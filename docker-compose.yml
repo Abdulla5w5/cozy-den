@@ -1,0 +1,48 @@
+# Semi-real deployment simulation ("emac2" stack): Postgres + API + nginx frontend.
+#   docker compose -p emac2 up --build -d
+# Frontend:  http://localhost:8080     API health: http://localhost:8080/api/health
+name: emac2
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cozyden
+      POSTGRES_PASSWORD: cozyden
+      POSTGRES_DB: cozyden
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cozyden -d cozyden"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgres://cozyden:cozyden@db:5432/cozyden
+      # Frontend is same-origin via the nginx proxy; listed here for completeness.
+      CORS_ORIGINS: http://localhost:8080
+      JWT_SECRET: local-dev-only-secret-change-me-32chars-min-000
+      COOKIE_SECURE: "false"
+      TABLE_FEE_CENTS: "500"
+      PAYMENT_PROVIDER: mock
+      # Only these emails may sign in to the staff dashboard (in addition to
+      # needing a valid staff_users row + password).
+      STAFF_ALLOWED_EMAILS: staff@cozyden.local
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:

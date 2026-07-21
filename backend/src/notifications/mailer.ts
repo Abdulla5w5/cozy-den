@@ -32,7 +32,7 @@ export function formatReceiptEmail(booking: {
   tableFeeCents: number;
   totalCents: number;
 }): { subject: string; text: string } {
-  const money = (c: number) => `£${(c / 100).toFixed(2)}`;
+  const money = (c: number) => `KD ${(c / 100).toFixed(2)}`;
   const lines = booking.items
     .map((i) => `  ${i.quantity} x ${i.name} — ${money(i.lineTotalCents)}`)
     .join('\n');

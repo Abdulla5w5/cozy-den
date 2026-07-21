@@ -34,6 +34,13 @@ export const env = {
   jwtExpiresIn: optional('JWT_EXPIRES_IN', '8h'),
   cookieSecure: optional('COOKIE_SECURE', 'false') === 'true',
 
+  // Optional allow-list of staff emails permitted to sign in. When empty, the
+  // staff_users table alone governs access; when set, the email must ALSO match.
+  staffAllowedEmails: optional('STAFF_ALLOWED_EMAILS', '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+
   tableFeeCents: parseInt(optional('TABLE_FEE_CENTS', '500'), 10),
 
   paymentProvider: optional('PAYMENT_PROVIDER', 'mock'),

@@ -76,4 +76,4 @@ export interface MonthlyAnalytics {
   tableUtilization: { label: string; capacity: number; bookings: number }[];
 }
 
-export const money = (cents: number) => `£${(cents / 100).toFixed(2)}`;
+export const money = (cents: number) => `KD ${(cents / 100).toFixed(2)}`;

@@ -108,7 +108,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
   // --- step 3: charge -------------------------------------------------------
   const charge = await paymentProvider.charge({
     amountCents: totalCents,
-    currency: 'GBP',
+    currency: 'KWD',
     paymentToken: input.paymentToken,
     description: `Cozy Den booking #${bookingId}`,
     metadata: { bookingId: String(bookingId) },
