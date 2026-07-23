@@ -1,6 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env';
 import { globalLimiter } from './middleware/rateLimit';
@@ -11,6 +11,12 @@ import { menuRouter } from './modules/menu/menu.routes';
 import { bookingsRouter } from './modules/bookings/bookings.routes';
 import { staffRouter } from './modules/staff/staff.routes';
 import { authRouter } from './modules/auth/auth.routes';
+
+function isSameOriginRequest(origin: string, req: express.Request) {
+  const host = req.get('host');
+  if (!host) return false;
+  return origin === `${req.protocol}://${host}`;
+}
 
 export function createApp() {
   const app = express();
@@ -24,14 +30,14 @@ export function createApp() {
 
   // Explicit CORS allow-list — never '*'. Credentials on so the auth cookie flows.
   app.use(
-    cors({
-      origin(origin, cb) {
-        // Allow same-origin / server-to-server tools (no Origin header).
-        if (!origin) return cb(null, true);
-        if (env.corsOrigins.includes(origin)) return cb(null, true);
-        return cb(new Error(`Origin ${origin} not allowed by CORS`));
-      },
-      credentials: true,
+    cors((req, cb) => {
+      const origin = req.header('Origin');
+      const options: CorsOptions = {
+        origin: (origin && (env.corsOrigins.includes(origin) || isSameOriginRequest(origin, req))) || !origin,
+        credentials: true,
+      };
+      if (options.origin) return cb(null, options);
+      return cb(new Error(`Origin ${origin} not allowed by CORS`));
     })
   );
 
