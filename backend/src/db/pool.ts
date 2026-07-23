@@ -3,8 +3,20 @@ import { env } from '../config/env';
 
 // A single shared pool. If DATABASE_URL is unset, pg falls back to the
 // standard PG* environment variables automatically.
+const requiresTls = Boolean(
+  env.databaseUrl && /[?&]sslmode=(?:prefer|require|verify-ca|verify-full)/.test(env.databaseUrl)
+);
+
 export const pool = new Pool(
-  env.databaseUrl ? { connectionString: env.databaseUrl } : {}
+  env.databaseUrl
+    ? {
+        connectionString: env.databaseUrl,
+        // App Platform's managed PostgreSQL endpoint uses a platform-issued
+        // certificate. The URL explicitly opts into TLS, so keep encryption
+        // while allowing that certificate chain.
+        ssl: requiresTls ? { rejectUnauthorized: false } : undefined,
+      }
+    : {}
 );
 
 pool.on('error', (err) => {
