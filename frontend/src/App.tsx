@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api/client';
+import { useI18n } from './i18n';
 import { Home } from './pages/Home';
 import { GamesPage } from './pages/GamesPage';
 import { MenuPage } from './pages/MenuPage';
@@ -8,34 +9,31 @@ import { BookingFlow } from './pages/BookingFlow';
 import { Confirmation } from './pages/Confirmation';
 import { StaffLogin } from './pages/StaffLogin';
 import { StaffDashboard } from './pages/StaffDashboard';
+import { MyBookings } from './pages/MyBookings';
 
 export function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [staff, setStaff] = useState<{ name: string; email: string } | null>(null);
-  const loggedIn = staff !== null;
+  const { t, lang, toggle } = useI18n();
+  const [user, setUser] = useState<{ name: string; email: string; isStaff: boolean } | null>(null);
+  const loggedIn = user !== null;
 
-  // Re-check the session on navigation so the nav stays accurate.
   useEffect(() => {
     let active = true;
     api
-      .get<{ staff: { name: string; email: string } }>('/staff/me')
-      .then((r) => active && setStaff(r.staff))
-      .catch(() => active && setStaff(null));
+      .get<{ user: { name: string; email: string; isStaff: boolean } }>('/auth/me')
+      .then((r) => active && setUser(r.user))
+      .catch(() => active && setUser(null));
     return () => {
       active = false;
     };
   }, [location.pathname]);
 
   async function logout() {
-    await api.post('/staff/logout').catch(() => {});
-    setStaff(null);
+    await api.post('/auth/logout').catch(() => {});
+    setUser(null);
     navigate('/');
   }
-
-  // On the booking page the "Book a Table" CTA is redundant, so swap it for an
-  // account action: Log out if signed in, otherwise Sign up.
-  const inBooking = location.pathname === '/book';
 
   return (
     <div className="app">
@@ -45,27 +43,32 @@ export function App() {
         </Link>
         <nav className="mainnav">
           <NavLink to="/" end>
-            Home
+            {t('nav.home')}
           </NavLink>
-          <NavLink to="/games">Games</NavLink>
-          <NavLink to="/menu">Menu</NavLink>
-          {/* Staff entry is unlisted; only appears once signed in. */}
-          {loggedIn && <NavLink to="/staff/dashboard">Staff</NavLink>}
+          <NavLink to="/games">{t('nav.games')}</NavLink>
+          <NavLink to="/menu">{t('nav.menu')}</NavLink>
+          {loggedIn && !user?.isStaff && (
+            <NavLink to="/account">{t('nav.mybookings')}</NavLink>
+          )}
+          {user?.isStaff && <NavLink to="/staff/dashboard">{t('nav.staff')}</NavLink>}
         </nav>
         <div className="nav-actions">
-          {inBooking ? (
-            loggedIn ? (
-              <button className="cta button nav-cta" onClick={logout}>
-                Log out
-              </button>
-            ) : (
-              <Link to="/staff" className="cta button nav-cta">
-                Sign up
-              </Link>
-            )
+          {/* Language switch (EN ⇄ عربي), right by the login/out button */}
+          <button
+            className="lang-toggle"
+            onClick={toggle}
+            aria-label="Switch language"
+            title={lang === 'en' ? 'التبديل إلى العربية' : 'Switch to English'}
+          >
+            {lang === 'en' ? 'عربي' : 'EN'}
+          </button>
+          {loggedIn ? (
+            <button className="cta button nav-cta" onClick={logout}>
+              {t('nav.logout')}
+            </button>
           ) : (
-            <Link to="/book" className="cta button nav-cta">
-              Book a Table
+            <Link to="/register" className="cta button nav-cta">
+              {t('nav.register')}
             </Link>
           )}
         </div>
@@ -78,8 +81,12 @@ export function App() {
           <Route path="/menu" element={<MenuPage />} />
           <Route path="/book" element={<BookingFlow />} />
           <Route path="/confirmation/:code" element={<Confirmation />} />
-          <Route path="/staff" element={<StaffLogin />} />
+          {/* Public auth page — separate from the staff namespace. */}
+          <Route path="/register" element={<StaffLogin />} />
+          <Route path="/account" element={<MyBookings />} />
           <Route path="/staff/dashboard" element={<StaffDashboard />} />
+          {/* Bare /staff just points at the dashboard (which guards itself). */}
+          <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>
       </main>
@@ -88,32 +95,30 @@ export function App() {
         <div className="footer-inner">
           <div className="footer-brand">
             <span className="brand">🎲 Cozy Den</span>
-            <p className="muted">Board games, great food, and good company — nightly.</p>
+            <p className="muted">{t('footer.tagline')}</p>
           </div>
           <div className="footer-cols">
             <div>
-              <h4>Visit</h4>
-              <Link to="/book">Book a table</Link>
-              <Link to="/games">Game library</Link>
-              <Link to="/menu">Food &amp; drink</Link>
+              <h4>{t('footer.visit')}</h4>
+              <Link to="/book">{t('footer.book')}</Link>
+              <Link to="/games">{t('footer.library')}</Link>
+              <Link to="/menu">{t('footer.food')}</Link>
             </div>
             <div>
-              <h4>Café</h4>
-              <a href="#">House rules</a>
-              <a href="#">Location</a>
-              <a href="#">Contact</a>
+              <h4>{t('footer.cafe')}</h4>
+              <a href="#">{t('footer.rules')}</a>
+              <a href="#">{t('footer.location')}</a>
+              <a href="#">{t('footer.contact')}</a>
             </div>
-            {loggedIn && (
+            {user?.isStaff && (
               <div>
-                <h4>Staff</h4>
-                <Link to="/staff/dashboard">Dashboard</Link>
+                <h4>{t('nav.staff')}</h4>
+                <Link to="/staff/dashboard">{t('footer.dashboard')}</Link>
               </div>
             )}
           </div>
         </div>
-        <div className="footer-legal muted">
-          © 2026 Cozy Den Board Game Café · Prototype — payments &amp; email are stubbed.
-        </div>
+        <div className="footer-legal muted">{t('footer.legal')}</div>
       </footer>
     </div>
   );

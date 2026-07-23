@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { MenuItem, money } from '../types';
+import { useI18n } from '../i18n';
+import { MenuItem } from '../types';
 
 const EMOJI: Record<string, string> = { food: '🍽️', drink: '🥤' };
 type Filter = 'All' | 'food' | 'drink';
 
 export function MenuPage() {
+  const { t, money } = useI18n();
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [filter, setFilter] = useState<Filter>('All');
 
@@ -15,24 +17,24 @@ export function MenuPage() {
   }, []);
 
   const sections = useMemo(() => {
-    const defs: { key: 'food' | 'drink'; title: string }[] = [
-      { key: 'food', title: 'Food' },
-      { key: 'drink', title: 'Drinks' },
+    const defs: { key: 'food' | 'drink'; titleKey: string }[] = [
+      { key: 'food', titleKey: 'menu.foodTitle' },
+      { key: 'drink', titleKey: 'menu.drinkTitle' },
     ];
     return defs
       .filter((d) => filter === 'All' || filter === d.key)
       .map((d) => ({ ...d, items: menu.filter((m) => m.category === d.key) }));
   }, [menu, filter]);
 
+  const filterLabel = (c: Filter) =>
+    c === 'All' ? t('menu.all') : c === 'food' ? t('menu.food') : t('menu.drink');
+
   return (
     <div>
       <header className="page-header left">
-        <span className="eyebrow">The provisions</span>
-        <h1>The Provision Menu</h1>
-        <p className="muted">
-          Fuel your focus and satisfy the squad with our curated selection of high-energy snacks
-          and refreshing beverages.
-        </p>
+        <span className="eyebrow">{t('menu.eyebrow')}</span>
+        <h1>{t('menu.title')}</h1>
+        <p className="muted">{t('menu.sub')}</p>
       </header>
 
       <div className="chips left sticky-filter">
@@ -42,7 +44,7 @@ export function MenuPage() {
             className={`chip ${filter === c ? 'active' : ''}`}
             onClick={() => setFilter(c)}
           >
-            {c === 'All' ? 'All Items' : c === 'food' ? 'Food' : 'Drinks'}
+            {filterLabel(c)}
           </button>
         ))}
       </div>
@@ -52,7 +54,7 @@ export function MenuPage() {
           s.items.length > 0 && (
             <section className="section" key={s.key}>
               <div className="section-head">
-                <h2 className="sec-primary">{s.title}</h2>
+                <h2 className="sec-primary">{t(s.titleKey)}</h2>
                 <div className="rule" />
               </div>
               <div className="menu-grid2">
@@ -68,7 +70,7 @@ export function MenuPage() {
                       </div>
                       <p className="muted">{m.description}</p>
                       <Link to="/book" className="add-den">
-                        Add to Den →
+                        {t('menu.add')}
                       </Link>
                     </div>
                   </div>
@@ -79,10 +81,10 @@ export function MenuPage() {
       )}
 
       <section className="cta-band">
-        <h2>Hungry yet?</h2>
-        <p className="muted">Add these to your booking at checkout.</p>
+        <h2>{t('menu.ctaTitle')}</h2>
+        <p className="muted">{t('menu.ctaSub')}</p>
         <Link to="/book" className="cta button">
-          Book a Table
+          {t('menu.book')}
         </Link>
       </section>
     </div>

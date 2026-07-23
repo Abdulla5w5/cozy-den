@@ -277,3 +277,14 @@ export async function getBookingByCode(code: string): Promise<BookingView | null
   );
   return rows[0] ? hydrate(rows[0]) : null;
 }
+
+/** All bookings made with a given email (a signed-in customer's history). */
+export async function getBookingsByEmail(email: string): Promise<BookingView[]> {
+  const { rows } = await query<BookingRow>(
+    `${BOOKING_SELECT}
+      WHERE lower(b.guest_email) = lower($1)
+      ORDER BY b.booking_date DESC, b.time_slot DESC`,
+    [email]
+  );
+  return Promise.all(rows.map(hydrate));
+}

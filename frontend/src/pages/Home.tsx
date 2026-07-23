@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { Game, MenuItem, money } from '../types';
+import { useI18n } from '../i18n';
+import { Game, MenuItem } from '../types';
 
 export function Home() {
+  const { t, money } = useI18n();
   const [games, setGames] = useState<Game[]>([]);
   const [menu, setMenu] = useState<MenuItem[]>([]);
 
@@ -12,71 +14,68 @@ export function Home() {
     api.get<{ items: MenuItem[] }>('/menu').then((r) => setMenu(r.items)).catch(() => {});
   }, []);
 
+  const steps = [
+    ['home.step1', 'home.step1b'],
+    ['home.step2', 'home.step2b'],
+    ['home.step3', 'home.step3b'],
+    ['home.step4', 'home.step4b'],
+  ];
+
   return (
     <div className="home">
-      {/* Hero */}
       <section className="hero">
-        <span className="eyebrow">The ultimate midnight social hub</span>
+        <span className="eyebrow">{t('home.eyebrow')}</span>
         <h1 className="hero-title">
-          Where every <span className="glow">move</span> matters, and every{' '}
-          <span className="accent-text">game</span> tells a story.
+          {t('home.title.a')} <span className="glow">{t('home.title.move')}</span>{' '}
+          {t('home.title.b')} <span className="accent-text">{t('home.title.game')}</span>{' '}
+          {t('home.title.c')}
         </h1>
-        <p className="hero-sub">
-          Book a table, pick from 100+ tabletop games, and pre-order food &amp; drink so it's
-          waiting when you arrive. Your den, your rules.
-        </p>
+        <p className="hero-sub">{t('home.sub')}</p>
         <div className="hero-ctas">
           <Link to="/book" className="cta button">
-            Claim Your Table
+            {t('home.claim')}
           </Link>
           <Link to="/games" className="ghost button">
-            Explore Games
+            {t('home.explore')}
           </Link>
         </div>
         <div className="stats">
           <div className="stat">
             <strong>100+</strong>
-            <span>Games on shelf</span>
+            <span>{t('home.stat.games')}</span>
           </div>
           <div className="stat">
             <strong>5</strong>
-            <span>Cozy tables</span>
+            <span>{t('home.stat.tables')}</span>
           </div>
           <div className="stat">
-            <strong>Till 10pm</strong>
-            <span>Last seating</span>
+            <strong>{t('home.stat.hours')}</strong>
+            <span>{t('home.stat.hoursSub')}</span>
           </div>
         </div>
       </section>
 
-      {/* How it works */}
       <section className="section">
         <div className="section-head">
-          <h2>How it works</h2>
-          <p className="muted">Four steps from craving to checkmate.</p>
+          <h2>{t('home.how')}</h2>
+          <p className="muted">{t('home.howSub')}</p>
         </div>
         <div className="steps">
-          {[
-            ['event_seat', 'Pick a table', 'Choose a date and a 2-hour seating that fits your crew.'],
-            ['casino', 'Choose a game', 'From quick party games to deep strategy epics.'],
-            ['restaurant', 'Order ahead', 'Snacks and drinks, prepped for when you sit down.'],
-            ['qr_code_2', 'Show your code', 'Pay online and flash your code at the counter.'],
-          ].map(([, title, body], i) => (
+          {steps.map(([title, body], i) => (
             <div className="step" key={title}>
               <span className="step-num">{i + 1}</span>
-              <h3>{title}</h3>
-              <p className="muted">{body}</p>
+              <h3>{t(title)}</h3>
+              <p className="muted">{t(body)}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Featured games */}
       <section className="section">
         <div className="section-head">
-          <h2>Popular games</h2>
+          <h2>{t('home.popular')}</h2>
           <Link to="/games" className="see-all">
-            See all →
+            {t('home.seeAll')}
           </Link>
         </div>
         <div className="feature-grid">
@@ -85,19 +84,18 @@ export function Home() {
               <span className="pill">{g.category}</span>
               <h3>{g.title}</h3>
               <p className="muted">
-                {g.min_players}–{g.max_players} players
+                {g.min_players}–{g.max_players} {t('players')}
               </p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Menu teaser */}
       <section className="section">
         <div className="section-head">
-          <h2>On the menu</h2>
+          <h2>{t('home.onMenu')}</h2>
           <Link to="/menu" className="see-all">
-            Full menu →
+            {t('home.fullMenu')}
           </Link>
         </div>
         <div className="feature-grid">
@@ -112,12 +110,11 @@ export function Home() {
         </div>
       </section>
 
-      {/* CTA band */}
       <section className="cta-band">
-        <h2>Your table is waiting.</h2>
-        <p className="muted">Grab a seating before they're gone tonight.</p>
+        <h2>{t('home.ctaTitle')}</h2>
+        <p className="muted">{t('home.ctaSub')}</p>
         <Link to="/book" className="cta button">
-          Book a Table
+          {t('home.book')}
         </Link>
       </section>
     </div>

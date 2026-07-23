@@ -1,31 +1,42 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { useI18n } from '../i18n';
 import { Game } from '../types';
 
 const ART = ['art-emerald', 'art-amber', 'art-pink'];
 const EMOJI = ['🎲', '♟️', '🃏', '🧩', '🎯', '🀄'];
+const FLAVOR_KEYS = ['Strategy', 'Family', 'Party', 'Cooperative', 'Abstract'];
 
 type Variant = 'feature' | 'side' | 'small';
 
 function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
+  const { t } = useI18n();
   const amber = variant === 'side';
+  const flavorKey = FLAVOR_KEYS.includes(g.category) ? `flavor.${g.category}` : 'flavor.default';
   return (
     <div className={`gcard bento-${variant} ${amber ? 'amber' : ''}`}>
       <div className={`gcard-art ${ART[i % ART.length]}`}>
         <span>{EMOJI[i % EMOJI.length]}</span>
       </div>
+      <div className="game-pop" aria-hidden="true">
+        <span className="game-pop-emoji">{EMOJI[i % EMOJI.length]}</span>
+        <p>{t(flavorKey)}</p>
+        <span className="game-pop-meta">
+          {g.min_players}–{g.max_players} {t('players')} · {g.category}
+        </span>
+      </div>
       <div className="gcard-body">
         {variant !== 'small' && (
           <span className={`badge ${amber ? 'amber' : 'primary'}`}>
-            {variant === 'feature' ? 'Featured' : 'Trending'}
+            {t(variant === 'feature' ? 'games.featured' : 'games.trending')}
           </span>
         )}
         <h3>{g.title}</h3>
         <div className="tag-row">
           <span className="tag">{g.category}</span>
           <span className="tag">
-            {g.min_players}–{g.max_players} players
+            {g.min_players}–{g.max_players} {t('players')}
           </span>
         </div>
         <div className="gcard-foot">
@@ -33,7 +44,7 @@ function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
             👥 {g.min_players}–{g.max_players}
           </span>
           <Link to="/book" className="card-link">
-            Book →
+            {t('games.book')}
           </Link>
         </div>
       </div>
@@ -42,6 +53,7 @@ function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
 }
 
 export function GamesPage() {
+  const { t } = useI18n();
   const [games, setGames] = useState<Game[]>([]);
   const [filter, setFilter] = useState('All');
 
@@ -58,12 +70,9 @@ export function GamesPage() {
   return (
     <div>
       <header className="page-header left">
-        <span className="eyebrow">The library</span>
-        <h1>The Vault</h1>
-        <p className="muted">
-          From high-stakes strategy to midnight party chaos. Pick your poison and let the games
-          begin.
-        </p>
+        <span className="eyebrow">{t('games.eyebrow')}</span>
+        <h1>{t('games.title')}</h1>
+        <p className="muted">{t('games.sub')}</p>
       </header>
 
       <div className="chips left">
@@ -73,7 +82,7 @@ export function GamesPage() {
             className={`chip ${filter === c ? 'active' : ''}`}
             onClick={() => setFilter(c)}
           >
-            {c}
+            {c === 'All' ? t('games.all') : c}
           </button>
         ))}
       </div>
@@ -91,7 +100,7 @@ export function GamesPage() {
 
       {shown.length > 0 && (
         <p className="showing muted">
-          Showing {shown.length} of {games.length} games
+          {t('games.showing', { n: shown.length, total: games.length })}
         </p>
       )}
     </div>

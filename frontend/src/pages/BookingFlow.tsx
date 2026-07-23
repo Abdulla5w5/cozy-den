@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
-import { Booking, Game, MenuItem, TableAvailability, money } from '../types';
+import { useI18n } from '../i18n';
+import { Booking, Game, MenuItem, TableAvailability } from '../types';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -11,33 +12,29 @@ function todayIso() {
 
 export function BookingFlow() {
   const navigate = useNavigate();
+  const { t, money } = useI18n();
   const [step, setStep] = useState<Step>(1);
   const [error, setError] = useState<string | null>(null);
 
-  // Step 1 — date, table, slot
   const [date, setDate] = useState(todayIso());
   const [availability, setAvailability] = useState<TableAvailability[]>([]);
   const [slots, setSlots] = useState<string[]>([]);
   const [tableId, setTableId] = useState<number | null>(null);
   const [timeSlot, setTimeSlot] = useState<string | null>(null);
 
-  // Step 2 — game
   const [games, setGames] = useState<Game[]>([]);
   const [gameId, setGameId] = useState<number | null>(null);
 
-  // Step 3 — menu + cart
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<Record<number, number>>({});
 
-  // Step 4 — guest + payment
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [paymentToken, setPaymentToken] = useState('tok_demo');
   const [submitting, setSubmitting] = useState(false);
 
-  const TABLE_FEE_CENTS = 500; // display only; server is the source of truth
+  const TABLE_FEE_CENTS = 500;
 
-  // Load availability whenever the date changes.
   useEffect(() => {
     setError(null);
     setTableId(null);
@@ -53,13 +50,20 @@ export function BookingFlow() {
       .catch((e) => setError(e.message));
   }, [date]);
 
-  // Load games + menu once.
   useEffect(() => {
     api.get<{ games: Game[] }>('/games').then((r) => setGames(r.games)).catch(() => {});
     api.get<{ items: MenuItem[] }>('/menu').then((r) => setMenu(r.items)).catch(() => {});
+    // Prefill from the signed-in account so bookings link to their history.
+    api
+      .get<{ user: { name: string; email: string } }>('/auth/me')
+      .then((r) => {
+        setGuestName(r.user.name);
+        setGuestEmail(r.user.email);
+      })
+      .catch(() => {});
   }, []);
 
-  const selectedTable = availability.find((t) => t.tableId === tableId) || null;
+  const selectedTable = availability.find((tb) => tb.tableId === tableId) || null;
 
   const itemsTotal = useMemo(
     () =>
@@ -100,8 +104,7 @@ export function BookingFlow() {
       });
       navigate(`/confirmation/${booking.verificationCode}`);
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : 'Something went wrong.';
-      setError(msg);
+      setError(e instanceof ApiError ? e.message : t('bk.wrong'));
     } finally {
       setSubmitting(false);
     }
@@ -114,9 +117,9 @@ export function BookingFlow() {
 
       {step === 1 && (
         <section>
-          <h2>1. Pick a date &amp; table</h2>
+          <h2>{t('bk.s1title')}</h2>
           <label className="field">
-            Date
+            {t('bk.date')}
             <input
               type="date"
               min={todayIso()}
@@ -126,23 +129,23 @@ export function BookingFlow() {
           </label>
 
           <div className="table-grid">
-            {availability.map((t) => (
-              <div key={t.tableId} className={`table-card ${tableId === t.tableId ? 'sel' : ''}`}>
+            {availability.map((tb) => (
+              <div key={tb.tableId} className={`table-card ${tableId === tb.tableId ? 'sel' : ''}`}>
                 <div className="table-head">
-                  <strong>{t.label}</strong>
-                  <span className="pill">{t.capacity} seats</span>
+                  <strong>{tb.label}</strong>
+                  <span className="pill">{t('bk.seats', { n: tb.capacity })}</span>
                 </div>
                 <div className="slots">
                   {slots.map((s) => {
-                    const free = t.freeSlots.includes(s);
-                    const active = tableId === t.tableId && timeSlot === s;
+                    const free = tb.freeSlots.includes(s);
+                    const active = tableId === tb.tableId && timeSlot === s;
                     return (
                       <button
                         key={s}
                         disabled={!free}
                         className={`slot ${active ? 'active' : ''}`}
                         onClick={() => {
-                          setTableId(t.tableId);
+                          setTableId(tb.tableId);
                           setTimeSlot(s);
                         }}
                       >
@@ -156,12 +159,8 @@ export function BookingFlow() {
           </div>
 
           <div className="actions">
-            <button
-              className="primary"
-              disabled={!tableId || !timeSlot}
-              onClick={() => setStep(2)}
-            >
-              Next: choose a game
+            <button className="primary" disabled={!tableId || !timeSlot} onClick={() => setStep(2)}>
+              {t('bk.nextGame')}
             </button>
           </div>
         </section>
@@ -169,14 +168,14 @@ export function BookingFlow() {
 
       {step === 2 && (
         <section>
-          <h2>2. Pick a game (optional)</h2>
+          <h2>{t('bk.s2title')}</h2>
           <div className="game-grid">
             <button
               className={`game-card ${gameId === null ? 'sel' : ''}`}
               onClick={() => setGameId(null)}
             >
-              <strong>No game</strong>
-              <span>Just the table</span>
+              <strong>{t('bk.noGame')}</strong>
+              <span>{t('bk.justTable')}</span>
             </button>
             {games.map((g) => (
               <button
@@ -186,15 +185,15 @@ export function BookingFlow() {
               >
                 <strong>{g.title}</strong>
                 <span>
-                  {g.min_players}–{g.max_players} players · {g.category}
+                  {g.min_players}–{g.max_players} {t('players')} · {g.category}
                 </span>
               </button>
             ))}
           </div>
           <div className="actions">
-            <button onClick={() => setStep(1)}>Back</button>
+            <button onClick={() => setStep(1)}>{t('bk.back')}</button>
             <button className="primary" onClick={() => setStep(3)}>
-              Next: food &amp; drink
+              {t('bk.nextFood')}
             </button>
           </div>
         </section>
@@ -202,7 +201,7 @@ export function BookingFlow() {
 
       {step === 3 && (
         <section>
-          <h2>3. Pre-order food &amp; drink (optional)</h2>
+          <h2>{t('bk.s3title')}</h2>
           <div className="menu-list">
             {menu.map((m) => (
               <div key={m.id} className="menu-row">
@@ -220,9 +219,9 @@ export function BookingFlow() {
             ))}
           </div>
           <div className="actions">
-            <button onClick={() => setStep(2)}>Back</button>
+            <button onClick={() => setStep(2)}>{t('bk.back')}</button>
             <button className="primary" onClick={() => setStep(4)}>
-              Next: your details
+              {t('bk.nextDetails')}
             </button>
           </div>
         </section>
@@ -230,14 +229,14 @@ export function BookingFlow() {
 
       {step === 4 && (
         <section>
-          <h2>4. Your details &amp; payment</h2>
+          <h2>{t('bk.s4title')}</h2>
 
           <div className="summary">
-            <h3>Booking summary</h3>
+            <h3>{t('bk.summary')}</h3>
             <p>
-              {selectedTable?.label} · {date} · {timeSlot} (2-hour seating)
+              {selectedTable?.label} · {date} · {timeSlot} {t('bk.seating')}
               <br />
-              Game: {games.find((g) => g.id === gameId)?.title ?? 'None'}
+              {t('bk.gameLabel')} {games.find((g) => g.id === gameId)?.title ?? t('bk.none')}
             </p>
             <ul>
               {Object.entries(cart).map(([id, qty]) => {
@@ -249,41 +248,38 @@ export function BookingFlow() {
                   </li>
                 );
               })}
-              <li>Table reservation fee — {money(TABLE_FEE_CENTS)}</li>
+              <li>
+                {t('bk.tableFee')} — {money(TABLE_FEE_CENTS)}
+              </li>
             </ul>
-            <p className="total">Total: {money(grandTotal)}</p>
+            <p className="total">
+              {t('bk.total')} {money(grandTotal)}
+            </p>
           </div>
 
           <label className="field">
-            Name
+            {t('bk.name')}
             <input value={guestName} onChange={(e) => setGuestName(e.target.value)} />
           </label>
           <label className="field">
-            Email
-            <input
-              type="email"
-              value={guestEmail}
-              onChange={(e) => setGuestEmail(e.target.value)}
-            />
+            {t('bk.email')}
+            <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} />
           </label>
 
           <label className="field">
-            Payment token (mock)
+            {t('bk.payToken')}
             <input value={paymentToken} onChange={(e) => setPaymentToken(e.target.value)} />
           </label>
-          <p className="muted">
-            Payment is stubbed. Use <code>tok_demo</code> to approve, or{' '}
-            <code>tok_decline</code> to simulate a declined card.
-          </p>
+          <p className="muted">{t('bk.payHint')}</p>
 
           <div className="actions">
-            <button onClick={() => setStep(3)}>Back</button>
+            <button onClick={() => setStep(3)}>{t('bk.back')}</button>
             <button
               className="primary"
               disabled={submitting || !guestName || !guestEmail}
               onClick={submit}
             >
-              {submitting ? 'Processing…' : `Pay ${money(grandTotal)} & book`}
+              {submitting ? t('bk.processing') : t('bk.pay', { amount: money(grandTotal) })}
             </button>
           </div>
         </section>
@@ -293,12 +289,13 @@ export function BookingFlow() {
 }
 
 function Stepper({ step }: { step: Step }) {
-  const labels = ['Table', 'Game', 'Menu', 'Checkout'];
+  const { t } = useI18n();
+  const labels = ['bk.table', 'bk.game', 'bk.menu', 'bk.checkout'];
   return (
     <ol className="stepper">
       {labels.map((l, i) => (
         <li key={l} className={step === i + 1 ? 'active' : step > i + 1 ? 'done' : ''}>
-          {i + 1}. {l}
+          {i + 1}. {t(l)}
         </li>
       ))}
     </ol>

@@ -5,45 +5,62 @@ import { ApiError } from './error';
 
 export const AUTH_COOKIE = 'cd_session';
 
-export interface StaffClaims {
-  sub: number; // staff_users.id
+export interface UserClaims {
+  sub: number; // users.id
   email: string;
   name: string;
 }
 
-export function signStaffToken(claims: StaffClaims): string {
+export function signToken(claims: UserClaims): string {
   const options: jwt.SignOptions = {
     expiresIn: env.jwtExpiresIn as jwt.SignOptions['expiresIn'],
   };
   return jwt.sign(claims, env.jwtSecret, options);
 }
 
-// Extend Express Request with the authenticated staff user.
+/** Staff = email present in the STAFF_ALLOWED_EMAILS allow-list. */
+export function isStaff(email: string): boolean {
+  return (
+    env.staffAllowedEmails.length > 0 && env.staffAllowedEmails.includes(email.toLowerCase())
+  );
+}
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      staff?: StaffClaims;
+      user?: UserClaims;
     }
   }
 }
 
-/**
- * Require a valid staff session. The JWT is read from an httpOnly cookie
- * (not localStorage / not a JS-readable header), which keeps it out of reach
- * of XSS-based token theft.
- */
-export function requireStaff(req: Request, _res: Response, next: NextFunction) {
+function readClaims(req: Request): UserClaims | null {
   const token = req.cookies?.[AUTH_COOKIE];
-  if (!token) return next(new ApiError(401, 'Authentication required'));
+  if (!token) return null;
   try {
-    const decoded = jwt.verify(token, env.jwtSecret) as unknown as StaffClaims & {
+    const d = jwt.verify(token, env.jwtSecret) as unknown as UserClaims & {
       iat: number;
       exp: number;
     };
-    req.staff = { sub: decoded.sub, email: decoded.email, name: decoded.name };
-    next();
+    return { sub: d.sub, email: d.email, name: d.name };
   } catch {
-    next(new ApiError(401, 'Invalid or expired session'));
+    return null;
   }
+}
+
+/** Any authenticated user. */
+export function requireAuth(req: Request, _res: Response, next: NextFunction) {
+  const claims = readClaims(req);
+  if (!claims) return next(new ApiError(401, 'Authentication required'));
+  req.user = claims;
+  next();
+}
+
+/** Authenticated AND on the staff allow-list. */
+export function requireStaff(req: Request, _res: Response, next: NextFunction) {
+  const claims = readClaims(req);
+  if (!claims) return next(new ApiError(401, 'Authentication required'));
+  if (!isStaff(claims.email)) return next(new ApiError(403, 'Staff access only.'));
+  req.user = claims;
+  next();
 }

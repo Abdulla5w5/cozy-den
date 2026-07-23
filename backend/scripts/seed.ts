@@ -13,17 +13,18 @@ async function main() {
   const sql = readFileSync(join(__dirname, '..', 'db', 'seed.sql'), 'utf8');
   await pool.query(sql);
 
-  // 2) Staff user — password hashed here, never stored in plaintext / in SQL.
+  // 2) Default account in the universal users table. This email should also be
+  //    in STAFF_ALLOWED_EMAILS so it logs in as staff and sees the dashboard.
   const hash = await bcrypt.hash(STAFF_PASSWORD, 10);
   await pool.query(
-    `INSERT INTO staff_users (email, password_hash, name)
-     VALUES ($1, $2, $3)
+    `INSERT INTO users (email, password_hash, name, provider)
+     VALUES ($1, $2, $3, 'local')
      ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
     [STAFF_EMAIL.toLowerCase(), hash, STAFF_NAME]
   );
 
   console.log('Seed complete.');
-  console.log(`  Staff login: ${STAFF_EMAIL} / ${STAFF_PASSWORD}`);
+  console.log(`  Staff account: ${STAFF_EMAIL} / ${STAFF_PASSWORD}`);
   await pool.end();
 }
 

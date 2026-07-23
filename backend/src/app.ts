@@ -10,6 +10,7 @@ import { gamesRouter } from './modules/games/games.routes';
 import { menuRouter } from './modules/menu/menu.routes';
 import { bookingsRouter } from './modules/bookings/bookings.routes';
 import { staffRouter } from './modules/staff/staff.routes';
+import { authRouter } from './modules/auth/auth.routes';
 
 export function createApp() {
   const app = express();
@@ -44,6 +45,7 @@ export function createApp() {
   app.use('/api/games', gamesRouter);
   app.use('/api/menu', menuRouter);
   app.use('/api/bookings', bookingsRouter);
+  app.use('/api/auth', authRouter);
   app.use('/api/staff', staffRouter);
 
   app.use(notFound);

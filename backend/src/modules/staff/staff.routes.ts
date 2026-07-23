@@ -1,49 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate';
-import { loginLimiter } from '../../middleware/rateLimit';
-import { AUTH_COOKIE, requireStaff, signStaffToken } from '../../middleware/auth';
-import { env } from '../../config/env';
-import { authenticateStaff, getBookingsForDate, checkInByCode } from './staff.service';
-import { getMonthlyAnalytics } from './analytics.service';
+import { requireStaff } from '../../middleware/auth';
+import { getBookingsForDate, checkInByCode } from './staff.service';
+import { getMonthlyAnalytics, getRecurrentCustomers } from './analytics.service';
 
+// Dashboard DATA endpoints. Auth (login/logout/me) lives in /api/auth.
+// Every route requires a signed-in user whose email is on the staff allow-list.
 export const staffRouter = Router();
-
-const loginSchema = z.object({
-  email: z.string().trim().email().max(200),
-  password: z.string().min(1).max(200),
-});
-
-const cookieOpts = {
-  httpOnly: true, // not readable by JS -> not stealable via XSS
-  sameSite: 'lax' as const,
-  secure: env.cookieSecure, // Secure flag when behind HTTPS
-  maxAge: 8 * 60 * 60 * 1000,
-  path: '/',
-};
-
-// POST /api/staff/login — sets an httpOnly session cookie.
-staffRouter.post('/login', loginLimiter, validate(loginSchema, 'body'), async (req, res, next) => {
-  try {
-    const claims = await authenticateStaff(req.body.email, req.body.password);
-    const token = signStaffToken(claims);
-    res.cookie(AUTH_COOKIE, token, cookieOpts);
-    res.json({ staff: { email: claims.email, name: claims.name } });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/staff/logout
-staffRouter.post('/logout', requireStaff, (req, res) => {
-  res.clearCookie(AUTH_COOKIE, { ...cookieOpts, maxAge: undefined });
-  res.json({ ok: true });
-});
-
-// GET /api/staff/me — who am I (used by the frontend to check session).
-staffRouter.get('/me', requireStaff, (req, res) => {
-  res.json({ staff: { email: req.staff!.email, name: req.staff!.name } });
-});
 
 const dateQuery = z.object({
   date: z
@@ -99,3 +63,12 @@ staffRouter.get(
     }
   }
 );
+
+// GET /api/staff/customers — recurrent customers (name, email, visits, spend).
+staffRouter.get('/customers', requireStaff, async (_req, res, next) => {
+  try {
+    res.json({ customers: await getRecurrentCustomers() });
+  } catch (err) {
+    next(err);
+  }
+});

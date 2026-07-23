@@ -1,5 +1,46 @@
 import { query } from '../../db/pool';
 
+export interface CustomerRow {
+  name: string;
+  email: string;
+  visits: number;
+  totalCents: number;
+  lastVisit: string;
+}
+
+/**
+ * Recurrent customers across all time — grouped by email, most-visits first.
+ * Gives the counter/sales a contact list (name + email) for events & offers.
+ */
+export async function getRecurrentCustomers(limit = 200): Promise<CustomerRow[]> {
+  const { rows } = await query<{
+    name: string;
+    email: string;
+    visits: string;
+    total_cents: string;
+    last_visit: string;
+  }>(
+    `SELECT max(guest_name) AS name,
+            guest_email     AS email,
+            count(*)        AS visits,
+            coalesce(sum(total_cents), 0) AS total_cents,
+            to_char(max(booking_date), 'YYYY-MM-DD') AS last_visit
+       FROM bookings
+      WHERE status <> 'cancelled'
+      GROUP BY guest_email
+      ORDER BY visits DESC, total_cents DESC
+      LIMIT $1`,
+    [limit]
+  );
+  return rows.map((r) => ({
+    name: r.name,
+    email: r.email,
+    visits: parseInt(r.visits, 10),
+    totalCents: parseInt(r.total_cents, 10),
+    lastVisit: r.last_visit,
+  }));
+}
+
 export interface MonthlyAnalytics {
   month: string; // 'YYYY-MM'
   bookingsCount: number;

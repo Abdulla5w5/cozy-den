@@ -34,11 +34,16 @@ services:
       TABLE_FEE_CENTS: "500"
       PAYMENT_PROVIDER: mock
       # Only these emails may sign in to the staff dashboard (in addition to
-      # needing a valid staff_users row + password).
+      # needing a valid account + password).
       STAFF_ALLOWED_EMAILS: staff@cozyden.local
+      # Google Sign-In: verifies ID tokens against this client id.
+      GOOGLE_CLIENT_ID: 499925933256-fvkpaf45350r3jbte5iavrf6m8359q7m.apps.googleusercontent.com
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_GOOGLE_CLIENT_ID: 499925933256-fvkpaf45350r3jbte5iavrf6m8359q7m.apps.googleusercontent.com
     depends_on:
       - backend
     ports:

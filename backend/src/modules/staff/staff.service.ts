@@ -1,39 +1,5 @@
-import bcrypt from 'bcryptjs';
 import { query } from '../../db/pool';
-import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
-import { StaffClaims } from '../../middleware/auth';
-
-export async function authenticateStaff(
-  email: string,
-  password: string
-): Promise<StaffClaims> {
-  const { rows } = await query<{
-    id: number;
-    email: string;
-    name: string;
-    password_hash: string;
-  }>('SELECT id, email, name, password_hash FROM staff_users WHERE email = $1', [
-    email.toLowerCase(),
-  ]);
-
-  const user = rows[0];
-  // Compare even when the user is missing to keep timing roughly constant and
-  // return one generic message so we don't reveal which emails exist.
-  const hash = user?.password_hash ?? '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinv';
-  const ok = await bcrypt.compare(password, hash);
-  if (!user || !ok) throw new ApiError(401, 'Invalid email or password.');
-
-  // Extra gate: if an allow-list is configured, the email must be on it.
-  if (
-    env.staffAllowedEmails.length > 0 &&
-    !env.staffAllowedEmails.includes(user.email.toLowerCase())
-  ) {
-    throw new ApiError(403, 'This account is not permitted to access the staff dashboard.');
-  }
-
-  return { sub: user.id, email: user.email, name: user.name };
-}
 
 export interface TodayBooking {
   id: number;

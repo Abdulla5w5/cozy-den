@@ -45,6 +45,10 @@ export const env = {
 
   paymentProvider: optional('PAYMENT_PROVIDER', 'mock'),
   paymentApiKey: process.env.PAYMENT_API_KEY || undefined,
+
+  // Google Sign-In. When unset, the /api/auth/google endpoint returns 503 and
+  // the frontend Google button shows a "not configured" note.
+  googleClientId: process.env.GOOGLE_CLIENT_ID || undefined,
 };
 
 // Fail fast on obviously bad config rather than at first request.

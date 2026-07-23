@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { Booking, money } from '../types';
+import { useI18n } from '../i18n';
+import { Booking } from '../types';
 
 export function Confirmation() {
   const { code } = useParams<{ code: string }>();
+  const { t, money } = useI18n();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,38 +19,44 @@ export function Confirmation() {
   }, [code]);
 
   if (error) return <div className="alert error">{error}</div>;
-  if (!booking) return <p>Loading…</p>;
+  if (!booking) return <p>{t('loading')}</p>;
 
   return (
     <div className="card confirmation">
       <div className="check">✅</div>
-      <h2>Booking confirmed!</h2>
-      <p>A receipt has been emailed to {booking.guestEmail} (stubbed in this prototype).</p>
+      <h2>{t('conf.title')}</h2>
+      <p>{t('conf.emailed', { email: booking.guestEmail })}</p>
 
       <div className="code-box">
-        <span>Show this code at the counter</span>
+        <span>{t('conf.show')}</span>
         <strong>{booking.verificationCode}</strong>
       </div>
 
       <div className="summary">
         <p>
-          <strong>{booking.tableLabel}</strong> · {booking.date} · {booking.timeSlot} (2-hour
-          seating)
+          <strong>{booking.tableLabel}</strong> · {booking.date} · {booking.timeSlot}{' '}
+          {t('bk.seating')}
         </p>
-        <p>Game: {booking.gameTitle ?? 'None selected'}</p>
+        <p>
+          {t('conf.game')} {booking.gameTitle ?? t('conf.noneSel')}
+        </p>
         <ul>
           {booking.items.map((i) => (
             <li key={i.menuItemId}>
               {i.quantity} × {i.name} — {money(i.lineTotalCents)}
             </li>
           ))}
-          <li>Table reservation fee — {money(booking.tableFeeCents)}</li>
+          <li>
+            {t('bk.tableFee')} — {money(booking.tableFeeCents)}
+          </li>
         </ul>
-        <p className="total">Total paid: {money(booking.totalCents)}</p>
+        <p className="total">
+          {t('conf.totalPaid')} {money(booking.totalCents)}
+        </p>
       </div>
 
-      <Link to="/" className="primary button">
-        Make another booking
+      <Link to="/" className="cta button">
+        {t('conf.another')}
       </Link>
     </div>
   );
