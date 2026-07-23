@@ -3,14 +3,18 @@ import { env } from '../config/env';
 
 // A single shared pool. If DATABASE_URL is unset, pg falls back to the
 // standard PG* environment variables automatically.
-const requiresTls = Boolean(
-  env.databaseUrl && /[?&]sslmode=(?:prefer|require|verify-ca|verify-full)/.test(env.databaseUrl)
-);
+const databaseUrl = env.databaseUrl ? new URL(env.databaseUrl) : undefined;
+const sslMode = databaseUrl?.searchParams.get('sslmode');
+const requiresTls = ['prefer', 'require', 'verify-ca', 'verify-full'].includes(sslMode || '');
+
+// pg re-parses sslmode from connectionString and lets it override the ssl
+// option below. Remove it after recording the intent so our TLS settings win.
+databaseUrl?.searchParams.delete('sslmode');
 
 export const pool = new Pool(
-  env.databaseUrl
+  databaseUrl
     ? {
-        connectionString: env.databaseUrl,
+        connectionString: databaseUrl.toString(),
         // App Platform's managed PostgreSQL endpoint uses a platform-issued
         // certificate. The URL explicitly opts into TLS, so keep encryption
         // while allowing that certificate chain.
