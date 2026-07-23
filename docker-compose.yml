@@ -14,6 +14,10 @@ services:
       POSTGRES_DB: cozyden
     volumes:
       - pgdata:/var/lib/postgresql/data
+    ports:
+      # App Platform reaches PostgreSQL through the Droplet's VPC address.
+      # The production .env binds this only to the private interface.
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cozyden -d cozyden"]
       interval: 3s
