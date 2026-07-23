@@ -37,15 +37,7 @@ export function Confirmation() {
           <strong>{booking.tableLabel}</strong> · {booking.date} · {booking.timeSlot}{' '}
           {t('bk.seating')}
         </p>
-        <p>
-          {t('conf.game')} {booking.gameTitle ?? t('conf.noneSel')}
-        </p>
         <ul>
-          {booking.items.map((i) => (
-            <li key={i.menuItemId}>
-              {i.quantity} × {i.name} — {money(i.lineTotalCents)}
-            </li>
-          ))}
           <li>
             {t('bk.tableFee')} — {money(booking.tableFeeCents)}
           </li>

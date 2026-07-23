@@ -164,7 +164,8 @@ h4 {
   display: inline-flex;
   margin-right: 1rem;
 }
-input {
+input,
+select {
   padding: 0.65rem 0.8rem;
   border: 1px solid var(--outline-variant);
   border-radius: 10px;
@@ -174,7 +175,8 @@ input {
   color: var(--ink);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-input:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(148, 211, 193, 0.15);
@@ -558,17 +560,27 @@ table.data code {
   font-weight: 700;
   text-transform: uppercase;
 }
-.status.confirmed {
+.status.pending {
   background: rgba(148, 211, 193, 0.15);
   color: var(--primary);
 }
-.status.arrived {
+.status.print_receipt {
+  background: rgba(254, 170, 0, 0.2);
+  color: var(--accent);
+  box-shadow: 0 0 10px rgba(254, 170, 0, 0.25);
+}
+.status.order_complete {
   background: rgba(248, 172, 255, 0.15);
   color: #f8acff;
 }
-.status.pending_payment {
-  background: rgba(254, 170, 0, 0.15);
-  color: var(--accent);
+.status.pending_payment,
+.status.cancelled {
+  background: rgba(255, 180, 171, 0.12);
+  color: var(--bad);
+}
+.manual-form .row {
+  align-items: flex-end;
+  margin-bottom: 0;
 }
 
 /* KPIs + bars */

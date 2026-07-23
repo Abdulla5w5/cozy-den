@@ -1,29 +1,35 @@
 import { z } from 'zod';
-import { TIME_SLOTS } from '../../utils/slots';
+import { isValidStart } from '../../utils/slots';
 
-// Guest checkout: only name + email required. No account.
+// Guest checkout: table only — no game pre-selection, no food/drink ordering.
+// Payment is the flat table-holding fee (server-priced).
 export const createBookingSchema = z.object({
   tableId: z.number().int().positive(),
-  gameId: z.number().int().positive().nullable().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
-  timeSlot: z.enum(TIME_SLOTS),
+  timeSlot: z
+    .string()
+    .refine(isValidStart, 'timeSlot must be a valid 30-minute start time within opening hours'),
   guestName: z.string().trim().min(1).max(120),
   guestEmail: z.string().trim().email().max(200),
-  items: z
-    .array(
-      z.object({
-        menuItemId: z.number().int().positive(),
-        quantity: z.number().int().min(1).max(50),
-      })
-    )
-    .max(100)
-    .default([]),
-  // Opaque token from the (mock) payment UI. Real gateways hand back a token
-  // that the server exchanges for a charge — the server never sees card data.
+  // Opaque token from the (mock) payment UI for the table-holding fee.
   paymentToken: z.string().min(1).max(200),
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
+
+// Staff manual entry (phone/WhatsApp bookings): no payment step, contact may be
+// a phone number or an email.
+export const staffCreateBookingSchema = z.object({
+  tableId: z.number().int().positive(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  timeSlot: z
+    .string()
+    .refine(isValidStart, 'timeSlot must be a valid 30-minute start time within opening hours'),
+  guestName: z.string().trim().min(1).max(120),
+  contact: z.string().trim().min(3).max(200),
+});
+
+export type StaffCreateBookingInput = z.infer<typeof staffCreateBookingSchema>;
 
 export const codeParamSchema = z.object({
   code: z.string().trim().min(4).max(32),

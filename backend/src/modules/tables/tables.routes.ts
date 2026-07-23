@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate';
 import { getTables, getAvailability } from './tables.service';
-import { TIME_SLOTS } from '../../utils/slots';
+import { START_TIMES } from '../../utils/slots';
 
 export const tablesRouter = Router();
 
@@ -28,7 +28,7 @@ tablesRouter.get(
     try {
       const { date } = req.query as unknown as { date: string };
       const availability = await getAvailability(date);
-      res.json({ date, slots: TIME_SLOTS, availability });
+      res.json({ date, slots: START_TIMES, availability });
     } catch (err) {
       next(err);
     }

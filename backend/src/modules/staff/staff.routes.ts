@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate';
 import { requireStaff } from '../../middleware/auth';
-import { getBookingsForDate, checkInByCode } from './staff.service';
+import { getBookingsForDate, confirmBooking, markPrinted } from './staff.service';
 import { getMonthlyAnalytics, getRecurrentCustomers } from './analytics.service';
+import { staffCreateBookingSchema } from '../bookings/bookings.schema';
+import { createStaffBooking, getBookingById } from '../bookings/bookings.service';
 
 // Dashboard DATA endpoints. Auth (login/logout/me) lives in /api/auth.
 // Every route requires a signed-in user whose email is on the staff allow-list.
@@ -26,16 +28,59 @@ staffRouter.get('/bookings', requireStaff, validate(dateQuery, 'query'), async (
   }
 });
 
-const checkInSchema = z.object({ code: z.string().trim().min(4).max(32) });
-
-// POST /api/staff/check-in  { code }
+// POST /api/staff/bookings — manual entry for phone/WhatsApp bookings
+// (source: staff_manual, no payment step).
 staffRouter.post(
-  '/check-in',
+  '/bookings',
   requireStaff,
-  validate(checkInSchema, 'body'),
+  validate(staffCreateBookingSchema, 'body'),
   async (req, res, next) => {
     try {
-      res.json({ booking: await checkInByCode(req.body.code) });
+      res.status(201).json({ booking: await createStaffBooking(req.body) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+const codeSchema = z.object({ code: z.string().trim().min(4).max(32) });
+const idParam = z.object({ id: z.coerce.number().int().positive() });
+
+// POST /api/staff/confirm  { code } — customer arrived; auto-advances to
+// 'print_receipt' the moment it's confirmed (system-driven).
+staffRouter.post('/confirm', requireStaff, validate(codeSchema, 'body'), async (req, res, next) => {
+  try {
+    const id = await confirmBooking({ code: req.body.code });
+    res.json({ booking: await getBookingById(id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/staff/bookings/:id/confirm — same transition, by row id.
+staffRouter.post(
+  '/bookings/:id/confirm',
+  requireStaff,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      const id = await confirmBooking({ id: Number(req.params.id) });
+      res.json({ booking: await getBookingById(id) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/staff/bookings/:id/printed — receipt physically printed.
+staffRouter.post(
+  '/bookings/:id/printed',
+  requireStaff,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      const id = await markPrinted(Number(req.params.id));
+      res.json({ booking: await getBookingById(id) });
     } catch (err) {
       next(err);
     }

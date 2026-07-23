@@ -69,9 +69,6 @@ export function MenuPage() {
                         <span className="price">{money(m.price_cents)}</span>
                       </div>
                       <p className="muted">{m.description}</p>
-                      <Link to="/book" className="add-den">
-                        {t('menu.add')}
-                      </Link>
                     </div>
                   </div>
                 ))}

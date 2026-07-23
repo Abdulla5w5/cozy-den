@@ -40,16 +40,14 @@ export interface Booking {
   id: number;
   tableId: number;
   tableLabel: string;
-  gameId: number | null;
-  gameTitle: string | null;
   date: string;
   timeSlot: string;
   guestName: string;
   guestEmail: string;
   verificationCode: string;
   status: string;
+  source: string;
   tableFeeCents: number;
-  itemsTotalCents: number;
   totalCents: number;
   items: BookingItemView[];
   createdAt: string;
@@ -60,9 +58,10 @@ export interface StaffBooking {
   verificationCode: string;
   timeSlot: string;
   guestName: string;
+  guestContact: string;
   tableLabel: string;
-  gameTitle: string | null;
   status: string;
+  source: string;
   totalCents: number;
   items: { name: string; quantity: number }[];
 }

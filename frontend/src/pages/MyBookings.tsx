@@ -41,14 +41,12 @@ export function MyBookings() {
           {bookings.map((b) => (
             <div className="feature-card" key={b.id}>
               <div className="mcard-top">
-                <span className={`status ${b.status}`}>{b.status}</span>
+                <span className={`status ${b.status}`}>{t(`status.${b.status}`)}</span>
                 <span className="price">{money(b.totalCents)}</span>
               </div>
               <h3>{b.tableLabel}</h3>
               <p className="muted">
                 {b.date} · {b.timeSlot} {t('bk.seating')}
-                <br />
-                {t('conf.game')} {b.gameTitle ?? t('conf.noneSel')}
               </p>
               {b.items.length > 0 && (
                 <p className="muted">

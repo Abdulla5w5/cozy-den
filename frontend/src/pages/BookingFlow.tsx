@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
-import { Booking, Game, MenuItem, TableAvailability } from '../types';
+import { Booking, TableAvailability } from '../types';
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Booking is table-only: select table & start time -> guest info + payment.
+// Sessions are a fixed 2 hours with rolling 30-minute start times.
 export function BookingFlow() {
   const navigate = useNavigate();
   const { t, money } = useI18n();
@@ -22,18 +24,12 @@ export function BookingFlow() {
   const [tableId, setTableId] = useState<number | null>(null);
   const [timeSlot, setTimeSlot] = useState<string | null>(null);
 
-  const [games, setGames] = useState<Game[]>([]);
-  const [gameId, setGameId] = useState<number | null>(null);
-
-  const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [cart, setCart] = useState<Record<number, number>>({});
-
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [paymentToken, setPaymentToken] = useState('tok_demo');
   const [submitting, setSubmitting] = useState(false);
 
-  const TABLE_FEE_CENTS = 500;
+  const TABLE_FEE_CENTS = 500; // display only; server is the source of truth
 
   useEffect(() => {
     setError(null);
@@ -51,8 +47,6 @@ export function BookingFlow() {
   }, [date]);
 
   useEffect(() => {
-    api.get<{ games: Game[] }>('/games').then((r) => setGames(r.games)).catch(() => {});
-    api.get<{ items: MenuItem[] }>('/menu').then((r) => setMenu(r.items)).catch(() => {});
     // Prefill from the signed-in account so bookings link to their history.
     api
       .get<{ user: { name: string; email: string } }>('/auth/me')
@@ -65,41 +59,16 @@ export function BookingFlow() {
 
   const selectedTable = availability.find((tb) => tb.tableId === tableId) || null;
 
-  const itemsTotal = useMemo(
-    () =>
-      Object.entries(cart).reduce((sum, [id, qty]) => {
-        const item = menu.find((m) => m.id === Number(id));
-        return sum + (item ? item.price_cents * qty : 0);
-      }, 0),
-    [cart, menu]
-  );
-  const grandTotal = itemsTotal + TABLE_FEE_CENTS;
-
-  function setQty(id: number, qty: number) {
-    setCart((c) => {
-      const next = { ...c };
-      if (qty <= 0) delete next[id];
-      else next[id] = qty;
-      return next;
-    });
-  }
-
   async function submit() {
     setError(null);
     setSubmitting(true);
     try {
-      const items = Object.entries(cart).map(([id, qty]) => ({
-        menuItemId: Number(id),
-        quantity: qty,
-      }));
       const { booking } = await api.post<{ booking: Booking }>('/bookings', {
         tableId,
-        gameId,
         date,
         timeSlot,
         guestName,
         guestEmail,
-        items,
         paymentToken,
       });
       navigate(`/confirmation/${booking.verificationCode}`);
@@ -118,6 +87,7 @@ export function BookingFlow() {
       {step === 1 && (
         <section>
           <h2>{t('bk.s1title')}</h2>
+          <p className="muted">{t('bk.sessionHint')}</p>
           <label className="field">
             {t('bk.date')}
             <input
@@ -160,7 +130,7 @@ export function BookingFlow() {
 
           <div className="actions">
             <button className="primary" disabled={!tableId || !timeSlot} onClick={() => setStep(2)}>
-              {t('bk.nextGame')}
+              {t('bk.nextDetails')}
             </button>
           </div>
         </section>
@@ -168,92 +138,20 @@ export function BookingFlow() {
 
       {step === 2 && (
         <section>
-          <h2>{t('bk.s2title')}</h2>
-          <div className="game-grid">
-            <button
-              className={`game-card ${gameId === null ? 'sel' : ''}`}
-              onClick={() => setGameId(null)}
-            >
-              <strong>{t('bk.noGame')}</strong>
-              <span>{t('bk.justTable')}</span>
-            </button>
-            {games.map((g) => (
-              <button
-                key={g.id}
-                className={`game-card ${gameId === g.id ? 'sel' : ''}`}
-                onClick={() => setGameId(g.id)}
-              >
-                <strong>{g.title}</strong>
-                <span>
-                  {g.min_players}–{g.max_players} {t('players')} · {g.category}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="actions">
-            <button onClick={() => setStep(1)}>{t('bk.back')}</button>
-            <button className="primary" onClick={() => setStep(3)}>
-              {t('bk.nextFood')}
-            </button>
-          </div>
-        </section>
-      )}
-
-      {step === 3 && (
-        <section>
-          <h2>{t('bk.s3title')}</h2>
-          <div className="menu-list">
-            {menu.map((m) => (
-              <div key={m.id} className="menu-row">
-                <div>
-                  <strong>{m.name}</strong> <span className="pill">{m.category}</span>
-                  <div className="muted">{m.description}</div>
-                </div>
-                <div className="qty">
-                  <span className="price">{money(m.price_cents)}</span>
-                  <button onClick={() => setQty(m.id, (cart[m.id] || 0) - 1)}>−</button>
-                  <span className="qnum">{cart[m.id] || 0}</span>
-                  <button onClick={() => setQty(m.id, (cart[m.id] || 0) + 1)}>+</button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="actions">
-            <button onClick={() => setStep(2)}>{t('bk.back')}</button>
-            <button className="primary" onClick={() => setStep(4)}>
-              {t('bk.nextDetails')}
-            </button>
-          </div>
-        </section>
-      )}
-
-      {step === 4 && (
-        <section>
-          <h2>{t('bk.s4title')}</h2>
+          <h2>{t('bk.s2checkout')}</h2>
 
           <div className="summary">
             <h3>{t('bk.summary')}</h3>
             <p>
               {selectedTable?.label} · {date} · {timeSlot} {t('bk.seating')}
-              <br />
-              {t('bk.gameLabel')} {games.find((g) => g.id === gameId)?.title ?? t('bk.none')}
             </p>
             <ul>
-              {Object.entries(cart).map(([id, qty]) => {
-                const item = menu.find((m) => m.id === Number(id));
-                if (!item) return null;
-                return (
-                  <li key={id}>
-                    {qty} × {item.name} — {money(item.price_cents * qty)}
-                  </li>
-                );
-              })}
               <li>
                 {t('bk.tableFee')} — {money(TABLE_FEE_CENTS)}
               </li>
             </ul>
             <p className="total">
-              {t('bk.total')} {money(grandTotal)}
+              {t('bk.total')} {money(TABLE_FEE_CENTS)}
             </p>
           </div>
 
@@ -273,13 +171,13 @@ export function BookingFlow() {
           <p className="muted">{t('bk.payHint')}</p>
 
           <div className="actions">
-            <button onClick={() => setStep(3)}>{t('bk.back')}</button>
+            <button onClick={() => setStep(1)}>{t('bk.back')}</button>
             <button
               className="primary"
               disabled={submitting || !guestName || !guestEmail}
               onClick={submit}
             >
-              {submitting ? t('bk.processing') : t('bk.pay', { amount: money(grandTotal) })}
+              {submitting ? t('bk.processing') : t('bk.pay', { amount: money(TABLE_FEE_CENTS) })}
             </button>
           </div>
         </section>
@@ -290,7 +188,7 @@ export function BookingFlow() {
 
 function Stepper({ step }: { step: Step }) {
   const { t } = useI18n();
-  const labels = ['bk.table', 'bk.game', 'bk.menu', 'bk.checkout'];
+  const labels = ['bk.table', 'bk.checkout'];
   return (
     <ol className="stepper">
       {labels.map((l, i) => (

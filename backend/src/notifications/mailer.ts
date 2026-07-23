@@ -27,15 +27,10 @@ export function formatReceiptEmail(booking: {
   date: string;
   timeSlot: string;
   tableLabel: string;
-  gameTitle: string | null;
-  items: { name: string; quantity: number; lineTotalCents: number }[];
   tableFeeCents: number;
   totalCents: number;
 }): { subject: string; text: string } {
   const money = (c: number) => `KD ${(c / 100).toFixed(2)}`;
-  const lines = booking.items
-    .map((i) => `  ${i.quantity} x ${i.name} — ${money(i.lineTotalCents)}`)
-    .join('\n');
 
   return {
     subject: `Your Cozy Den booking is confirmed — code ${booking.verificationCode}`,
@@ -47,15 +42,13 @@ export function formatReceiptEmail(booking: {
       `    ${booking.verificationCode}`,
       '',
       `Date:  ${booking.date}`,
-      `Time:  ${booking.timeSlot} (2-hour seating)`,
+      `Time:  ${booking.timeSlot} (2-hour session)`,
       `Table: ${booking.tableLabel}`,
-      `Game:  ${booking.gameTitle ?? 'None selected'}`,
       '',
-      'Order:',
-      lines || '  (no food/drink pre-ordered)',
-      `  Table reservation fee — ${money(booking.tableFeeCents)}`,
-      '',
+      `Table-holding fee paid: ${money(booking.tableFeeCents)}`,
       `Total paid: ${money(booking.totalCents)}`,
+      '',
+      'Games and the menu are waiting for you at the café.',
       '',
       'See you soon,',
       'The Cozy Den',
