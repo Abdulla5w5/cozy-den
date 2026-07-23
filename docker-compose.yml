@@ -12,17 +12,44 @@ services:
       POSTGRES_USER: cozyden
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: cozyden
+    # TLS is opt-in: production sets DB_SSL=on and points DB_CERT_DIR at the
+    # cert pair. Locally DB_SSL defaults to off and the mount is an empty dir.
+    command: >
+      postgres
+      -c ssl=${DB_SSL:-off}
+      -c ssl_cert_file=/etc/pgcerts/server.crt
+      -c ssl_key_file=/etc/pgcerts/server.key
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ${DB_CERT_DIR:-./.pgcerts}:/etc/pgcerts:ro
     ports:
       # App Platform reaches PostgreSQL through the Droplet's VPC address.
       # The production .env binds this only to the private interface.
-      - "${DB_BIND_ADDRESS:-127.0.0.1}:5432:5432"
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cozyden -d cozyden"]
       interval: 3s
       timeout: 3s
       retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Opt-in: only needed when running >1 API instance so rate limits are shared.
+    # Start with:  docker compose --profile redis up -d
+    profiles: ["redis"]
+    # Ephemeral rate-limit counters only: no persistence, bounded memory.
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-changeme}
+      --maxmemory 64mb --maxmemory-policy allkeys-lru --save ""
+    ports:
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   backend:
     build: ./backend
@@ -35,6 +62,8 @@ services:
       PORT: "4000"
       DATABASE_URL: postgres://cozyden:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/cozyden
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      # Shared rate-limit store; unset => per-process memory limits.
+      REDIS_URL: ${REDIS_URL:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TABLE_FEE_CENTS: "500"

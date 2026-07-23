@@ -30,6 +30,9 @@ export const env = {
 
   databaseUrl: process.env.DATABASE_URL || undefined,
 
+  // Shared rate-limit store. Unset => per-process memory limits (single instance only).
+  redisUrl: process.env.REDIS_URL || undefined,
+
   jwtSecret: required('JWT_SECRET'),
   jwtExpiresIn: optional('JWT_EXPIRES_IN', '8h'),
   cookieSecure: optional('COOKIE_SECURE', 'false') === 'true',

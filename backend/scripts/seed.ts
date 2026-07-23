@@ -24,7 +24,7 @@ async function main() {
   await pool.query(
     `INSERT INTO users (email, password_hash, name, provider)
      VALUES ($1, $2, $3, 'local')
-     ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+     ON CONFLICT (email) DO NOTHING`,
     [STAFF_EMAIL.toLowerCase(), hash, STAFF_NAME]
   );
 

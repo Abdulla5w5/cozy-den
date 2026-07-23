@@ -53,9 +53,20 @@ DELETE FROM tables     WHERE id IN (SELECT dup_id FROM table_map);
 DELETE FROM games      WHERE id IN (SELECT dup_id FROM game_map);
 DELETE FROM menu_items WHERE id IN (SELECT dup_id FROM menu_map);
 
-ALTER TABLE tables     ADD CONSTRAINT tables_label_key   UNIQUE (label);
-ALTER TABLE games      ADD CONSTRAINT games_title_key    UNIQUE (title);
-ALTER TABLE menu_items ADD CONSTRAINT menu_items_name_key UNIQUE (name);
+-- Postgres has no ADD CONSTRAINT IF NOT EXISTS; guard so the migration is
+-- re-runnable if it ever fails partway through.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tables_label_key') THEN
+    ALTER TABLE tables ADD CONSTRAINT tables_label_key UNIQUE (label);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'games_title_key') THEN
+    ALTER TABLE games ADD CONSTRAINT games_title_key UNIQUE (title);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'menu_items_name_key') THEN
+    ALTER TABLE menu_items ADD CONSTRAINT menu_items_name_key UNIQUE (name);
+  END IF;
+END $$;
 
 -- ---------- (B) performance indexes ----------
 -- Customer booking history: WHERE lower(guest_email) = lower($1).
