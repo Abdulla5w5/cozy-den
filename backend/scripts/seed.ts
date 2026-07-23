@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import bcrypt from 'bcryptjs';
 import { pool } from '../src/db/pool';
@@ -10,7 +10,12 @@ const STAFF_NAME = process.env.SEED_STAFF_NAME || 'Front Counter';
 
 async function main() {
   // 1) Reference data (tables / games / menu).
-  const sql = readFileSync(join(__dirname, '..', 'db', 'seed.sql'), 'utf8');
+  const seedPath = [
+    join(__dirname, '..', 'db', 'seed.sql'),
+    join(__dirname, '..', '..', 'db', 'seed.sql'),
+  ].find(existsSync);
+  if (!seedPath) throw new Error('Could not find database seed data');
+  const sql = readFileSync(seedPath, 'utf8');
   await pool.query(sql);
 
   // 2) Default account in the universal users table. This email should also be

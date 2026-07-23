@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { pool } from '../src/db/pool';
 
@@ -8,7 +8,14 @@ import { pool } from '../src/db/pool';
  * so the SQL is explicit and reviewable (see README "Why raw SQL").
  */
 async function main() {
-  const dir = join(__dirname, '..', 'db', 'migrations');
+  // Docker copies db under dist/, while App Platform's buildpack leaves it at
+  // the project root. Support both layouts so the same command deploys there.
+  const dir = [
+    join(__dirname, '..', 'db', 'migrations'),
+    join(__dirname, '..', '..', 'db', 'migrations'),
+  ].find(existsSync);
+
+  if (!dir) throw new Error('Could not find database migrations');
 
   await pool.query(
     `CREATE TABLE IF NOT EXISTS schema_migrations (
