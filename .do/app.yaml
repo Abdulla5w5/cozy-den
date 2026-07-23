@@ -1,0 +1,73 @@
+name: cozy-den
+region: fra
+
+# App Platform serves the React build and routes same-origin API calls to the
+# Express service. This replaces the Docker Compose-only service discovery used
+# on a Droplet.
+static_sites:
+  - name: web
+    github:
+      repo: Abdulla5w5/cozy-den
+      branch: main
+      deploy_on_push: true
+    source_dir: /frontend
+    environment_slug: node-js
+    build_command: npm ci && npm run build
+    output_dir: dist
+
+services:
+  - name: api
+    github:
+      repo: Abdulla5w5/cozy-den
+      branch: main
+      deploy_on_push: true
+    source_dir: /backend
+    environment_slug: node-js
+    build_command: npm ci && npm run build
+    run_command: node dist/scripts/migrate.js && node dist/scripts/seed.js && node dist/src/index.js
+    http_port: 4000
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+      failure_threshold: 6
+    envs:
+      - key: NODE_ENV
+        value: production
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DATABASE_URL
+        value: ${cozyden-db.DATABASE_URL}
+        scope: RUN_TIME
+        type: GENERAL
+      - key: COOKIE_SECURE
+        value: "true"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: PAYMENT_PROVIDER
+        value: mock
+        scope: RUN_TIME
+        type: GENERAL
+
+databases:
+  - name: cozyden-db
+    engine: PG
+    version: "16"
+
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /api
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /
+      component:
+        name: web
+
+alerts:
+  - rule: DEPLOYMENT_FAILED

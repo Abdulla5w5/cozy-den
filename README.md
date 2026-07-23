@@ -8,6 +8,21 @@ Staff get a dashboard for the day's bookings, check-in, and monthly analytics.
 
 ---
 
+## DigitalOcean App Platform
+
+The repository includes a complete App Platform specification at
+`.do/app.yaml`. It declares the frontend, API, routing, and an App Platform
+PostgreSQL 16 database, so DigitalOcean does not need to infer components from
+the monorepo root.
+
+When creating the app from the control panel, select this repository and branch
+`main`. The platform will read `.do/app.yaml`. Before the first deployment, add
+`JWT_SECRET` to the `api` service as a **Secret** runtime environment variable;
+use a unique value of at least 32 characters. Database connection details are
+injected automatically through `DATABASE_URL` and must not be added manually.
+
+---
+
 ## Repository layout
 
 ```
