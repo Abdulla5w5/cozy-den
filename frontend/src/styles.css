@@ -1603,16 +1603,16 @@ table.data code {
   z-index: 100;
   display: grid;
   place-items: center;
-  padding: 1.5rem;
+  padding: 1rem;
   background: rgba(19, 19, 19, 0.8);
   backdrop-filter: blur(12px);
 }
 .promo-card {
   position: relative;
   width: 100%;
-  max-width: 640px;
+  max-width: 420px;
   overflow: hidden;
-  border-radius: 40px;
+  border-radius: 28px;
   background: rgba(19, 19, 19, 0.7);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 211, 193, 0.2);
@@ -1654,7 +1654,7 @@ table.data code {
 /* Hero: image with a scrim so the headline stays readable on any artwork. */
 .promo-hero {
   position: relative;
-  height: 16rem;
+  aspect-ratio: 16 / 9;
 }
 .promo-hero.plain {
   height: auto;
@@ -1695,9 +1695,9 @@ table.data code {
 }
 .promo-hero-copy {
   position: absolute;
-  bottom: 1.5rem;
-  left: 2rem;
-  right: 2rem;
+  bottom: 1.1rem;
+  left: 1.25rem;
+  right: 1.25rem;
   z-index: 20;
 }
 .promo-hero.plain .promo-hero-copy {
@@ -1715,11 +1715,11 @@ table.data code {
 }
 .promo-title {
   margin: 0;
-  font-size: 2.25rem;
-  line-height: 1.1;
+  font-size: 1.6rem;
+  line-height: 1.15;
 }
 .promo-body {
-  padding: 2rem;
+  padding: 1.25rem;
 }
 .promo-cta {
   display: block;
@@ -1731,13 +1731,10 @@ table.data code {
 }
 @media (max-width: 560px) {
   .promo-card {
-    border-radius: 24px;
-  }
-  .promo-hero {
-    height: 12rem;
+    border-radius: 20px;
   }
   .promo-title {
-    font-size: 1.6rem;
+    font-size: 1.4rem;
   }
   .promo-hero-copy {
     left: 1.25rem;
