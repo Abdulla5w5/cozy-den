@@ -686,13 +686,30 @@ table.data code {
     gap: 0.75rem;
     padding: 0.9rem 1.25rem;
   }
+  /* One swipeable row. Wrapping left the last item ("Staff") orphaned and
+     centred on its own line, which read as a layout bug. */
   .mainnav {
     order: 3;
     width: 100%;
     margin: 0;
-    justify-content: center;
-    gap: 1.25rem;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 1.4rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* let the row bleed to the screen edges so it reads as scrollable */
+    margin-inline: -1.25rem;
+    padding-inline: 1.25rem;
+    scroll-padding-inline: 1.25rem;
+  }
+  .mainnav::-webkit-scrollbar {
+    display: none;
+  }
+  .mainnav a {
+    flex: none;
+    white-space: nowrap;
+    font-size: 0.95rem;
   }
 }
 
