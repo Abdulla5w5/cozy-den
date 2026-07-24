@@ -38,44 +38,42 @@ export function App() {
 
   return (
     <div className="app">
-      {!isStaffRoute && (
-        <header className="topbar">
-          <Link to="/" className="brand">
-            🎲 Cozy Den
-          </Link>
-          <nav className="mainnav">
-            <NavLink to="/" end>
-              {t('nav.home')}
-            </NavLink>
-            <NavLink to="/games">{t('nav.games')}</NavLink>
-            <NavLink to="/menu">{t('nav.menu')}</NavLink>
-            {loggedIn && !user?.isStaff && (
-              <NavLink to="/account">{t('nav.mybookings')}</NavLink>
-            )}
-            {user?.isStaff && <NavLink to="/staff/dashboard">{t('nav.staff')}</NavLink>}
-          </nav>
-          <div className="nav-actions">
-            {/* Language switch (EN ⇄ عربي), right by the login/out button */}
-            <button
-              className="lang-toggle"
-              onClick={toggle}
-              aria-label="Switch language"
-              title={lang === 'en' ? 'التبديل إلى العربية' : 'Switch to English'}
-            >
-              {lang === 'en' ? 'عربي' : 'EN'}
+      <header className="topbar">
+        <Link to="/" className="brand">
+          🎲 Cozy Den
+        </Link>
+        <nav className="mainnav">
+          <NavLink to="/" end>
+            {t('nav.home')}
+          </NavLink>
+          <NavLink to="/games">{t('nav.games')}</NavLink>
+          <NavLink to="/menu">{t('nav.menu')}</NavLink>
+          {loggedIn && !user?.isStaff && (
+            <NavLink to="/account">{t('nav.mybookings')}</NavLink>
+          )}
+          {user?.isStaff && <NavLink to="/staff/dashboard">{t('nav.staff')}</NavLink>}
+        </nav>
+        <div className="nav-actions">
+          {/* Language switch (EN ⇄ عربي), right by the login/out button */}
+          <button
+            className="lang-toggle"
+            onClick={toggle}
+            aria-label="Switch language"
+            title={lang === 'en' ? 'التبديل إلى العربية' : 'Switch to English'}
+          >
+            {lang === 'en' ? 'عربي' : 'EN'}
+          </button>
+          {loggedIn ? (
+            <button className="cta button nav-cta" onClick={logout}>
+              {t('nav.logout')}
             </button>
-            {loggedIn ? (
-              <button className="cta button nav-cta" onClick={logout}>
-                {t('nav.logout')}
-              </button>
-            ) : (
-              <Link to="/register" className="cta button nav-cta">
-                {t('nav.register')}
-              </Link>
-            )}
-          </div>
-        </header>
-      )}
+          ) : (
+            <Link to="/register" className="cta button nav-cta">
+              {t('nav.register')}
+            </Link>
+          )}
+        </div>
+      </header>
 
       <main className={isStaffRoute ? 'staff-content' : 'content'}>
         <Routes>
@@ -94,37 +92,35 @@ export function App() {
         </Routes>
       </main>
 
-      {!isStaffRoute && (
-        <footer className="footer">
-          <div className="footer-inner">
-            <div className="footer-brand">
-              <span className="brand">🎲 Cozy Den</span>
-              <p className="muted">{t('footer.tagline')}</p>
-            </div>
-            <div className="footer-cols">
-              <div>
-                <h4>{t('footer.visit')}</h4>
-                <Link to="/book">{t('footer.book')}</Link>
-                <Link to="/games">{t('footer.library')}</Link>
-                <Link to="/menu">{t('footer.food')}</Link>
-              </div>
-              <div>
-                <h4>{t('footer.cafe')}</h4>
-                <a href="#">{t('footer.rules')}</a>
-                <a href="#">{t('footer.location')}</a>
-                <a href="#">{t('footer.contact')}</a>
-              </div>
-              {user?.isStaff && (
-                <div>
-                  <h4>{t('nav.staff')}</h4>
-                  <Link to="/staff/dashboard">{t('footer.dashboard')}</Link>
-                </div>
-              )}
-            </div>
+      <footer className="footer">
+        <div className="footer-inner">
+          <div className="footer-brand">
+            <span className="brand">🎲 Cozy Den</span>
+            <p className="muted">{t('footer.tagline')}</p>
           </div>
-          <div className="footer-legal muted">{t('footer.legal')}</div>
-        </footer>
-      )}
+          <div className="footer-cols">
+            <div>
+              <h4>{t('footer.visit')}</h4>
+              <Link to="/book">{t('footer.book')}</Link>
+              <Link to="/games">{t('footer.library')}</Link>
+              <Link to="/menu">{t('footer.food')}</Link>
+            </div>
+            <div>
+              <h4>{t('footer.cafe')}</h4>
+              <a href="#">{t('footer.rules')}</a>
+              <a href="#">{t('footer.location')}</a>
+              <a href="#">{t('footer.contact')}</a>
+            </div>
+            {user?.isStaff && (
+              <div>
+                <h4>{t('nav.staff')}</h4>
+                <Link to="/staff/dashboard">{t('footer.dashboard')}</Link>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="footer-legal muted">{t('footer.legal')}</div>
+      </footer>
     </div>
   );
 }
