@@ -10,6 +10,8 @@ import { Confirmation } from './pages/Confirmation';
 import { StaffLogin } from './pages/StaffLogin';
 import { StaffDashboard } from './pages/StaffDashboard';
 import { MyBookings } from './pages/MyBookings';
+import { EventsPage } from './pages/EventsPage';
+import { PromoModal } from './components/PromoModal';
 
 export function App() {
   const location = useLocation();
@@ -37,6 +39,7 @@ export function App() {
 
   return (
     <div className="app">
+      <PromoModal />
       <header className="topbar">
         <Link to="/" className="brand">
           🎲 Cozy Den
@@ -47,6 +50,7 @@ export function App() {
           </NavLink>
           <NavLink to="/games">{t('nav.games')}</NavLink>
           <NavLink to="/menu">{t('nav.menu')}</NavLink>
+          <NavLink to="/events">{t('nav.events')}</NavLink>
           {loggedIn && !user?.isStaff && (
             <NavLink to="/account">{t('nav.mybookings')}</NavLink>
           )}
@@ -79,6 +83,7 @@ export function App() {
           <Route path="/" element={<Home />} />
           <Route path="/games" element={<GamesPage />} />
           <Route path="/menu" element={<MenuPage />} />
+          <Route path="/events" element={<EventsPage />} />
           <Route path="/book" element={<BookingFlow />} />
           <Route path="/confirmation/:code" element={<Confirmation />} />
           {/* Public auth page — separate from the staff namespace. */}

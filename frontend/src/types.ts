@@ -18,6 +18,40 @@ export interface Game {
   min_players: number;
   max_players: number;
   category: string;
+  description: string;
+  image_url: string | null;
+  purchase_url: string | null;
+}
+
+export interface EventItem {
+  id: number;
+  title: string;
+  description: string;
+  event_date: string;
+  event_time: string | null;
+  location: string;
+  type: 'internal' | 'external';
+  image_url: string | null;
+  is_featured: boolean;
+}
+
+export interface HistoryEntry {
+  id: number;
+  game_id: number;
+  title: string;
+  category: string;
+  image_url: string | null;
+  played_date: string;
+  booking_id: number | null;
+}
+
+export interface Promo {
+  id: number;
+  image_url: string | null;
+  text: string;
+  link_url: string | null;
+  link_label: string | null;
+  is_active: boolean;
 }
 
 export interface MenuItem {

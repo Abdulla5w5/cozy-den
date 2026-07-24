@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { MonthlyAnalytics, StaffBooking, Table, TableAvailability } from '../types';
+import { EventsTab, PromoTab } from './StaffContent';
 
-type Tab = 'today' | 'analytics' | 'customers';
+type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo';
 
 interface Customer {
   name: string;
@@ -68,9 +69,25 @@ export function StaffDashboard() {
         <button className={tab === 'customers' ? 'active' : ''} onClick={() => setTab('customers')}>
           {t('staff.customers')}
         </button>
+        <button className={tab === 'events' ? 'active' : ''} onClick={() => setTab('events')}>
+          {t('staff.events')}
+        </button>
+        <button className={tab === 'promo' ? 'active' : ''} onClick={() => setTab('promo')}>
+          {t('staff.promo')}
+        </button>
       </div>
 
-      {tab === 'today' ? <TodayTab /> : tab === 'analytics' ? <AnalyticsTab /> : <CustomersTab />}
+      {tab === 'today' ? (
+        <TodayTab />
+      ) : tab === 'analytics' ? (
+        <AnalyticsTab />
+      ) : tab === 'customers' ? (
+        <CustomersTab />
+      ) : tab === 'events' ? (
+        <EventsTab />
+      ) : (
+        <PromoTab />
+      )}
     </div>
   );
 }

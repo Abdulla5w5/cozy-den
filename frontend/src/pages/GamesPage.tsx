@@ -17,7 +17,11 @@ function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
   return (
     <div className={`gcard bento-${variant} ${amber ? 'amber' : ''}`}>
       <div className={`gcard-art ${ART[i % ART.length]}`}>
-        <span>{EMOJI[i % EMOJI.length]}</span>
+        {g.image_url ? (
+          <img className="gcard-img" src={g.image_url} alt={g.title} loading="lazy" />
+        ) : (
+          <span>{EMOJI[i % EMOJI.length]}</span>
+        )}
       </div>
       <div className="game-pop" aria-hidden="true">
         <span className="game-pop-emoji">{EMOJI[i % EMOJI.length]}</span>
@@ -39,6 +43,17 @@ function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
             {g.min_players}–{g.max_players} {t('players')}
           </span>
         </div>
+        {g.description && <p className="muted gcard-desc">{g.description}</p>}
+        {g.purchase_url && (
+          <a
+            className="add-den buy-btn"
+            href={g.purchase_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t('gl.buy')}
+          </a>
+        )}
         <div className="gcard-foot">
           <span>
             👥 {g.min_players}–{g.max_players}

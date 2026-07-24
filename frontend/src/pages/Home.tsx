@@ -2,16 +2,21 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
-import { Game, MenuItem } from '../types';
+import { EventItem, Game, MenuItem } from '../types';
 
 export function Home() {
   const { t, money } = useI18n();
   const [games, setGames] = useState<Game[]>([]);
   const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
 
   useEffect(() => {
     api.get<{ games: Game[] }>('/games').then((r) => setGames(r.games)).catch(() => {});
     api.get<{ items: MenuItem[] }>('/menu').then((r) => setMenu(r.items)).catch(() => {});
+    api
+      .get<{ events: EventItem[] }>('/events?featured=true')
+      .then((r) => setEvents(r.events))
+      .catch(() => {});
   }, []);
 
   const steps = [
@@ -70,6 +75,33 @@ export function Home() {
           ))}
         </div>
       </section>
+
+      {events.length > 0 && (
+        <section className="section">
+          <div className="section-head">
+            <h2>{t('ev.upcoming')}</h2>
+            <Link to="/events" className="see-all">
+              {t('ev.seeAll')}
+            </Link>
+          </div>
+          <div className="ev-strip">
+            {events.slice(0, 4).map((e) => (
+              <Link to="/events" className="ev-card" key={e.id}>
+                {e.image_url && <img className="ev-card-img" src={e.image_url} alt="" />}
+                <span className={`pill ${e.type === 'external' ? 'ext' : ''}`}>
+                  {e.type === 'internal' ? t('ev.internal') : t('ev.external')}
+                </span>
+                <h3>{e.title}</h3>
+                <p className="muted">
+                  {e.event_date}
+                  {e.event_time ? ` · ${e.event_time}` : ''}
+                </p>
+                {e.description && <p className="muted ev-card-desc">{e.description}</p>}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="section">
         <div className="section-head">

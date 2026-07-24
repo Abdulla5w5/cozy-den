@@ -271,6 +271,63 @@ const dict: Record<string, { en: string; ar: string }> = {
   'cust.last': { en: 'Last visit', ar: 'آخر زيارة' },
   'cust.empty': { en: 'No customers yet.', ar: 'ما في عملاء بعد.' },
 
+  // ---- events / calendar ----
+  'nav.events': { en: 'Our Calendar', ar: 'تقويمنا' },
+  'ev.eyebrow': { en: "What's on", ar: 'شنو صاير' },
+  'ev.title': { en: 'Our Calendar', ar: 'تقويمنا' },
+  'ev.sub': {
+    en: 'Everything coming up — nights at the Den and places you can find us.',
+    ar: 'كل اللي جاي — ليالينا بالدن والأماكن اللي تلقونا فيها.',
+  },
+  'ev.upcoming': { en: 'Upcoming events', ar: 'فعاليات قادمة' },
+  'ev.seeAll': { en: 'Full calendar →', ar: 'التقويم الكامل ←' },
+  'ev.internal': { en: 'At Cozy Den', ar: 'في كوزي دن' },
+  'ev.external': { en: 'Off-site', ar: 'خارج المحل' },
+  'ev.none': { en: 'No upcoming events right now — check back soon.', ar: 'ما في فعاليات حالياً — ترقبونا.' },
+  'ev.all': { en: 'All', ar: 'الكل' },
+  'ev.past': { en: 'Past', ar: 'سابقة' },
+
+  // ---- game library ----
+  'gl.buy': { en: 'Buy on Board Games Panda', ar: 'اشترها من بورد جيمز باندا' },
+  'gl.players': { en: 'players', ar: 'لاعبين' },
+
+  // ---- game history ----
+  'gh.title': { en: "Games I've Played", ar: 'الألعاب اللي لعبتها' },
+  'gh.sub': { en: 'Log what you played after a visit.', ar: 'سجّل اللي لعبته بعد زيارتك.' },
+  'gh.empty': { en: "You haven't logged any games yet.", ar: 'ما سجلت أي لعبة بعد.' },
+  'gh.add': { en: 'Log a game', ar: 'سجّل لعبة' },
+  'gh.pick': { en: 'Pick a game', ar: 'اختر لعبة' },
+  'gh.date': { en: 'Played on', ar: 'تاريخ اللعب' },
+  'gh.save': { en: 'Add to history', ar: 'أضف للسجل' },
+  'gh.remove': { en: 'Remove', ar: 'حذف' },
+  'gh.already': { en: 'Already logged for that date.', ar: 'مسجلة بهذا التاريخ.' },
+  'gh.signin': { en: 'Create an account to track the games you play.', ar: 'سوِّ حساب عشان تتابع الألعاب اللي تلعبها.' },
+
+  // ---- staff: events + promo ----
+  'staff.events': { en: 'Events', ar: 'الفعاليات' },
+  'staff.promo': { en: 'Promo popup', ar: 'إعلان الترحيب' },
+  'staff.newEvent': { en: '+ New event', ar: '+ فعالية جديدة' },
+  'staff.evTitle': { en: 'Title', ar: 'العنوان' },
+  'staff.evDesc': { en: 'Description', ar: 'الوصف' },
+  'staff.evLocation': { en: 'Location', ar: 'المكان' },
+  'staff.evType': { en: 'Type', ar: 'النوع' },
+  'staff.evImage': { en: 'Image URL', ar: 'رابط الصورة' },
+  'staff.evFeatured': { en: 'Featured on homepage', ar: 'مميّزة بالصفحة الرئيسية' },
+  'staff.save': { en: 'Save', ar: 'حفظ' },
+  'staff.cancel': { en: 'Cancel', ar: 'إلغاء' },
+  'staff.edit': { en: 'Edit', ar: 'تعديل' },
+  'staff.delete': { en: 'Delete', ar: 'حذف' },
+  'staff.confirmDelete': { en: 'Delete this event?', ar: 'تحذف هالفعالية؟' },
+  'staff.promoText': { en: 'Popup text', ar: 'نص الإعلان' },
+  'staff.promoLink': { en: 'Link URL', ar: 'رابط' },
+  'staff.promoLabel': { en: 'Button label', ar: 'نص الزر' },
+  'staff.promoActive': { en: 'Show popup to visitors', ar: 'اعرض الإعلان للزوار' },
+  'staff.promoHint': {
+    en: 'Shown once per visitor session. Leave inactive to hide it.',
+    ar: 'يظهر مرة وحدة بكل زيارة. عطّله عشان يختفي.',
+  },
+  'promo.close': { en: 'Close', ar: 'إغلاق' },
+
   // ---- booking status workflow + staff manual entry ----
   'status.all': { en: 'All', ar: 'الكل' },
   'status.pending': { en: 'Pending', ar: 'بالانتظار' },

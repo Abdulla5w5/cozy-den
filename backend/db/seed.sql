@@ -28,3 +28,32 @@ ON CONFLICT DO NOTHING;
 
 -- NOTE: the staff dashboard login is created by scripts/seed.ts, which hashes
 -- the password with bcrypt at seed time (never store a plaintext password here).
+
+-- Game Library extras (idempotent: only fills rows that are still blank).
+UPDATE games SET
+  description = COALESCE(NULLIF(description,''), d.descr),
+  image_url   = COALESCE(image_url, d.img),
+  purchase_url= COALESCE(purchase_url, d.buy)
+FROM (VALUES
+  ('Catan',          'Trade, build and settle the island. A gateway classic.', NULL, 'https://boardgamespanda.com/products/catan'),
+  ('Ticket to Ride', 'Claim railway routes across the map. Easy to learn.',    NULL, 'https://boardgamespanda.com/products/ticket-to-ride'),
+  ('Codenames',      'Two teams, one grid of words, clever one-word clues.',   NULL, 'https://boardgamespanda.com/products/codenames'),
+  ('Carcassonne',    'Tile-laying city building with cunning placement.',      NULL, NULL),
+  ('Pandemic',       'Co-operative race to cure four global diseases.',        NULL, 'https://boardgamespanda.com/products/pandemic'),
+  ('Azul',           'Beautiful abstract tile drafting. Quick and tense.',     NULL, NULL)
+) AS d(title, descr, img, buy)
+WHERE games.title = d.title;
+
+-- Sample events (idempotent by title+date).
+INSERT INTO events (title, description, event_date, event_time, location, type, is_featured)
+SELECT * FROM (VALUES
+  ('Friday Night Tournament', 'Weekly knockout across three tables. Prizes for the top two.', CURRENT_DATE + 3, '19:00', 'Cozy Den', 'internal', TRUE),
+  ('Beginners Board Game Night', 'New to tabletop? We teach you three games in one evening.', CURRENT_DATE + 7, '18:00', 'Cozy Den', 'internal', TRUE),
+  ('Kuwait Comic Con Booth', 'Come find our booth and play a demo round with us.', CURRENT_DATE + 21, '12:00', 'Kuwait International Fairground', 'external', FALSE)
+) AS e(title, description, event_date, event_time, location, type, is_featured)
+WHERE NOT EXISTS (SELECT 1 FROM events x WHERE x.title = e.title);
+
+-- One active promo for the entry popup.
+INSERT INTO promos (text, link_url, link_label, is_active)
+SELECT 'Friday Night Tournament this week — book your table early!', '/events', 'See what''s on', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM promos);
