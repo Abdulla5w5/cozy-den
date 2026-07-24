@@ -5,7 +5,9 @@ import { pool } from './db/pool';
 const app = createApp();
 
 const server = app.listen(env.port, () => {
-  console.log(`[cozy-den] API listening on http://localhost:${env.port} (${env.nodeEnv})`);
+  const addr = server.address();
+  const bind = typeof addr === 'object' && addr ? `${addr.address}:${addr.port}` : `:${env.port}`;
+  console.log(`[cozy-den] API listening on ${bind} (${env.nodeEnv})`);
 });
 
 // Graceful shutdown so in-flight requests finish and the pool closes cleanly.
