@@ -2273,3 +2273,67 @@ textarea:focus {
   background: var(--surface-variant);
   color: var(--muted);
 }
+
+/* ============ Header centring & auth card fit ============ */
+/* The nav was centred with `margin: 0 auto` inside a flex row, so it centred in
+   the space left over by the brand and the actions — which are different widths,
+   putting it ~21px off true centre. A 3-column grid with equal side tracks
+   centres it against the viewport regardless of what sits either side. */
+.topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+.topbar > .brand {
+  justify-self: start;
+}
+.topbar .mainnav {
+  justify-self: center;
+  margin: 0;
+}
+.topbar .nav-actions {
+  justify-self: end;
+}
+
+@media (max-width: 720px) {
+  /* Brand + actions on row 1, the scrollable nav spanning row 2. */
+  .topbar {
+    grid-template-columns: auto auto;
+    row-gap: 0.75rem;
+  }
+  .topbar > .brand {
+    grid-column: 1;
+  }
+  .topbar .nav-actions {
+    grid-column: 2;
+  }
+  .topbar .mainnav {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+}
+
+/* The auth card's inputs would not shrink below their intrinsic width, so on a
+   375px screen the card overflowed its padded container and was clipped by
+   `overflow: hidden` — which read as "not centred". min-width:0 lets grid and
+   flex children actually shrink. */
+.auth-page {
+  grid-template-columns: minmax(0, 1fr);
+}
+.auth-card,
+.auth-field,
+.auth-input,
+.auth-input input {
+  min-width: 0;
+}
+.auth-card {
+  width: 100%;
+}
+@media (max-width: 560px) {
+  .auth-page {
+    padding: 1.25rem;
+  }
+  .auth-card {
+    padding: 1.35rem;
+  }
+}

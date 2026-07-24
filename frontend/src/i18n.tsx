@@ -195,10 +195,6 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.password': { en: 'Password', ar: 'كلمة السر' },
   'staff.signin': { en: 'Sign in', ar: 'دخول' },
   'staff.signing': { en: 'Signing in…', ar: 'جاري الدخول…' },
-  'staff.creds': {
-    en: 'Dev credentials: staff@cozyden.local / cozyden123',
-    ar: 'بيانات تجريبية: staff@cozyden.local / cozyden123',
-  },
   'staff.dashboard': { en: 'Dashboard', ar: 'لوحة التحكم' },
   'staff.signedInAs': { en: 'Signed in as {name}', ar: 'مسجّل دخول باسم {name}' },
   'staff.today': { en: "Today's bookings", ar: 'حجوزات اليوم' },

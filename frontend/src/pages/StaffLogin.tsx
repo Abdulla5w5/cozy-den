@@ -242,9 +242,6 @@ export function StaffLogin() {
           </div>
         </form>
 
-        <p className="muted" style={{ marginTop: '1rem' }}>
-          {t('staff.creds')}
-        </p>
       </div>
     </div>
   );
