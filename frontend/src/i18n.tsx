@@ -328,7 +328,6 @@ const dict: Record<string, { en: string; ar: string }> = {
     ar: 'يظهر مرة وحدة بكل زيارة. عطّله عشان يختفي.',
   },
   'promo.close': { en: 'Close', ar: 'إغلاق' },
-  'promo.kicker': { en: 'Upcoming Event', ar: 'فعالية قادمة' },
 
   // ---- booking status workflow + staff manual entry ----
   'status.all': { en: 'All', ar: 'الكل' },
