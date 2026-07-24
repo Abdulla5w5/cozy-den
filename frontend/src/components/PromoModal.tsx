@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
@@ -46,7 +47,11 @@ export function PromoModal() {
 
   const isInternal = promo.link_url?.startsWith('/');
 
-  return (
+  // Portalled to <body>: a position:fixed element is positioned against its
+  // nearest ancestor with a transform/filter/backdrop-filter, and the app shell
+  // has several. Rendering at the body root removes that whole class of bug —
+  // which matters most on iOS Safari, where it bites hardest.
+  return createPortal(
     <div className="promo-backdrop" role="dialog" aria-modal="true" onClick={close}>
       <div className="promo-card" onClick={(e) => e.stopPropagation()}>
         <button className="promo-x" onClick={close} aria-label={t('promo.close')}>
@@ -81,6 +86,7 @@ export function PromoModal() {
             ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
