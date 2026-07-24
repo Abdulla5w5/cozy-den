@@ -1636,12 +1636,20 @@ table.data code {
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 211, 193, 0.2);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  opacity: 1;
+  /* Transform-only entrance. The previous version animated opacity from 0, and
+     when the animation stalled (observed in production on mobile: playState
+     "running" but currentTime frozen at 0) the card stayed at its `from`
+     keyframe — invisible. An animation must never be the thing that decides
+     whether the modal can be seen. */
   animation: promo-in 0.35s ease-out;
 }
 @keyframes promo-in {
   from {
-    opacity: 0;
     transform: translateY(16px) scale(0.98);
+  }
+  to {
+    transform: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {
