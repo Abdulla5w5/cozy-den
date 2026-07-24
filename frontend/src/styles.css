@@ -2350,7 +2350,7 @@ textarea:focus {
   .mainnav.guest {
     overflow-x: visible;
     justify-content: center;
-    gap: 0.7rem;
+    gap: 1.5rem;
     /* no edge bleed: the row must fit exactly, not hint at more content */
     margin-inline: 0;
     padding-inline: 0;
@@ -2361,7 +2361,7 @@ textarea:focus {
 }
 @media (max-width: 360px) {
   .mainnav.guest {
-    gap: 0.55rem;
+    gap: 1rem;
   }
   .mainnav.guest a {
     font-size: 0.78rem;
