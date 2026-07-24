@@ -1,10 +1,13 @@
+import { createPortal } from 'react-dom';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
-import { MonthlyAnalytics, StaffBooking, Table, TableAvailability } from '../types';
+import { MonthlyAnalytics, StaffBooking, Table, TableAvailability, TeamMember } from '../types';
+import { EventsTab, PromoTab } from './StaffContent';
+import { SupportTab } from './StaffSupport';
 
-type Tab = 'today' | 'analytics' | 'customers';
+type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support';
 
 interface Customer {
   name: string;
@@ -25,14 +28,18 @@ export function StaffDashboard() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const [staffName, setStaffName] = useState<string | null>(null);
+  const [staffEmail, setStaffEmail] = useState('');
   const [tab, setTab] = useState<Tab>('today');
 
   useEffect(() => {
     api
-      .get<{ user: { name: string; isStaff: boolean } }>('/auth/me')
+      .get<{ user: { name: string; email: string; isStaff: boolean } }>('/auth/me')
       .then((r) => {
         if (!r.user.isStaff) navigate('/'); // logged in but not staff
-        else setStaffName(r.user.name);
+        else {
+          setStaffName(r.user.name);
+          setStaffEmail(r.user.email);
+        }
       })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 401) navigate('/register');
@@ -44,35 +51,59 @@ export function StaffDashboard() {
     navigate('/register');
   }
 
-  if (!staffName) return <p className="staff-loading">{t('loading')}</p>;
+  if (!staffName) return <p>{t('loading')}</p>;
 
   return (
-    <div className="staff-dashboard">
-      <header className="staff-portal-bar">
-        <div className="staff-brand">
-          <span>Cozy Den</span>
-          <small>Staff portal</small>
+    <div className="card wide">
+      <div className="dash-head">
+        <h2>{t('staff.dashboard')}</h2>
+        <div>
+          <span className="muted">{t('staff.signedInAs', { name: staffName })}</span>
+          <button className="link" onClick={logout}>
+            {t('nav.logout')}
+          </button>
         </div>
-        <nav className="staff-nav" aria-label="Staff dashboard views">
-          <button className={tab === 'today' ? 'active' : ''} onClick={() => setTab('today')}>
-            {t('staff.today')}
-          </button>
-          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => setTab('analytics')}>
-            {t('staff.analytics')}
-          </button>
-          <button className={tab === 'customers' ? 'active' : ''} onClick={() => setTab('customers')}>
-            {t('staff.customers')}
-          </button>
-        </nav>
-        <div className="staff-profile">
-          <span className="staff-avatar" aria-hidden="true">{staffName.slice(0, 1).toUpperCase()}</span>
-          <span className="staff-profile-name">{staffName}</span>
-          <button className="staff-signout" onClick={logout}>{t('nav.logout')}</button>
-        </div>
-      </header>
-      <main className="staff-dashboard-main">
-        {tab === 'today' ? <TodayTab /> : tab === 'analytics' ? <AnalyticsTab /> : <CustomersTab />}
-      </main>
+      </div>
+
+      <div className="tabs">
+        <button className={tab === 'today' ? 'active' : ''} onClick={() => setTab('today')}>
+          {t('staff.today')}
+        </button>
+        <button className={tab === 'analytics' ? 'active' : ''} onClick={() => setTab('analytics')}>
+          {t('staff.analytics')}
+        </button>
+        <button className={tab === 'customers' ? 'active' : ''} onClick={() => setTab('customers')}>
+          {t('staff.customers')}
+        </button>
+        <button className={tab === 'events' ? 'active' : ''} onClick={() => setTab('events')}>
+          {t('staff.events')}
+        </button>
+        <button className={tab === 'promo' ? 'active' : ''} onClick={() => setTab('promo')}>
+          {t('staff.promo')}
+        </button>
+        <button className={tab === 'support' ? 'active' : ''} onClick={() => setTab('support')}>
+          {t('staff.support')}
+        </button>
+        <button className={tab === 'team' ? 'active' : ''} onClick={() => setTab('team')}>
+          {t('staff.team')}
+        </button>
+      </div>
+
+      {tab === 'today' ? (
+        <TodayTab />
+      ) : tab === 'analytics' ? (
+        <AnalyticsTab />
+      ) : tab === 'customers' ? (
+        <CustomersTab />
+      ) : tab === 'events' ? (
+        <EventsTab />
+      ) : tab === 'support' ? (
+        <SupportTab />
+      ) : tab === 'team' ? (
+        <TeamTab meEmail={staffEmail} />
+      ) : (
+        <PromoTab />
+      )}
     </div>
   );
 }
@@ -88,6 +119,7 @@ function TodayTab() {
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [printing, setPrinting] = useState<StaffBooking | null>(null);
 
   const load = useCallback(() => {
     api
@@ -111,29 +143,39 @@ function TodayTab() {
     }
   }
 
+  // Print flow: render the receipt off-screen, hand it to the browser's print
+  // dialog (which also offers "Save as PDF"), then mark the booking printed.
+  useEffect(() => {
+    if (!printing) return;
+    const booking = printing;
+    const done = () => {
+      setPrinting(null);
+      act(`/staff/bookings/${booking.id}/printed`);
+    };
+    window.addEventListener('afterprint', done, { once: true });
+    const id = window.setTimeout(() => window.print(), 50);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener('afterprint', done);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printing]);
+
   const shown = filter === 'all' ? bookings : bookings.filter((b) => b.status === filter);
   const outstanding = bookings.filter((b) => b.status === 'print_receipt').length;
 
   return (
-    <section className="staff-floor">
-      <div className="staff-page-heading">
-        <div>
-          <span className="staff-kicker">Operations board</span>
-          <h1>Daily floor map</h1>
-          <p>Live arrivals, orders, and table handoffs for the selected service date.</p>
-        </div>
-        <button className="staff-new-booking" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? t('staff.closeForm') : t('staff.newBooking')}
-        </button>
-      </div>
-
-      <div className="staff-control-bar">
+    <section>
+      <div className="row">
         <label className="field inline">
           {t('bk.date')}
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
+        <button className="primary" onClick={() => setShowForm((v) => !v)}>
+          {showForm ? t('staff.closeForm') : t('staff.newBooking')}
+        </button>
         <form
-          className="staff-quick-checkin"
+          className="checkin"
           onSubmit={(e) => {
             e.preventDefault();
             if (code.trim()) act('/staff/confirm', { code: code.trim() });
@@ -144,7 +186,7 @@ function TodayTab() {
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
           />
-          <button>{t('staff.confirmBtn')}</button>
+          <button className="primary">{t('staff.confirmBtn')}</button>
         </form>
       </div>
 
@@ -158,11 +200,11 @@ function TodayTab() {
         />
       )}
 
-      <div className="staff-filter-row">
+      <div className="chips left">
         {STATUS_FILTERS.map((f) => (
           <button
             key={f}
-            className={filter === f ? 'active' : ''}
+            className={`chip ${filter === f ? 'active' : ''}`}
             onClick={() => setFilter(f)}
           >
             {t(`status.${f}`)}
@@ -173,15 +215,8 @@ function TodayTab() {
 
       {error && <div className="alert error">{error}</div>}
 
-      <div className="staff-arrivals-card">
-        <div className="staff-card-head">
-          <div>
-            <span className="staff-kicker">Live queue</span>
-            <h2>Active arrivals</h2>
-          </div>
-          <span>{shown.length} shown</span>
-        </div>
-      <table className="data staff-arrivals-table">
+      <div className="table-scroll">
+        <table className="data">
         <thead>
           <tr>
             <th>{t('staff.time')}</th>
@@ -225,7 +260,7 @@ function TodayTab() {
                     {t('staff.confirmBtn')}
                   </button>
                 ) : b.status === 'print_receipt' ? (
-                  <button className="link" onClick={() => act(`/staff/bookings/${b.id}/printed`)}>
+                  <button className="link" onClick={() => setPrinting(b)}>
                     {t('staff.printedBtn')}
                   </button>
                 ) : (
@@ -236,8 +271,41 @@ function TodayTab() {
           ))}
         </tbody>
       </table>
-      </div>
+        </div>
+      {printing && <Receipt booking={printing} date={date} />}
     </section>
+  );
+}
+
+// Printable receipt. Hidden on screen, sole visible element when printing
+// (see .receipt-sheet in styles.css) so the browser lays it out on its own page.
+function Receipt({ booking, date }: { booking: StaffBooking; date: string }) {
+  const { t, money } = useI18n();
+  const row = (label: string, value: string) => (
+    <div className="receipt-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+  return createPortal(
+    <div className="receipt-sheet">
+      <h1>🎲 Cozy Den</h1>
+      <h2>{t('receipt.title')}</h2>
+      <div className="receipt-code">{booking.verificationCode}</div>
+      {row(t('receipt.guest'), booking.guestName)}
+      {row(t('receipt.contact'), booking.guestContact)}
+      {row(t('receipt.table'), booking.tableLabel)}
+      {row(t('receipt.date'), date)}
+      {row(t('receipt.time'), booking.timeSlot)}
+      <hr />
+      {row(t('receipt.fee'), money(booking.totalCents))}
+      <div className="receipt-row total">
+        <span>{t('receipt.total')}</span>
+        <strong>{money(booking.totalCents)}</strong>
+      </div>
+      <p className="receipt-thanks">{t('receipt.thanks')}</p>
+    </div>,
+    document.body,
   );
 }
 
@@ -370,107 +438,51 @@ function AnalyticsTab() {
       .catch((e) => setError(e.message));
   }, [month]);
 
-  const monthLabel = new Intl.DateTimeFormat(undefined, {
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(`${month}-01T00:00:00`));
-  const topSlot = data?.peakSlots[0];
-  const activeTables = data?.tableUtilization.filter((table) => table.bookings > 0).length ?? 0;
-  const averageBookingValue =
-    data && data.bookingsCount > 0 ? Math.round(data.revenueCents / data.bookingsCount) : 0;
-
   return (
-    <section className="staff-analytics">
-      <div className="staff-analytics-heading">
-        <div>
-          <span className="staff-kicker">Performance desk</span>
-          <h1>Monthly analytics</h1>
-          <p>Booking demand, revenue, and floor usage for {monthLabel}.</p>
-        </div>
-        <label className="staff-month-picker">
-          <span>{t('staff.month')}</span>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-        </label>
-      </div>
+    <section>
+      <label className="field inline">
+        {t('staff.month')}
+        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+      </label>
 
       {error && <div className="alert error">{error}</div>}
       {!data ? (
-        <div className="staff-analytics-loading">{t('loading')}</div>
+        <p>{t('loading')}</p>
       ) : (
         <>
-          <div className="staff-analytics-kpis">
-            <article className="staff-analytics-kpi revenue">
-              <div className="staff-analytics-kpi-label">
-                <span>{t('staff.revenue')}</span>
-                <small>{data.month === thisMonth() ? 'Live month' : 'Selected month'}</small>
-              </div>
-              <strong>{money(data.revenueCents)}</strong>
-              <p>{money(averageBookingValue)} average booking value</p>
-            </article>
-
-            <article className="staff-analytics-kpi bookings">
-              <div className="staff-analytics-kpi-label">
-                <span>{t('staff.bookings')}</span>
-                <small>{activeTables} active tables</small>
-              </div>
+          <div className="kpis">
+            <div className="kpi">
+              <span>{t('staff.bookings')}</span>
               <strong>{data.bookingsCount}</strong>
-              <p>
-                {activeTables > 0
-                  ? `${(data.bookingsCount / activeTables).toFixed(1)} per active table`
-                  : 'No table activity yet'}
-              </p>
-            </article>
-
-            <article className="staff-analytics-kpi peak">
-              <div className="staff-analytics-kpi-label">
-                <span>{t('staff.peak')}</span>
-                <small>Highest demand</small>
-              </div>
-              <strong>{topSlot?.timeSlot ?? '--:--'}</strong>
-              <p>
-                {topSlot
-                  ? `${topSlot.bookings} booking${topSlot.bookings === 1 ? '' : 's'} in this slot`
-                  : 'No peak window yet'}
-              </p>
-            </article>
+            </div>
+            <div className="kpi">
+              <span>{t('staff.revenue')}</span>
+              <strong>{money(data.revenueCents)}</strong>
+            </div>
           </div>
 
-          <div className="staff-analytics-grid">
-            <article className="staff-analytics-panel">
-              <div className="staff-analytics-panel-heading">
-                <div>
-                  <span className="staff-kicker">Service rhythm</span>
-                  <h2>{t('staff.peak')}</h2>
-                  <p>Booking volume by arrival time.</p>
-                </div>
-                <span className="staff-analytics-period">{monthLabel}</span>
-              </div>
+          <div className="analytics-grid">
+            <div>
+              <h4>{t('staff.popularGames')}</h4>
+              <AnalyticsList
+                rows={data.popularGames.map((g) => [g.title, g.bookings])}
+                empty={t('staff.emptyGames')}
+              />
+            </div>
+            <div>
+              <h4>{t('staff.peak')}</h4>
               <AnalyticsList
                 rows={data.peakSlots.map((s) => [s.timeSlot, s.bookings])}
                 empty={t('staff.emptyBookings')}
-                valueLabel="bookings"
-                tone="amber"
               />
-            </article>
-
-            <article className="staff-analytics-panel">
-              <div className="staff-analytics-panel-heading">
-                <div>
-                  <span className="staff-kicker">Floor balance</span>
-                  <h2>{t('staff.utilization')}</h2>
-                  <p>Monthly reservations by table and capacity.</p>
-                </div>
-                <span className="staff-analytics-period">
-                  {activeTables}/{data.tableUtilization.length} active
-                </span>
-              </div>
+            </div>
+            <div>
+              <h4>{t('staff.utilization')}</h4>
               <AnalyticsList
                 rows={data.tableUtilization.map((tb) => [`${tb.label} (${tb.capacity})`, tb.bookings])}
                 empty={t('staff.noTables')}
-                valueLabel="bookings"
-                tone="violet"
               />
-            </article>
+            </div>
           </div>
         </>
       )}
@@ -499,6 +511,7 @@ function CustomersTab() {
       ) : customers.length === 0 ? (
         <p className="muted">{t('cust.empty')}</p>
       ) : (
+        <div className="table-scroll">
         <table className="data">
           <thead>
             <tr>
@@ -525,42 +538,131 @@ function CustomersTab() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </section>
   );
 }
 
-function AnalyticsList({
-  rows,
-  empty,
-  valueLabel,
-  tone = 'primary',
-}: {
-  rows: [string, number][];
-  empty: string;
-  valueLabel: string;
-  tone?: 'primary' | 'amber' | 'violet';
-}) {
+function AnalyticsList({ rows, empty }: { rows: [string, number][]; empty: string }) {
   if (rows.length === 0) return <p className="muted">{empty}</p>;
   const max = Math.max(...rows.map((r) => r[1]), 1);
   return (
-    <ul className={`staff-analytics-bars ${tone}`}>
+    <ul className="bars">
       {rows.map(([label, value]) => (
         <li key={label}>
-          <div>
-            <strong>{label}</strong>
-            <span>
-              {value} {valueLabel}
-            </span>
-          </div>
-          <span className="staff-analytics-bar-track" aria-hidden="true">
-            <span
-              className="staff-analytics-bar-fill"
-              style={{ width: `${(value / max) * 100}%` }}
-            />
+          <span className="bar-label">{label}</span>
+          <span className="bar-track">
+            <span className="bar-fill" style={{ width: `${(value / max) * 100}%` }} />
           </span>
+          <span className="bar-value">{value}</span>
         </li>
       ))}
     </ul>
+  );
+}
+
+// Staff access is a column on users, granted here rather than by editing an env
+// var and redeploying. Grants target existing accounts only.
+function TeamTab({ meEmail }: { meEmail: string }) {
+  const { t } = useI18n();
+  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    api
+      .get<{ team: TeamMember[] }>('/staff/team')
+      .then((r) => setTeam(r.team))
+      .catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function grant(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await api.post('/staff/team', { email: email.trim() });
+      setEmail('');
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revoke(m: TeamMember) {
+    if (!window.confirm(t('team.confirmRevoke', { email: m.email }))) return;
+    setError(null);
+    try {
+      await api.del(`/staff/team/${m.id}`);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed.');
+    }
+  }
+
+  return (
+    <section>
+      <p className="muted">{t('team.hint')}</p>
+      <form className="row" onSubmit={grant}>
+        <label className="field inline">
+          {t('team.email')}
+          <input
+            type="email"
+            required
+            placeholder="name@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </label>
+        <button className="primary" disabled={busy}>
+          {t('team.grant')}
+        </button>
+      </form>
+
+      {error && <div className="alert error">{error}</div>}
+
+      {team === null ? (
+        <p>{t('loading')}</p>
+      ) : (
+        <div className="table-scroll">
+        <table className="data">
+          <thead>
+            <tr>
+              <th>{t('bk.name')}</th>
+              <th>{t('bk.email')}</th>
+              <th>{t('team.since')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {team.map((m) => (
+              <tr key={m.id}>
+                <td>{m.name}</td>
+                <td>{m.email}</td>
+                <td>{m.createdAt.slice(0, 10)}</td>
+                <td>
+                  {m.email === meEmail ? (
+                    <span className="muted">{t('team.you')}</span>
+                  ) : (
+                    <button className="link" onClick={() => revoke(m)}>
+                      {t('team.revoke')}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+      )}
+    </section>
   );
 }
