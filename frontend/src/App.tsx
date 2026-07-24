@@ -138,8 +138,13 @@ export function App() {
             </div>
             <div>
               <h4>{t('footer.cafe')}</h4>
-              <a href="#">{t('footer.rules')}</a>
-              <a href="#">{t('footer.location')}</a>
+              <a
+                href="https://maps.app.goo.gl/trvMLY888ZiGpdpQ7"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t('footer.location')}
+              </a>
               <Link to="/support">{t('footer.contact')}</Link>
             </div>
             {user?.isStaff && (

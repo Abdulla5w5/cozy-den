@@ -21,7 +21,6 @@ const dict: Record<string, { en: string; ar: string }> = {
   'footer.library': { en: 'Game library', ar: 'مكتبة الألعاب' },
   'footer.food': { en: 'Food & drink', ar: 'أكل وشرب' },
   'footer.cafe': { en: 'Café', ar: 'الكافيه' },
-  'footer.rules': { en: 'House rules', ar: 'قوانين المحل' },
   'footer.location': { en: 'Location', ar: 'الموقع' },
   'footer.contact': { en: 'Contact', ar: 'تواصل معنا' },
   'footer.dashboard': { en: 'Dashboard', ar: 'لوحة التحكم' },
