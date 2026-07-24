@@ -28,6 +28,10 @@ export const env = {
     .map((o) => o.trim())
     .filter(Boolean),
 
+  // Mail transport. Without SMTP_URL the mailer logs instead of sending.
+  smtpUrl: optional('SMTP_URL', ''),
+  mailFrom: optional('MAIL_FROM', 'Cozy Den <no-reply@cozyden.local>'),
+
   // Absolute site URL used in notification emails (links back to a thread).
   publicUrl: optional('PUBLIC_URL', '').replace(/\/$/, ''),
 

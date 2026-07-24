@@ -2,6 +2,9 @@ import { pool, query } from '../../db/pool';
 import { ApiError } from '../../middleware/error';
 import { notifyNewComplaint, notifyResolved, notifyStaffReply } from './support.mail';
 
+// A customer may have at most this many messages awaiting a staff reply.
+const MAX_UNANSWERED = 2;
+
 export type Kind = 'suggestion' | 'complaint' | 'question';
 export type Severity = 'low' | 'normal' | 'urgent';
 export type Status = 'open' | 'in_progress' | 'resolved' | 'closed';
@@ -203,6 +206,28 @@ export async function addMessage(
   const request = reqRows[0];
   if (!request) throw new ApiError(404, 'Request not found.');
   if (request.status === 'closed') throw new ApiError(409, 'This request is closed.');
+
+  // Anti-flood: a customer may queue at most two unanswered messages. Internal
+  // notes are invisible to them, so only a public staff reply clears the count.
+  if (role === 'customer') {
+    const { rows: pending } = await query<{ n: string }>(
+      `SELECT count(*)::text AS n
+         FROM support_messages
+        WHERE request_id = $1
+          AND author_role = 'customer'
+          AND created_at > COALESCE(
+                (SELECT max(created_at) FROM support_messages
+                  WHERE request_id = $1 AND author_role = 'staff' AND NOT is_internal),
+                '-infinity'::timestamptz)`,
+      [requestId],
+    );
+    if (Number(pending[0].n) >= MAX_UNANSWERED) {
+      throw new ApiError(
+        429,
+        'You have already sent two messages. Please wait for our reply before sending another.',
+      );
+    }
+  }
 
   const { rows } = await query(
     `INSERT INTO support_messages (request_id, author_id, author_name, author_role, is_internal, body)
