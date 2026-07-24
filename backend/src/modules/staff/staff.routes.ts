@@ -5,6 +5,12 @@ import { requireStaff } from '../../middleware/auth';
 import { getBookingsForDate, confirmBooking, markPrinted } from './staff.service';
 import { getMonthlyAnalytics, getRecurrentCustomers } from './analytics.service';
 import { listTeam, grantStaff, revokeStaff } from './team.service';
+import {
+  addMessage,
+  listAllRequests,
+  setStatus,
+  Status as SupportStatus,
+} from '../support/support.service';
 import { staffCreateBookingSchema } from '../bookings/bookings.schema';
 import { createStaffBooking, getBookingById } from '../bookings/bookings.service';
 
@@ -152,3 +158,70 @@ staffRouter.delete('/team/:id', requireStaff, async (req, res, next) => {
     next(err);
   }
 });
+
+// ---------- Support inbox (staff side) ----------
+
+const supportListQuery = z.object({
+  status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
+});
+
+// GET /api/staff/support?status=open — the inbox.
+staffRouter.get(
+  '/support',
+  requireStaff,
+  validate(supportListQuery, 'query'),
+  async (req, res, next) => {
+    try {
+      const status = (req.query as { status?: SupportStatus }).status;
+      res.json({ requests: await listAllRequests(status) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+const staffReplySchema = z.object({
+  body: z.string().trim().min(1).max(4000),
+  internal: z.boolean().optional(),
+});
+
+// POST /api/staff/support/:id/messages — reply, or leave a staff-only note.
+staffRouter.post(
+  '/support/:id/messages',
+  requireStaff,
+  validate(staffReplySchema),
+  async (req, res, next) => {
+    try {
+      const actor = { id: req.user!.sub, name: req.user!.name, email: req.user!.email };
+      const message = await addMessage(
+        Number(req.params.id),
+        actor,
+        'staff',
+        req.body.body,
+        req.body.internal === true
+      );
+      res.status(201).json({ message });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+const statusSchema = z.object({
+  status: z.enum(['open', 'in_progress', 'resolved', 'closed']),
+});
+
+// POST /api/staff/support/:id/status — move the request through the workflow.
+staffRouter.post(
+  '/support/:id/status',
+  requireStaff,
+  validate(statusSchema),
+  async (req, res, next) => {
+    try {
+      const actor = { id: req.user!.sub, name: req.user!.name, email: req.user!.email };
+      res.json({ request: await setStatus(Number(req.params.id), actor, req.body.status) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);

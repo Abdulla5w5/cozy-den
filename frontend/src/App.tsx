@@ -11,6 +11,7 @@ import { StaffLogin } from './pages/StaffLogin';
 import { StaffDashboard } from './pages/StaffDashboard';
 import { MyBookings } from './pages/MyBookings';
 import { EventsPage } from './pages/EventsPage';
+import { SupportPage, SupportThreadPage } from './pages/SupportPage';
 import { PromoModal } from './components/PromoModal';
 
 export function App() {
@@ -54,6 +55,7 @@ export function App() {
           {loggedIn && !user?.isStaff && (
             <NavLink to="/account">{t('nav.mybookings')}</NavLink>
           )}
+          {loggedIn && !user?.isStaff && <NavLink to="/support">{t('nav.support')}</NavLink>}
           {user?.isStaff && <NavLink to="/staff/dashboard">{t('nav.staff')}</NavLink>}
         </nav>
         <div className="nav-actions">
@@ -84,6 +86,8 @@ export function App() {
           <Route path="/games" element={<GamesPage />} />
           <Route path="/menu" element={<MenuPage />} />
           <Route path="/events" element={<EventsPage />} />
+          <Route path="/support" element={<SupportPage />} />
+          <Route path="/support/:id" element={<SupportThreadPage />} />
           <Route path="/book" element={<BookingFlow />} />
           <Route path="/confirmation/:code" element={<Confirmation />} />
           {/* Public auth page — separate from the staff namespace. */}
@@ -136,7 +140,7 @@ export function App() {
               <h4>{t('footer.cafe')}</h4>
               <a href="#">{t('footer.rules')}</a>
               <a href="#">{t('footer.location')}</a>
-              <a href="#">{t('footer.contact')}</a>
+              <Link to="/support">{t('footer.contact')}</Link>
             </div>
             {user?.isStaff && (
               <div>

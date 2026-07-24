@@ -5,8 +5,9 @@ import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { MonthlyAnalytics, StaffBooking, Table, TableAvailability, TeamMember } from '../types';
 import { EventsTab, PromoTab } from './StaffContent';
+import { SupportTab } from './StaffSupport';
 
-type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team';
+type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support';
 
 interface Customer {
   name: string;
@@ -80,6 +81,9 @@ export function StaffDashboard() {
         <button className={tab === 'promo' ? 'active' : ''} onClick={() => setTab('promo')}>
           {t('staff.promo')}
         </button>
+        <button className={tab === 'support' ? 'active' : ''} onClick={() => setTab('support')}>
+          {t('staff.support')}
+        </button>
         <button className={tab === 'team' ? 'active' : ''} onClick={() => setTab('team')}>
           {t('staff.team')}
         </button>
@@ -93,6 +97,8 @@ export function StaffDashboard() {
         <CustomersTab />
       ) : tab === 'events' ? (
         <EventsTab />
+      ) : tab === 'support' ? (
+        <SupportTab />
       ) : tab === 'team' ? (
         <TeamTab meEmail={staffEmail} />
       ) : (

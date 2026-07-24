@@ -118,3 +118,42 @@ export interface TeamMember {
   provider: string;
   createdAt: string;
 }
+
+export type SupportKind = 'suggestion' | 'complaint' | 'question';
+export type SupportSeverity = 'low' | 'normal' | 'urgent';
+export type SupportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export interface SupportRequest {
+  id: number;
+  kind: SupportKind;
+  severity: SupportSeverity | null;
+  subject: string;
+  status: SupportStatus;
+  createdAt: string;
+  updatedAt: string;
+  customerName?: string;
+  customerEmail?: string;
+  messageCount?: number;
+}
+
+export interface SupportMessage {
+  id: number;
+  authorName: string;
+  authorRole: 'customer' | 'staff';
+  isInternal: boolean;
+  body: string;
+  createdAt: string;
+}
+
+export interface SupportStatusEvent {
+  actorName: string;
+  from: string | null;
+  to: string;
+  createdAt: string;
+}
+
+export interface SupportThread {
+  request: SupportRequest;
+  messages: SupportMessage[];
+  statusHistory: SupportStatusEvent[];
+}

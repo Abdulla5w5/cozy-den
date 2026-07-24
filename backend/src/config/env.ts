@@ -28,6 +28,9 @@ export const env = {
     .map((o) => o.trim())
     .filter(Boolean),
 
+  // Absolute site URL used in notification emails (links back to a thread).
+  publicUrl: optional('PUBLIC_URL', '').replace(/\/$/, ''),
+
   databaseUrl: process.env.DATABASE_URL || undefined,
 
   // Shared rate-limit store. Unset => per-process memory limits (single instance only).

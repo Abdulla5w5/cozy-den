@@ -2135,3 +2135,141 @@ html {
     padding-inline: 0.6rem;
   }
 }
+
+/* ============ Support (Suggestions & Support) ============ */
+textarea {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: var(--surface-low);
+  color: var(--ink);
+  resize: vertical;
+}
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(148, 211, 193, 0.15);
+}
+.field.inline.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.field.inline.check input {
+  width: auto;
+}
+.sup-list-title {
+  margin-top: 2rem;
+}
+.sup-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.sup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 14px;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--surface-container);
+  border: 1px solid rgba(63, 73, 69, 0.4);
+  transition: border-color 0.2s;
+}
+.sup-row:hover {
+  border-color: var(--primary);
+}
+.sup-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.sup-row-main .muted {
+  font-size: 0.8rem;
+}
+.sup-thread {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.sup-msg {
+  padding: 0.9rem 1.1rem;
+  border-radius: 14px;
+  background: var(--surface-container);
+  border: 1px solid rgba(63, 73, 69, 0.4);
+}
+/* Staff replies lean emerald so the two voices are distinguishable at a glance. */
+.sup-msg.staff {
+  border-color: rgba(148, 211, 193, 0.35);
+  background: rgba(0, 77, 64, 0.18);
+}
+/* Internal notes are visually unmistakable — they must never read as a reply. */
+.sup-msg.internal {
+  border-style: dashed;
+  border-color: var(--accent);
+  background: rgba(254, 170, 0, 0.08);
+}
+.sup-msg-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+}
+.sup-msg p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sup-panel {
+  margin-top: 1.5rem;
+}
+.sup-audit {
+  margin-top: 1.25rem;
+  font-size: 0.85rem;
+}
+.sup-audit summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.sup-audit ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+}
+.pill.sev-urgent {
+  background: rgba(255, 180, 171, 0.18);
+  color: var(--bad);
+}
+.pill.sev-normal {
+  background: rgba(254, 170, 0, 0.15);
+  color: var(--accent);
+}
+.status.open {
+  background: rgba(254, 170, 0, 0.15);
+  color: var(--accent);
+}
+.status.in_progress {
+  background: rgba(148, 211, 193, 0.15);
+  color: var(--primary);
+}
+.status.resolved {
+  background: rgba(0, 77, 64, 0.35);
+  color: var(--on-primary-container);
+}
+.status.closed {
+  background: var(--surface-variant);
+  color: var(--muted);
+}

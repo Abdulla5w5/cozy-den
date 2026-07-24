@@ -10,6 +10,7 @@ import { gamesRouter } from './modules/games/games.routes';
 import { menuRouter } from './modules/menu/menu.routes';
 import { bookingsRouter } from './modules/bookings/bookings.routes';
 import { staffRouter } from './modules/staff/staff.routes';
+import { supportRouter } from './modules/support/support.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import { eventsRouter } from './modules/events/events.routes';
 import { historyRouter } from './modules/history/history.routes';
@@ -58,6 +59,7 @@ export function createApp() {
   app.use('/api/events', eventsRouter);
   app.use('/api/history', historyRouter);
   app.use('/api/promo', promoRouter);
+  app.use('/api/support', supportRouter);
   app.use('/api/staff', staffRouter);
 
   app.use(notFound);
