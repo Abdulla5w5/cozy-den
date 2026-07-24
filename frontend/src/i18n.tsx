@@ -25,6 +25,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'footer.location': { en: 'Location', ar: 'الموقع' },
   'footer.contact': { en: 'Contact', ar: 'تواصل معنا' },
   'footer.dashboard': { en: 'Dashboard', ar: 'لوحة التحكم' },
+  'footer.instagram': { en: 'Cozy Den on Instagram', ar: 'كوزي دن على إنستقرام' },
   'footer.legal': {
     en: '© 2026 Cozy Den Board Game Café · Prototype — payments & email are stubbed.',
     ar: '© 2026 كوزي دن · نسخة تجريبية — الدفع والإيميل تجريبي.',

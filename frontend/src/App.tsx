@@ -101,6 +101,29 @@ export function App() {
           <div className="footer-brand">
             <span className="brand">🎲 Cozy Den</span>
             <p className="muted">{t('footer.tagline')}</p>
+            <a
+              className="social-link"
+              href="https://www.instagram.com/cozyden.kw/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={t('footer.instagram')}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                <rect
+                  x="2.5"
+                  y="2.5"
+                  width="19"
+                  height="19"
+                  rx="5.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                />
+                <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                <circle cx="17.4" cy="6.6" r="1.2" fill="currentColor" />
+              </svg>
+              <span>@cozyden.kw</span>
+            </a>
           </div>
           <div className="footer-cols">
             <div>

@@ -957,6 +957,30 @@ table.data code {
 .footer-brand .brand {
   font-size: 1.3rem;
 }
+.social-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+  padding: 0.4rem 0.8rem 0.4rem 0.6rem;
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  color: var(--muted);
+  text-decoration: none;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.78rem;
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+}
+.social-link:hover,
+.social-link:focus-visible {
+  color: var(--on-primary);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.social-link svg {
+  flex: none;
+}
+
 .footer-cols {
   display: flex;
   gap: 3rem;
