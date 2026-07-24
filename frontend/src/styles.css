@@ -1651,11 +1651,72 @@ table.data code {
   border: none;
   background: rgba(255, 180, 171, 0.2);
 }
-.promo-img {
-  display: block;
-  width: 100%;
+/* Hero: image with a scrim so the headline stays readable on any artwork. */
+.promo-hero {
+  position: relative;
+  height: 16rem;
+}
+.promo-hero.plain {
   height: auto;
-  border-radius: 40px 40px 0 0;
+  padding-top: 3.5rem;
+  background: linear-gradient(160deg, rgba(0, 77, 64, 0.35), transparent 70%);
+}
+.promo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.promo-hero:not(.plain)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--surface), rgba(19, 19, 19, 0.4) 45%, transparent);
+}
+.promo-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+  opacity: 0.4;
+  pointer-events: none;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-style: italic;
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+  filter: blur(1px);
+  text-shadow: 0 0 10px #feaa00, 0 0 20px #feaa00, 0 0 30px #feaa00;
+}
+.promo-hero.plain .promo-watermark {
+  display: none;
+}
+.promo-hero-copy {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 2rem;
+  right: 2rem;
+  z-index: 20;
+}
+.promo-hero.plain .promo-hero-copy {
+  position: static;
+  padding: 0 2rem;
+}
+.promo-kicker {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--tertiary);
+}
+.promo-title {
+  margin: 0;
+  font-size: 2.25rem;
+  line-height: 1.1;
 }
 .promo-body {
   padding: 2rem;
@@ -1672,8 +1733,15 @@ table.data code {
   .promo-card {
     border-radius: 24px;
   }
-  .promo-img {
-    border-radius: 24px 24px 0 0;
+  .promo-hero {
+    height: 12rem;
+  }
+  .promo-title {
+    font-size: 1.6rem;
+  }
+  .promo-hero-copy {
+    left: 1.25rem;
+    right: 1.25rem;
   }
   .promo-body {
     padding: 1.25rem;

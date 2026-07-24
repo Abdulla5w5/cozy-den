@@ -52,10 +52,19 @@ export function PromoModal() {
         <button className="promo-x" onClick={close} aria-label={t('promo.close')}>
           ✕
         </button>
-        {promo.image_url && <img className="promo-img" src={promo.image_url} alt={promo.text} />}
-        {promo.link_url && (
-          <div className="promo-body">
-            {isInternal ? (
+        <div className={`promo-hero ${promo.image_url ? '' : 'plain'}`}>
+          {promo.image_url && <img className="promo-img" src={promo.image_url} alt="" />}
+          <span className="promo-watermark" aria-hidden="true">
+            Cozy Den
+          </span>
+          <div className="promo-hero-copy">
+            <span className="promo-kicker">{t('promo.kicker')}</span>
+            {promo.text && <h2 className="promo-title">{promo.text}</h2>}
+          </div>
+        </div>
+        <div className="promo-body">
+          {promo.link_url &&
+            (isInternal ? (
               <Link to={promo.link_url} className="cta button promo-cta" onClick={close}>
                 {promo.link_label || t('ev.seeAll')}
               </Link>
@@ -69,9 +78,8 @@ export function PromoModal() {
               >
                 {promo.link_label || t('ev.seeAll')}
               </a>
-            )}
-          </div>
-        )}
+            ))}
+        </div>
       </div>
     </div>
   );
