@@ -80,11 +80,16 @@ export const bookingLimiter = failOpen(
   })
 );
 
-// Strict cap on login/registration to blunt credential-stuffing / brute force.
+// Cap on login/registration to blunt credential-stuffing / brute force.
+// 13 per 15 min: enough headroom for a customer fumbling a password or a typo'd
+// email a few times, still far below what a brute-force run needs.
 export const loginLimiter = failOpen(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    max: 13,
+    // Don't spend the budget on successful logins — only failures count, so a
+    // household sharing an IP can't lock itself out by signing in normally.
+    skipSuccessfulRequests: true,
     standardHeaders: true,
     legacyHeaders: false,
     store: redisStore('rl:login:'),
