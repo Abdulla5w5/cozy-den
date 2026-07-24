@@ -290,6 +290,12 @@ const dict: Record<string, { en: string; ar: string }> = {
 
   // ---- game library ----
   'gl.buy': { en: 'Buy on Board Games Panda', ar: 'اشترها من بورد جيمز باندا' },
+  'gl.storeTitle': { en: 'Loved a game? Take it home.', ar: 'عجبتك لعبة؟ خذها بيتك.' },
+  'gl.storeSub': {
+    en: 'Shop the same titles at Board Games Q8 — delivered across Kuwait.',
+    ar: 'اشتر نفس الألعاب من بورد جيمز كويت — توصيل داخل الكويت.',
+  },
+  'gl.storeCta': { en: 'Visit store →', ar: 'زور المتجر ←' },
   'gl.players': { en: 'players', ar: 'لاعبين' },
 
   // ---- game history ----

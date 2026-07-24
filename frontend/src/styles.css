@@ -1942,3 +1942,59 @@ table.data code {
     margin: 6mm;
   }
 }
+
+/* ============ Partner store banner (Games page) ============ */
+.store-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 16px;
+  text-decoration: none;
+  color: var(--ink);
+  background: linear-gradient(135deg, rgba(254, 170, 0, 0.12), rgba(148, 211, 193, 0.06));
+  border: 1px solid rgba(254, 170, 0, 0.25);
+  transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+.store-banner:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(254, 170, 0, 0.15);
+}
+.store-banner-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.store-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.store-banner-copy strong {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 1rem;
+}
+.store-banner-copy .muted {
+  font-size: 0.85rem;
+}
+.store-banner-cta {
+  margin-left: auto;
+  flex: none;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+@media (max-width: 560px) {
+  .store-banner {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .store-banner-cta {
+    margin-left: 0;
+    width: 100%;
+  }
+}

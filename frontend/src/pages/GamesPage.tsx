@@ -90,6 +90,23 @@ export function GamesPage() {
         <p className="muted">{t('games.sub')}</p>
       </header>
 
+      {/* Partner store — customers who want to own a game they played here. */}
+      <a
+        className="store-banner"
+        href="https://boardgamesq8.com/index.php?route=product/category&path=66"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <span className="store-banner-icon" aria-hidden="true">
+          🛍️
+        </span>
+        <span className="store-banner-copy">
+          <strong>{t('gl.storeTitle')}</strong>
+          <span className="muted">{t('gl.storeSub')}</span>
+        </span>
+        <span className="store-banner-cta">{t('gl.storeCta')}</span>
+      </a>
+
       <div className="chips left">
         {categories.map((c) => (
           <button
