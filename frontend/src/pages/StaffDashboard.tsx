@@ -209,7 +209,8 @@ function TodayTab() {
 
       {error && <div className="alert error">{error}</div>}
 
-      <table className="data">
+      <div className="table-scroll">
+        <table className="data">
         <thead>
           <tr>
             <th>{t('staff.time')}</th>
@@ -264,6 +265,7 @@ function TodayTab() {
           ))}
         </tbody>
       </table>
+        </div>
       {printing && <Receipt booking={printing} date={date} />}
     </section>
   );
@@ -503,6 +505,7 @@ function CustomersTab() {
       ) : customers.length === 0 ? (
         <p className="muted">{t('cust.empty')}</p>
       ) : (
+        <div className="table-scroll">
         <table className="data">
           <thead>
             <tr>
@@ -529,6 +532,7 @@ function CustomersTab() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </section>
   );
@@ -622,6 +626,7 @@ function TeamTab({ meEmail }: { meEmail: string }) {
       {team === null ? (
         <p>{t('loading')}</p>
       ) : (
+        <div className="table-scroll">
         <table className="data">
           <thead>
             <tr>
@@ -650,6 +655,7 @@ function TeamTab({ meEmail }: { meEmail: string }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </section>
   );

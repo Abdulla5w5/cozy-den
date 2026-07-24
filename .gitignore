@@ -22,3 +22,4 @@ Thumbs.db
 
 # local placeholder for postgres TLS certs (prod uses DB_CERT_DIR)
 .pgcerts/
+docker-compose.override.yml

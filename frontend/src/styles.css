@@ -49,6 +49,8 @@ h4 {
 
 .app {
   min-height: 100vh;
+  /* dvh tracks the collapsing mobile URL bar; vh above is the fallback. */
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -1996,5 +1998,123 @@ table.data code {
   .store-banner-cta {
     margin-left: 0;
     width: 100%;
+  }
+}
+
+/* ============ Mobile: staff dashboard & global overflow guards ============ */
+
+/* The no-image promo variant must not inherit the hero's 16/9 box. */
+.promo-hero.plain {
+  aspect-ratio: auto;
+}
+
+/* Wide data tables scroll inside their own box instead of widening the page.
+   Without this the dashboard table forced the whole document ~580px wide on a
+   375px screen, which shifted every fixed/centred element on the page. */
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll table.data {
+  min-width: 640px; /* keeps columns legible; the box scrolls, the page doesn't */
+}
+
+@media (max-width: 720px) {
+  .dash-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .dash-head h2 {
+    margin: 0;
+  }
+  /* Tabs scroll horizontally rather than running off-screen. */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tabs button {
+    flex: none;
+    white-space: nowrap;
+  }
+  /* Stack the date / new-booking / confirm-code controls. */
+  .row {
+    align-items: stretch;
+  }
+  .row .field.inline {
+    display: flex;
+    width: 100%;
+    margin-right: 0;
+  }
+  .checkin {
+    width: 100%;
+    margin-left: 0;
+  }
+  .checkin input {
+    flex: 1;
+    min-width: 0;
+  }
+  .card {
+    padding: 1.25rem;
+  }
+  .card.wide {
+    padding: 1rem;
+  }
+  /* The sticky action bar bleeds to the card edge — match the smaller padding. */
+  .actions {
+    margin: 1.5rem -1.25rem -1.25rem;
+    padding: 2.25rem 1.25rem 1rem;
+  }
+}
+
+/* Nothing may push the document wider than the screen. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+img,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* ---- iOS / Android device fit ---- */
+html {
+  /* Stop iOS Safari inflating text in landscape. */
+  -webkit-text-size-adjust: 100%;
+}
+/* Keep the sticky action bar clear of the iPhone home indicator. */
+.actions {
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+}
+@supports (padding: max(0px)) {
+  .topbar {
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+    padding-right: max(1.25rem, env(safe-area-inset-right));
+  }
+  .footer {
+    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  }
+}
+/* Comfortable touch targets — 44px is the iOS/Android minimum. Keyed to width
+   as well as pointer type so it holds on phones that report a fine pointer
+   (stylus, some Android browsers). */
+@media (max-width: 720px), (pointer: coarse) {
+  button,
+  .button,
+  .chip,
+  .tabs button {
+    min-height: 44px;
+  }
+  button.link {
+    min-height: 44px;
+    padding-inline: 0.6rem;
   }
 }

@@ -167,7 +167,8 @@ export function EventsTab() {
         </form>
       )}
 
-      <table className="data">
+      <div className="table-scroll">
+        <table className="data">
         <thead>
           <tr>
             <th>{t('bk.date')}</th>
@@ -217,6 +218,7 @@ export function EventsTab() {
           ))}
         </tbody>
       </table>
+        </div>
     </section>
   );
 }
