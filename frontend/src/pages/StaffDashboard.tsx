@@ -3,10 +3,10 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
-import { MonthlyAnalytics, StaffBooking, Table, TableAvailability } from '../types';
+import { MonthlyAnalytics, StaffBooking, Table, TableAvailability, TeamMember } from '../types';
 import { EventsTab, PromoTab } from './StaffContent';
 
-type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo';
+type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team';
 
 interface Customer {
   name: string;
@@ -27,14 +27,18 @@ export function StaffDashboard() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const [staffName, setStaffName] = useState<string | null>(null);
+  const [staffEmail, setStaffEmail] = useState('');
   const [tab, setTab] = useState<Tab>('today');
 
   useEffect(() => {
     api
-      .get<{ user: { name: string; isStaff: boolean } }>('/auth/me')
+      .get<{ user: { name: string; email: string; isStaff: boolean } }>('/auth/me')
       .then((r) => {
         if (!r.user.isStaff) navigate('/'); // logged in but not staff
-        else setStaffName(r.user.name);
+        else {
+          setStaffName(r.user.name);
+          setStaffEmail(r.user.email);
+        }
       })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 401) navigate('/register');
@@ -76,6 +80,9 @@ export function StaffDashboard() {
         <button className={tab === 'promo' ? 'active' : ''} onClick={() => setTab('promo')}>
           {t('staff.promo')}
         </button>
+        <button className={tab === 'team' ? 'active' : ''} onClick={() => setTab('team')}>
+          {t('staff.team')}
+        </button>
       </div>
 
       {tab === 'today' ? (
@@ -86,6 +93,8 @@ export function StaffDashboard() {
         <CustomersTab />
       ) : tab === 'events' ? (
         <EventsTab />
+      ) : tab === 'team' ? (
+        <TeamTab meEmail={staffEmail} />
       ) : (
         <PromoTab />
       )}
@@ -540,5 +549,108 @@ function AnalyticsList({ rows, empty }: { rows: [string, number][]; empty: strin
         </li>
       ))}
     </ul>
+  );
+}
+
+// Staff access is a column on users, granted here rather than by editing an env
+// var and redeploying. Grants target existing accounts only.
+function TeamTab({ meEmail }: { meEmail: string }) {
+  const { t } = useI18n();
+  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    api
+      .get<{ team: TeamMember[] }>('/staff/team')
+      .then((r) => setTeam(r.team))
+      .catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function grant(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await api.post('/staff/team', { email: email.trim() });
+      setEmail('');
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revoke(m: TeamMember) {
+    if (!window.confirm(t('team.confirmRevoke', { email: m.email }))) return;
+    setError(null);
+    try {
+      await api.del(`/staff/team/${m.id}`);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed.');
+    }
+  }
+
+  return (
+    <section>
+      <p className="muted">{t('team.hint')}</p>
+      <form className="row" onSubmit={grant}>
+        <label className="field inline">
+          {t('team.email')}
+          <input
+            type="email"
+            required
+            placeholder="name@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </label>
+        <button className="primary" disabled={busy}>
+          {t('team.grant')}
+        </button>
+      </form>
+
+      {error && <div className="alert error">{error}</div>}
+
+      {team === null ? (
+        <p>{t('loading')}</p>
+      ) : (
+        <table className="data">
+          <thead>
+            <tr>
+              <th>{t('bk.name')}</th>
+              <th>{t('bk.email')}</th>
+              <th>{t('team.since')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {team.map((m) => (
+              <tr key={m.id}>
+                <td>{m.name}</td>
+                <td>{m.email}</td>
+                <td>{m.createdAt.slice(0, 10)}</td>
+                <td>
+                  {m.email === meEmail ? (
+                    <span className="muted">{t('team.you')}</span>
+                  ) : (
+                    <button className="link" onClick={() => revoke(m)}>
+                      {t('team.revoke')}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }

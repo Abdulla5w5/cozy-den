@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { ApiError } from './error';
+import { isStaffUser } from '../modules/staff/team.service';
 
 export const AUTH_COOKIE = 'cd_session';
 
@@ -18,12 +19,9 @@ export function signToken(claims: UserClaims): string {
   return jwt.sign(claims, env.jwtSecret, options);
 }
 
-/** Staff = email present in the STAFF_ALLOWED_EMAILS allow-list. */
-export function isStaff(email: string): boolean {
-  return (
-    env.staffAllowedEmails.length > 0 && env.staffAllowedEmails.includes(email.toLowerCase())
-  );
-}
+// Staff is a column on users, granted from the dashboard — see
+// modules/staff/team.service.ts. Checked per request so revoking access takes
+// effect immediately instead of waiting out the holder's 8h session.
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -56,11 +54,17 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   next();
 }
 
-/** Authenticated AND on the staff allow-list. */
-export function requireStaff(req: Request, _res: Response, next: NextFunction) {
+/** Authenticated AND flagged as staff in the database. */
+export async function requireStaff(req: Request, _res: Response, next: NextFunction) {
   const claims = readClaims(req);
   if (!claims) return next(new ApiError(401, 'Authentication required'));
-  if (!isStaff(claims.email)) return next(new ApiError(403, 'Staff access only.'));
+  try {
+    if (!(await isStaffUser(claims.sub))) {
+      return next(new ApiError(403, 'Staff access only.'));
+    }
+  } catch (err) {
+    return next(err);
+  }
   req.user = claims;
   next();
 }

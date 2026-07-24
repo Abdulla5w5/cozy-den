@@ -4,11 +4,12 @@ import { validate } from '../../middleware/validate';
 import { requireStaff } from '../../middleware/auth';
 import { getBookingsForDate, confirmBooking, markPrinted } from './staff.service';
 import { getMonthlyAnalytics, getRecurrentCustomers } from './analytics.service';
+import { listTeam, grantStaff, revokeStaff } from './team.service';
 import { staffCreateBookingSchema } from '../bookings/bookings.schema';
 import { createStaffBooking, getBookingById } from '../bookings/bookings.service';
 
 // Dashboard DATA endpoints. Auth (login/logout/me) lives in /api/auth.
-// Every route requires a signed-in user whose email is on the staff allow-list.
+// Every route requires a signed-in user flagged as staff in the database.
 export const staffRouter = Router();
 
 const dateQuery = z.object({
@@ -113,6 +114,40 @@ staffRouter.get(
 staffRouter.get('/customers', requireStaff, async (_req, res, next) => {
   try {
     res.json({ customers: await getRecurrentCustomers() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------- Team management (staff grant/revoke) ----------
+
+// GET /api/staff/team — current staff members.
+staffRouter.get('/team', requireStaff, async (_req, res, next) => {
+  try {
+    res.json({ team: await listTeam() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const grantSchema = z.object({ email: z.string().trim().email().max(200) });
+
+// POST /api/staff/team — promote an existing account to staff.
+staffRouter.post('/team', requireStaff, validate(grantSchema), async (req, res, next) => {
+  try {
+    const actor = { id: req.user!.sub, email: req.user!.email };
+    res.status(201).json({ member: await grantStaff(actor, req.body.email) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/staff/team/:id — revoke staff access.
+staffRouter.delete('/team/:id', requireStaff, async (req, res, next) => {
+  try {
+    const actor = { id: req.user!.sub, email: req.user!.email };
+    await revokeStaff(actor, Number(req.params.id));
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

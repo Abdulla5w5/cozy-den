@@ -110,3 +110,11 @@ export interface MonthlyAnalytics {
 }
 
 export const money = (cents: number) => `KD ${(cents / 100).toFixed(2)}`;
+
+export interface TeamMember {
+  id: number;
+  email: string;
+  name: string;
+  provider: string;
+  createdAt: string;
+}

@@ -313,6 +313,20 @@ const dict: Record<string, { en: string; ar: string }> = {
   // ---- staff: events + promo ----
   'staff.events': { en: 'Events', ar: 'الفعاليات' },
   'staff.promo': { en: 'Promo popup', ar: 'إعلان الترحيب' },
+  'staff.team': { en: 'Team', ar: 'الفريق' },
+  'team.hint': {
+    en: 'Staff access is granted here. The person must register a customer account first — then enter their email below to promote them.',
+    ar: 'صلاحية الموظفين تُعطى من هنا. لازم الشخص يسجّل حساب عادي أول، وبعدين اكتب إيميله تحت عشان تعطيه الصلاحية.',
+  },
+  'team.email': { en: 'Email of a registered account', ar: 'إيميل حساب مسجّل' },
+  'team.grant': { en: 'Grant staff access', ar: 'أعطِ الصلاحية' },
+  'team.revoke': { en: 'Revoke', ar: 'سحب الصلاحية' },
+  'team.since': { en: 'Member since', ar: 'عضو منذ' },
+  'team.you': { en: 'You', ar: 'أنت' },
+  'team.confirmRevoke': {
+    en: 'Revoke staff access for {email}? They keep their customer account.',
+    ar: 'تسحب صلاحية الموظف من {email}؟ حسابه العادي بيظل موجود.',
+  },
   'staff.newEvent': { en: '+ New event', ar: '+ فعالية جديدة' },
   'staff.evTitle': { en: 'Title', ar: 'العنوان' },
   'staff.evDesc': { en: 'Description', ar: 'الوصف' },
