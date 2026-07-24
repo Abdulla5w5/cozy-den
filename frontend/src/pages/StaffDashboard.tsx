@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
@@ -103,6 +104,7 @@ function TodayTab() {
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [printing, setPrinting] = useState<StaffBooking | null>(null);
 
   const load = useCallback(() => {
     api
@@ -125,6 +127,24 @@ function TodayTab() {
       setError(e instanceof Error ? e.message : 'Action failed.');
     }
   }
+
+  // Print flow: render the receipt off-screen, hand it to the browser's print
+  // dialog (which also offers "Save as PDF"), then mark the booking printed.
+  useEffect(() => {
+    if (!printing) return;
+    const booking = printing;
+    const done = () => {
+      setPrinting(null);
+      act(`/staff/bookings/${booking.id}/printed`);
+    };
+    window.addEventListener('afterprint', done, { once: true });
+    const id = window.setTimeout(() => window.print(), 50);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener('afterprint', done);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printing]);
 
   const shown = filter === 'all' ? bookings : bookings.filter((b) => b.status === filter);
   const outstanding = bookings.filter((b) => b.status === 'print_receipt').length;
@@ -224,7 +244,7 @@ function TodayTab() {
                     {t('staff.confirmBtn')}
                   </button>
                 ) : b.status === 'print_receipt' ? (
-                  <button className="link" onClick={() => act(`/staff/bookings/${b.id}/printed`)}>
+                  <button className="link" onClick={() => setPrinting(b)}>
                     {t('staff.printedBtn')}
                   </button>
                 ) : (
@@ -235,7 +255,40 @@ function TodayTab() {
           ))}
         </tbody>
       </table>
+      {printing && <Receipt booking={printing} date={date} />}
     </section>
+  );
+}
+
+// Printable receipt. Hidden on screen, sole visible element when printing
+// (see .receipt-sheet in styles.css) so the browser lays it out on its own page.
+function Receipt({ booking, date }: { booking: StaffBooking; date: string }) {
+  const { t, money } = useI18n();
+  const row = (label: string, value: string) => (
+    <div className="receipt-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+  return createPortal(
+    <div className="receipt-sheet">
+      <h1>🎲 Cozy Den</h1>
+      <h2>{t('receipt.title')}</h2>
+      <div className="receipt-code">{booking.verificationCode}</div>
+      {row(t('receipt.guest'), booking.guestName)}
+      {row(t('receipt.contact'), booking.guestContact)}
+      {row(t('receipt.table'), booking.tableLabel)}
+      {row(t('receipt.date'), date)}
+      {row(t('receipt.time'), booking.timeSlot)}
+      <hr />
+      {row(t('receipt.fee'), money(booking.totalCents))}
+      <div className="receipt-row total">
+        <span>{t('receipt.total')}</span>
+        <strong>{money(booking.totalCents)}</strong>
+      </div>
+      <p className="receipt-thanks">{t('receipt.thanks')}</p>
+    </div>,
+    document.body,
   );
 }
 
