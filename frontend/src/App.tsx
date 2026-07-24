@@ -45,7 +45,9 @@ export function App() {
         <Link to="/" className="brand">
           🎲 Cozy Den
         </Link>
-        <nav className="mainnav">
+        {/* Guests see four links, which fit without scrolling; signed-in users
+            get extra links and the row becomes swipeable. */}
+        <nav className={`mainnav ${loggedIn ? 'authed' : 'guest'}`}>
           <NavLink to="/" end>
             {t('nav.home')}
           </NavLink>

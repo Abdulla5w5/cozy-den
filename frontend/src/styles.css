@@ -2337,3 +2337,33 @@ textarea:focus {
     padding: 1.35rem;
   }
 }
+
+/* The legacy `.topbar nav a { margin-left: 1.5rem }` predates the flex `gap`
+   and stacked on top of it — 24px of phantom width per link, pushing the row
+   off-centre and eating the space the guest nav needs to fit. */
+.topbar .mainnav a {
+  margin-left: 0;
+}
+
+/* ---- Guest header: all four links visible, centred, never scrolling ---- */
+@media (max-width: 720px) {
+  .mainnav.guest {
+    overflow-x: visible;
+    justify-content: center;
+    gap: 0.7rem;
+    /* no edge bleed: the row must fit exactly, not hint at more content */
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+  .mainnav.guest a {
+    font-size: 0.9rem;
+  }
+}
+@media (max-width: 360px) {
+  .mainnav.guest {
+    gap: 0.55rem;
+  }
+  .mainnav.guest a {
+    font-size: 0.78rem;
+  }
+}
