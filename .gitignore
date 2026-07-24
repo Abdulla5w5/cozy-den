@@ -4,6 +4,7 @@ node_modules/
 # build output
 dist/
 build/
+*.tsbuildinfo
 
 # env / secrets
 .env
@@ -19,7 +20,3 @@ npm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
-
-# local placeholder for postgres TLS certs (prod uses DB_CERT_DIR)
-.pgcerts/
-docker-compose.override.yml
