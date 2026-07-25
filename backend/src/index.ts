@@ -2,6 +2,7 @@ import { createApp } from './app';
 import { env } from './config/env';
 import { pool } from './db/pool';
 import { bootstrapStaff } from './modules/staff/team.service';
+import { startReconciler } from './modules/bookings/reconcile';
 
 const app = createApp();
 
@@ -12,6 +13,9 @@ const server = app.listen(env.port, () => {
   // Break-glass only: promotes STAFF_ALLOWED_EMAILS accounts when the team is
   // empty. A no-op once anyone has staff access.
   bootstrapStaff().catch((err) => console.error('[cozy-den] staff bootstrap failed', err));
+  // Safety net for redirect payments: confirms bookings that were paid but
+  // never came back via redirect/webhook. No-op under the mock provider.
+  startReconciler();
 });
 
 // Graceful shutdown so in-flight requests finish and the pool closes cleanly.
