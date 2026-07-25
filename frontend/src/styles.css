@@ -2407,3 +2407,42 @@ textarea:focus {
   margin: 0;
   font-size: 0.88rem;
 }
+
+/* ============ Email-verification banner ============ */
+.verify-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 1rem;
+  background: rgba(254, 170, 0, 0.12);
+  border-bottom: 1px solid rgba(254, 170, 0, 0.3);
+  color: var(--ink);
+  font-size: 0.88rem;
+  text-align: center;
+}
+.verify-banner-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.verify-banner .link {
+  color: var(--accent);
+}
+.verify-banner-sent {
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.verify-banner-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  padding: 0.1rem 0.35rem;
+  min-height: auto;
+}
+.verify-banner-x:hover {
+  color: var(--ink);
+  border: none;
+}

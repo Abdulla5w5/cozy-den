@@ -13,18 +13,27 @@ import { MyBookings } from './pages/MyBookings';
 import { EventsPage } from './pages/EventsPage';
 import { SupportPage, SupportThreadPage } from './pages/SupportPage';
 import { PromoModal } from './components/PromoModal';
+import { VerifyBanner } from './components/VerifyBanner';
+import { VerifyEmail } from './pages/VerifyEmail';
 
 export function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t, lang, toggle } = useI18n();
-  const [user, setUser] = useState<{ name: string; email: string; isStaff: boolean } | null>(null);
+  const [user, setUser] = useState<{
+    name: string;
+    email: string;
+    isStaff: boolean;
+    emailVerified: boolean;
+  } | null>(null);
   const loggedIn = user !== null;
 
   useEffect(() => {
     let active = true;
     api
-      .get<{ user: { name: string; email: string; isStaff: boolean } }>('/auth/me')
+      .get<{ user: { name: string; email: string; isStaff: boolean; emailVerified: boolean } }>(
+        '/auth/me',
+      )
       .then((r) => active && setUser(r.user))
       .catch(() => active && setUser(null));
     return () => {
@@ -41,6 +50,9 @@ export function App() {
   return (
     <div className="app">
       <PromoModal />
+      {loggedIn && user && !user.emailVerified && !user.isStaff && (
+        <VerifyBanner email={user.email} />
+      )}
       <header className="topbar">
         <Link to="/" className="brand">
           🎲 Cozy Den
@@ -89,6 +101,7 @@ export function App() {
           <Route path="/menu" element={<MenuPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/support" element={<SupportPage />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/support/:id" element={<SupportThreadPage />} />
           <Route path="/book" element={<BookingFlow />} />
           <Route path="/confirmation/:code" element={<Confirmation />} />

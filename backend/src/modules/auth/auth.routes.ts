@@ -13,6 +13,11 @@ import {
 } from './auth.service';
 import { getBookingsByEmail } from '../bookings/bookings.service';
 import { isStaffUser } from '../staff/team.service';
+import {
+  sendVerificationEmail,
+  verifyEmailToken,
+  isEmailVerified,
+} from './verification';
 
 export const authRouter = Router();
 
@@ -28,7 +33,12 @@ const cookieOpts = {
 async function issueSession(res: Response, user: UserRow) {
   const token = signToken({ sub: user.id, email: user.email, name: user.name });
   res.cookie(AUTH_COOKIE, token, cookieOpts);
-  return { email: user.email, name: user.name, isStaff: await isStaffUser(user.id) };
+  return {
+    email: user.email,
+    name: user.name,
+    isStaff: await isStaffUser(user.id),
+    emailVerified: await isEmailVerified(user.id),
+  };
 }
 
 const registerSchema = z.object({
@@ -41,6 +51,8 @@ const registerSchema = z.object({
 authRouter.post('/register', loginLimiter, validate(registerSchema), async (req, res, next) => {
   try {
     const user = await registerUser(req.body.email, req.body.name, req.body.password);
+    // New self-registered accounts start unverified; email the confirm link.
+    void sendVerificationEmail({ id: user.id, name: user.name, email: user.email });
     res.status(201).json({ user: await issueSession(res, user) });
   } catch (err) {
     next(err);
@@ -98,8 +110,35 @@ authRouter.get('/me', requireAuth, async (req, res, next) => {
         email: req.user!.email,
         name: req.user!.name,
         isStaff: await isStaffUser(req.user!.sub),
+        emailVerified: await isEmailVerified(req.user!.sub),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/auth/verify-email?token=... — the link target from the email. Marks
+// the account verified, then redirects the browser to a friendly result page.
+authRouter.get('/verify-email', async (req, res) => {
+  const site = env.publicUrl || `${req.protocol}://${req.get('host')}`;
+  const ok = await verifyEmailToken(String(req.query.token || '')).catch(() => false);
+  res.redirect(`${site}/verify-email?status=${ok ? 'ok' : 'invalid'}`);
+});
+
+// POST /api/auth/resend-verification — re-send the link for the signed-in user.
+authRouter.post('/resend-verification', requireAuth, async (req, res, next) => {
+  try {
+    if (await isEmailVerified(req.user!.sub)) {
+      res.json({ alreadyVerified: true });
+      return;
+    }
+    await sendVerificationEmail({
+      id: req.user!.sub,
+      name: req.user!.name,
+      email: req.user!.email,
+    });
+    res.json({ sent: true });
   } catch (err) {
     next(err);
   }

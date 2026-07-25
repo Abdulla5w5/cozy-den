@@ -394,6 +394,24 @@ const dict: Record<string, { en: string; ar: string }> = {
     ar: 'يظهر مرة وحدة بكل زيارة. عطّله عشان يختفي.',
   },
   'promo.close': { en: 'Close', ar: 'إغلاق' },
+  'verify.prompt': {
+    en: 'Please confirm your email ({email}) — we sent you a link.',
+    ar: 'رجاءً أكّد إيميلك ({email}) — رسّلنا لك رابط.',
+  },
+  'verify.resend': { en: 'Resend link', ar: 'أعد إرسال الرابط' },
+  'verify.sending': { en: 'Sending…', ar: 'جاري الإرسال…' },
+  'verify.sent': { en: 'Sent — check your inbox.', ar: 'انرسل — شيّك إيميلك.' },
+  'verify.okTitle': { en: 'Email confirmed', ar: 'تم تأكيد الإيميل' },
+  'verify.okBody': {
+    en: 'Thanks — your email is verified. Enjoy Cozy Den!',
+    ar: 'شكرًا — تم تأكيد إيميلك. استمتع في كوزي دن!',
+  },
+  'verify.badTitle': { en: 'Link expired or invalid', ar: 'الرابط منتهي أو غير صالح' },
+  'verify.badBody': {
+    en: 'This link didn’t work. Sign in and use “Resend link” to get a fresh one.',
+    ar: 'الرابط ما اشتغل. سجّل دخول واستخدم «أعد إرسال الرابط» عشان تجيب واحد جديد.',
+  },
+  'verify.home': { en: 'Go home', ar: 'الرئيسية' },
   'promo.kicker': { en: 'Upcoming Event', ar: 'فعالية قادمة' },
 
   // ---- booking status workflow + staff manual entry ----
