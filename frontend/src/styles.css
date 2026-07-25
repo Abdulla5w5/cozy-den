@@ -4144,7 +4144,9 @@ button.link {
   .topbar .mainnav,
   .mainnav.guest {
     gap: clamp(0.8rem, 5vw, 1.5rem);
-    justify-content: flex-start;
+    /* Centre the links when they fit (guest), fall back to start only if the
+       signed-in nav overflows — 'safe' prevents clipping the scrollable case. */
+    justify-content: safe center;
     margin-inline: -1rem;
     padding-inline: 1rem;
     overflow-x: auto;
