@@ -2044,10 +2044,13 @@ table.data code {
   display: inline-block;
   margin-bottom: 0.7rem;
   padding: 0.25rem 0.65rem;
-  border: 2px solid var(--ink);
+  border: 2px solid #242424;
   border-radius: 999px;
   background: var(--yellow);
-  color: var(--ink);
+  /* Fixed dark ink, not the theme's --ink: in dark mode --ink is a pale cream
+     which reads as low-contrast on the bright yellow badge background. This
+     badge is always yellow regardless of theme, so its text stays fixed too. */
+  color: #242424;
   font-family: 'Baloo 2 Local', sans-serif;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -2564,7 +2567,11 @@ table.data code {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: var(--tertiary);
+  /* This later rule was the one actually winning the cascade and set
+     color: var(--tertiary) — in dark mode that's #ffda3d, near-identical to
+     the badge's yellow background, so the text was effectively invisible.
+     Fixed dark ink instead, matching the badge fix above. */
+  color: #242424;
 }
 .promo-title {
   margin: 0;
