@@ -168,10 +168,21 @@ const dict: Record<string, { en: string; ar: string }> = {
   'bk.total': { en: 'Total:', ar: 'الإجمالي:' },
   'bk.name': { en: 'Name', ar: 'الاسم' },
   'bk.email': { en: 'Email', ar: 'الإيميل' },
-  'bk.payToken': { en: 'Payment token (mock)', ar: 'رمز الدفع (تجريبي)' },
-  'bk.payHint': {
-    en: 'Payment is stubbed. Use tok_demo to approve, or tok_decline to simulate a declined card.',
-    ar: 'الدفع تجريبي. استخدم tok_demo للقبول، أو tok_decline لتجربة بطاقة مرفوضة.',
+  'bk.paySecure': {
+    en: 'You’ll be taken to a secure page to pay by KNET or card. Your booking is held while you pay.',
+    ar: 'بننقلك لصفحة دفع آمنة تدفع فيها بالكي نت أو البطاقة. حجزك محفوظ لين تخلص الدفع.',
+  },
+  'bk.payFailed': {
+    en: 'Payment didn’t go through, so the table wasn’t booked. You can try again.',
+    ar: 'الدفع ما تم، فما انحجزت الطاولة. تقدر تحاول مرة ثانية.',
+  },
+  'bk.payError': {
+    en: 'We couldn’t confirm the payment. If you were charged, contact us and we’ll sort it out.',
+    ar: 'ما قدرنا نتأكد من الدفع. إذا انخصم منك مبلغ، تواصل معنا ونحلها.',
+  },
+  'bk.payPending': {
+    en: 'Your payment is still being confirmed. Check your bookings in a moment.',
+    ar: 'دفعتك لسه قيد التأكيد. راجع حجوزاتك بعد شوي.',
   },
   'bk.pay': { en: 'Pay {amount} & book', ar: 'ادفع {amount} واحجز' },
   'bk.processing': { en: 'Processing…', ar: 'جاري المعالجة…' },

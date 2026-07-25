@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { Booking, TableAvailability } from '../types';
+
+// POST /bookings returns one of two shapes: the finished booking (direct/mock
+// provider) or a gateway redirect URL (Tap). One handler covers both.
+type CheckoutResponse = { booking?: Booking; redirectUrl?: string };
 
 type Step = 1 | 2;
 
@@ -14,6 +18,7 @@ function todayIso() {
 // Sessions are a fixed 2 hours with rolling 30-minute start times.
 export function BookingFlow() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t, money } = useI18n();
   const [step, setStep] = useState<Step>(1);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +31,6 @@ export function BookingFlow() {
 
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
-  const [paymentToken, setPaymentToken] = useState('tok_demo');
   const [submitting, setSubmitting] = useState(false);
 
   const TABLE_FEE_CENTS = 500; // display only; server is the source of truth
@@ -59,24 +63,50 @@ export function BookingFlow() {
 
   const selectedTable = availability.find((tb) => tb.tableId === tableId) || null;
 
+  // Surface a failed/cancelled return from the payment gateway.
+  const payStatus = searchParams.get('payment');
+  useEffect(() => {
+    if (payStatus) setStep(2);
+  }, [payStatus]);
+  const payError =
+    payStatus === 'failed'
+      ? t('bk.payFailed')
+      : payStatus === 'error'
+        ? t('bk.payError')
+        : payStatus === 'pending'
+          ? t('bk.payPending')
+          : null;
+
   async function submit() {
     setError(null);
     setSubmitting(true);
     try {
-      const { booking } = await api.post<{ booking: Booking }>('/bookings', {
+      const res = await api.post<CheckoutResponse>('/bookings', {
         tableId,
         date,
         timeSlot,
         guestName,
         guestEmail,
-        paymentToken,
       });
-      navigate(`/confirmation/${booking.verificationCode}`);
+      if (res.redirectUrl) {
+        // Redirect gateway (Tap): hand the browser to the hosted payment page.
+        // A full navigation, not a route change, so we leave our SPA entirely.
+        window.location.assign(res.redirectUrl);
+        return; // keep the spinner up while the browser navigates away
+      }
+      if (res.booking) {
+        navigate(`/confirmation/${res.booking.verificationCode}`);
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('bk.wrong'));
-    } finally {
       setSubmitting(false);
     }
+  }
+
+  // Clear the ?payment marker once seen, so a refresh doesn't re-show the banner.
+  function dismissPayStatus() {
+    searchParams.delete('payment');
+    setSearchParams(searchParams, { replace: true });
   }
 
   return (
@@ -164,11 +194,16 @@ export function BookingFlow() {
             <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} />
           </label>
 
-          <label className="field">
-            {t('bk.payToken')}
-            <input value={paymentToken} onChange={(e) => setPaymentToken(e.target.value)} />
-          </label>
-          <p className="muted">{t('bk.payHint')}</p>
+          {payError && (
+            <div className="alert error" onClick={dismissPayStatus}>
+              {payError}
+            </div>
+          )}
+
+          <div className="pay-note">
+            <span aria-hidden="true">🔒</span>
+            <p className="muted">{t('bk.paySecure')}</p>
+          </div>
 
           <div className="actions">
             <button onClick={() => setStep(1)}>{t('bk.back')}</button>

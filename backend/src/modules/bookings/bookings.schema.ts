@@ -11,8 +11,9 @@ export const createBookingSchema = z.object({
     .refine(isValidStart, 'timeSlot must be a valid 30-minute start time within opening hours'),
   guestName: z.string().trim().min(1).max(120),
   guestEmail: z.string().trim().email().max(200),
-  // Opaque token from the (mock) payment UI for the table-holding fee.
-  paymentToken: z.string().min(1).max(200),
+  // Only the direct (mock) provider uses a client token. The redirect gateway
+  // (Tap) collects payment on its own hosted page, so this is optional.
+  paymentToken: z.string().min(1).max(200).optional(),
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;

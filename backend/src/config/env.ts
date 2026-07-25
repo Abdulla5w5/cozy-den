@@ -56,6 +56,10 @@ export const env = {
   paymentProvider: optional('PAYMENT_PROVIDER', 'mock'),
   paymentApiKey: process.env.PAYMENT_API_KEY || undefined,
 
+  // Tap Payments. Secret key is server-only and must never reach the client.
+  tapSecretKey: process.env.TAP_SECRET_KEY || undefined,
+  tapApiBase: optional('TAP_API_BASE', 'https://api.tap.company/v2'),
+
   // Google Sign-In. When unset, the /api/auth/google endpoint returns 503 and
   // the frontend Google button shows a "not configured" note.
   googleClientId: process.env.GOOGLE_CLIENT_ID || undefined,

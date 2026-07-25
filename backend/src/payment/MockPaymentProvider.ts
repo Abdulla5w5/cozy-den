@@ -13,6 +13,7 @@ import { ChargeRequest, ChargeResult, PaymentProvider } from './PaymentProvider'
  */
 export class MockPaymentProvider implements PaymentProvider {
   readonly name = 'mock';
+  readonly kind = 'direct' as const;
 
   async charge(req: ChargeRequest): Promise<ChargeResult> {
     // Simulate a little network latency.

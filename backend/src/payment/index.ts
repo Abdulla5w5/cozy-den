@@ -1,19 +1,23 @@
 import { env } from '../config/env';
 import { MockPaymentProvider } from './MockPaymentProvider';
+import { TapPaymentProvider } from './TapPaymentProvider';
 import { PaymentProvider } from './PaymentProvider';
 
 /**
- * Factory that returns the configured provider. To add the real gateway later:
- *   1. Create e.g. StripePaymentProvider implements PaymentProvider.
- *   2. Add a case below.
- *   3. Set PAYMENT_PROVIDER=stripe (+ PAYMENT_API_KEY) in the environment.
+ * Factory that returns the configured provider, chosen by PAYMENT_PROVIDER:
+ *   - 'mock' (default) — approves everything; local dev and tests.
+ *   - 'tap'            — real Tap gateway; needs TAP_SECRET_KEY (and PUBLIC_URL
+ *                        so the redirect/webhook URLs are absolute).
  */
 function build(): PaymentProvider {
   switch (env.paymentProvider) {
     case 'mock':
       return new MockPaymentProvider();
-    // case 'stripe':
-    //   return new StripePaymentProvider(env.paymentApiKey!);
+    case 'tap':
+      if (!env.tapSecretKey) {
+        throw new Error('PAYMENT_PROVIDER=tap requires TAP_SECRET_KEY');
+      }
+      return new TapPaymentProvider(env.tapSecretKey, env.tapApiBase);
     default:
       throw new Error(`Unknown PAYMENT_PROVIDER: ${env.paymentProvider}`);
   }

@@ -114,7 +114,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
   const charge = await paymentProvider.charge({
     amountCents: feeCents,
     currency: 'KWD',
-    paymentToken: input.paymentToken,
+    paymentToken: input.paymentToken ?? '',
     description: `Cozy Den table-holding fee, booking #${bookingId}`,
     metadata: { bookingId: String(bookingId) },
   });
@@ -131,15 +131,135 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
 
   const view = await getBookingById(bookingId);
   if (!view) throw new ApiError(500, 'Booking vanished after creation.');
+  sendReceipt(view);
+  return view;
+}
 
-  // Fire-and-forget receipt email (stubbed); a mail failure must not fail a
-  // paid booking.
+// Fire-and-forget receipt; a mail failure must never fail a paid booking.
+function sendReceipt(view: BookingView) {
   const email = formatReceiptEmail(view);
   mailer
     .send({ to: view.guestEmail, subject: email.subject, text: email.text })
     .catch((e) => console.error('[mailer] failed to send receipt', e));
+}
 
-  return view;
+export interface CheckoutStart {
+  /** Send the customer's browser here to pay. */
+  redirectUrl: string;
+  /** So the caller can build the eventual /confirmation/{code} link. */
+  code: string;
+}
+
+/**
+ * Redirect checkout (Tap). Reserve the window as 'pending_payment', open a
+ * gateway charge, and hand back the hosted-payment URL. The booking is NOT
+ * confirmed here — that happens in finalizeCharge() once the customer has paid
+ * and we've verified it with the gateway.
+ */
+export async function startBookingCheckout(
+  input: CreateBookingInput,
+  base: { returnUrl: string; webhookUrl: string },
+): Promise<CheckoutStart> {
+  if (!paymentProvider.createCharge || !paymentProvider.retrieveCharge) {
+    throw new ApiError(500, 'Configured payment provider does not support redirect checkout.');
+  }
+  if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
+  await assertTableExists(input.tableId);
+
+  const feeCents = env.tableFeeCents;
+  const bookingId = await insertBooking({
+    tableId: input.tableId,
+    date: input.date,
+    timeSlot: input.timeSlot,
+    guestName: input.guestName,
+    guestEmail: input.guestEmail,
+    status: 'pending_payment',
+    source: 'online',
+    feeCents,
+    totalCents: feeCents,
+  });
+
+  const { rows } = await query<{ verification_code: string }>(
+    'SELECT verification_code FROM bookings WHERE id = $1',
+    [bookingId],
+  );
+  const code = rows[0].verification_code;
+
+  try {
+    const charge = await paymentProvider.createCharge({
+      amountCents: feeCents,
+      currency: 'KWD',
+      description: `Cozy Den table-holding fee, booking #${bookingId}`,
+      redirectUrl: base.returnUrl,
+      webhookUrl: base.webhookUrl,
+      customer: { name: input.guestName, email: input.guestEmail },
+      metadata: { bookingId: String(bookingId), code },
+    });
+    // Store the gateway charge id so the return/webhook can find this booking.
+    await query('UPDATE bookings SET payment_ref = $1 WHERE id = $2', [charge.chargeId, bookingId]);
+    return { redirectUrl: charge.transactionUrl, code };
+  } catch (err) {
+    // Couldn't open a charge — free the window rather than stranding it.
+    await query(`UPDATE bookings SET status = 'cancelled' WHERE id = $1`, [bookingId]);
+    throw err;
+  }
+}
+
+/**
+ * Confirm (or reject) a redirect charge by asking the gateway for the truth.
+ * Idempotent and race-safe: the return redirect and the webhook may both fire,
+ * but the conditional UPDATE only transitions the first time. Returns the
+ * booking code so the return route can redirect to /confirmation/{code}.
+ */
+export async function finalizeCharge(
+  chargeId: string,
+): Promise<{ outcome: 'paid' | 'failed' | 'pending'; code: string | null }> {
+  if (!paymentProvider.retrieveCharge) {
+    throw new ApiError(500, 'Configured payment provider cannot retrieve charges.');
+  }
+
+  const { rows } = await query<{ id: number; status: string; verification_code: string }>(
+    'SELECT id, status, verification_code FROM bookings WHERE payment_ref = $1',
+    [chargeId],
+  );
+  const booking = rows[0];
+  if (!booking) return { outcome: 'failed', code: null };
+
+  // Already resolved by the other path — report the settled state, no re-work.
+  if (booking.status === 'pending' || booking.status === 'order_complete') {
+    return { outcome: 'paid', code: booking.verification_code };
+  }
+  if (booking.status === 'cancelled') {
+    return { outcome: 'failed', code: booking.verification_code };
+  }
+
+  const status = await paymentProvider.retrieveCharge(chargeId);
+
+  if (status.paid) {
+    // Only the first caller flips it; the WHERE guard makes this idempotent.
+    const upd = await query(
+      `UPDATE bookings SET status = 'pending'
+        WHERE id = $1 AND status = 'pending_payment'
+        RETURNING id`,
+      [booking.id],
+    );
+    if (upd.rows.length > 0) {
+      const view = await getBookingById(booking.id);
+      if (view) sendReceipt(view);
+    }
+    return { outcome: 'paid', code: booking.verification_code };
+  }
+
+  if (status.failed) {
+    await query(
+      `UPDATE bookings SET status = 'cancelled' WHERE id = $1 AND status = 'pending_payment'`,
+      [booking.id],
+    );
+    return { outcome: 'failed', code: booking.verification_code };
+  }
+
+  // Still in flight (INITIATED / IN_PROGRESS) — leave it held.
+  return { outcome: 'pending', code: booking.verification_code };
 }
 
 /**
