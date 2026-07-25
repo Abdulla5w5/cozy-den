@@ -16,10 +16,33 @@ import { PromoModal } from './components/PromoModal';
 import { VerifyBanner } from './components/VerifyBanner';
 import { VerifyEmail } from './pages/VerifyEmail';
 
+type Theme = 'light' | 'dark';
+
+function readInitialTheme(): Theme {
+  try {
+    const saved = localStorage.getItem('cd_theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {
+    /* localStorage may be unavailable */
+  }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 export function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t, lang, toggle } = useI18n();
+  const [theme, setTheme] = useState<Theme>(readInitialTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    try {
+      localStorage.setItem('cd_theme', theme);
+    } catch {
+      /* ignore */
+    }
+  }, [theme]);
   const [user, setUser] = useState<{
     name: string;
     email: string;
@@ -54,8 +77,8 @@ export function App() {
         <VerifyBanner email={user.email} />
       )}
       <header className="topbar">
-        <Link to="/" className="brand">
-          🎲 Cozy Den
+        <Link to="/" className="brand brand-lockup" aria-label={t('brand.home')}>
+          <img src="/brand/cozy-den-wordmark.png" alt="Cozy Den" />
         </Link>
         {/* Guests see four links, which fit without scrolling; signed-in users
             get extra links and the row becomes swipeable. */}
@@ -73,6 +96,17 @@ export function App() {
           {user?.isStaff && <NavLink to="/staff/dashboard">{t('nav.staff')}</NavLink>}
         </nav>
         <div className="nav-actions">
+          {/* Light / dark theme toggle */}
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
+            aria-label={theme === 'light' ? t('theme.dark') : t('theme.light')}
+            title={theme === 'light' ? t('theme.dark') : t('theme.light')}
+          >
+            <span className="theme-toggle-track" aria-hidden="true">
+              <span className="theme-toggle-thumb">{theme === 'light' ? '☀' : '☾'}</span>
+            </span>
+          </button>
           {/* Language switch (EN ⇄ عربي), right by the login/out button */}
           <button
             className="lang-toggle"
@@ -118,7 +152,9 @@ export function App() {
       <footer className="footer">
         <div className="footer-inner">
           <div className="footer-brand">
-            <span className="brand">🎲 Cozy Den</span>
+            <Link to="/" className="brand footer-lockup" aria-label={t('brand.home')}>
+              <img src="/brand/cozy-den-wordmark.png" alt="Cozy Den" />
+            </Link>
             <p className="muted">{t('footer.tagline')}</p>
             <a
               className="social-link"
