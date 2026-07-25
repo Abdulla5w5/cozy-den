@@ -9,7 +9,7 @@ export interface TableRow {
 
 export async function getTables(): Promise<TableRow[]> {
   const { rows } = await query<TableRow>(
-    'SELECT id, label, capacity FROM tables ORDER BY capacity, id'
+    'SELECT id, label, capacity FROM tables WHERE is_active ORDER BY capacity, id'
   );
   return rows;
 }

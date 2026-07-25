@@ -1,12 +1,17 @@
 -- Sample data for local development. Safe to re-run (idempotent-ish via ON CONFLICT / guards).
 
-INSERT INTO tables (label, capacity) VALUES
-  ('Nook 1', 2),
-  ('Nook 2', 2),
-  ('Window Table', 4),
-  ('Family Table', 6),
-  ('The Long Table', 8)
-ON CONFLICT DO NOTHING;
+INSERT INTO tables (label, capacity, is_active) VALUES
+  ('Small Table 1',     5,  TRUE),
+  ('Small Table 2',     4,  TRUE),
+  ('Small Table 3',     4,  TRUE),
+  ('Big Table 1',       12, TRUE),
+  ('Big Table 2',       6,  TRUE),
+  ('Big Table 3',       12, TRUE),
+  ('Big Table 4 (D&D)', 7,  TRUE),
+  ('Floor Table',       6,  TRUE)
+ON CONFLICT (label) DO UPDATE SET
+  capacity = EXCLUDED.capacity,
+  is_active = TRUE;
 
 INSERT INTO games (title, min_players, max_players, category) VALUES
   ('Catan',           3, 4, 'Strategy'),

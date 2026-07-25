@@ -32,7 +32,9 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
        JOIN tables t ON t.id = b.table_id
       WHERE b.booking_date = $1
         AND b.status <> 'cancelled'
-      ORDER BY b.time_slot, t.label`,
+      ORDER BY CASE WHEN b.time_slot::time < TIME '03:00' THEN 1 ELSE 0 END,
+               b.time_slot,
+               t.label`,
     [date]
   );
 

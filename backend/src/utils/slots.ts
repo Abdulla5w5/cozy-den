@@ -1,18 +1,18 @@
 // Café hours + session rules. Every booking is a fixed 2-hour session that can
 // start every 30 minutes from opening until (closing - 2h). Changing the café's
 // hours = edit OPEN_MIN / CLOSE_MIN here; everything else derives from them.
-export const OPEN_MIN = 12 * 60; // 12:00
-export const CLOSE_MIN = 22 * 60; // 22:00
+export const OPEN_MIN = 14 * 60; // 14:00
+export const CLOSE_MIN = 27 * 60; // 03:00 the following morning
 export const SESSION_MIN = 120; // fixed 2-hour session
 const STEP_MIN = 30; // rolling start-time granularity
 
 function fmt(min: number): string {
-  const h = Math.floor(min / 60);
+  const h = Math.floor(min / 60) % 24;
   const m = min % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-/** All valid start times: 12:00, 12:30, ... 20:00 (last start = close - 2h). */
+/** All valid starts: 14:00, 14:30, ... 00:30, 01:00. */
 export const START_TIMES: string[] = (() => {
   const out: string[] = [];
   for (let t = OPEN_MIN; t <= CLOSE_MIN - SESSION_MIN; t += STEP_MIN) out.push(fmt(t));
@@ -25,7 +25,8 @@ export function isValidStart(value: string): boolean {
 
 export function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
+  const minutes = h * 60 + m;
+  return minutes < OPEN_MIN ? minutes + 24 * 60 : minutes;
 }
 
 /** Two 2-hour sessions overlap iff their starts are less than 2h apart. */

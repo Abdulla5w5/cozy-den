@@ -4,6 +4,39 @@ import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { EventItem, Game, MenuItem } from '../types';
 
+const HOME_ARABIC_CONTENT: Record<string, string> = {
+  Abstract: 'تجريدية',
+  Strategy: 'استراتيجية',
+  Party: 'جماعية',
+  Cooperative: 'تعاونية',
+  Family: 'عائلية',
+  'Friday Night Tournament': 'بطولة ليلة الجمعة',
+  'Weekly knockout across three tables. Prizes for the top two.':
+    'بطولة خروج مغلوب أسبوعية على ثلاث طاولات، وجوائز للمركزين الأول والثاني.',
+  'Beginners Board Game Night': 'ليلة ألعاب للمبتدئين',
+  'New to tabletop? We teach you three games in one evening.':
+    'أول مرة تجرّب ألعاب البورد؟ نعلّمكم ثلاث ألعاب بليلة وحدة.',
+  'Kuwait Comic Con Booth': 'جناحنا في كويت كوميك كون',
+  'Come find our booth and play a demo round with us.':
+    'زوروا جناحنا والعبوا ويانا جولة تجريبية.',
+  'Flat White': 'فلات وايت',
+  'Double shot, silky microfoam': 'دبل شوت مع رغوة حليب ناعمة',
+  'Hot Chocolate': 'شوكولاتة ساخنة',
+  'Belgian chocolate, whipped cream': 'شوكولاتة بلجيكية مع كريمة مخفوقة',
+  'Craft Lemonade': 'ليمونادة كوزي دن',
+  'House-made, lightly sparkling': 'نحضّرها عندنا، وغازية بخفّة',
+  'Loaded Nachos': 'ناتشوز محمّل',
+  'Cheese, jalapenos, salsa, guac': 'جبن، هالبينو، سالسا، وغواكامولي',
+  'Soft Pretzel': 'بريتزل طري',
+  'Warm, sea salt, mustard dip': 'دافي مع ملح بحري وصوص خردل',
+  'Brownie Stack': 'براوني مع آيس كريم',
+  'Fudgy, vanilla ice cream': 'براوني غنية مع آيس كريم فانيلا',
+};
+
+function homeContent(text: string, lang: 'en' | 'ar') {
+  return lang === 'ar' ? HOME_ARABIC_CONTENT[text] || text : text;
+}
+
 export function Home() {
   const { t, money, lang } = useI18n();
   const [games, setGames] = useState<Game[]>([]);
@@ -73,7 +106,7 @@ export function Home() {
         </div>
         <div className="stats">
           <div className="stat"><strong>100+</strong><span>{t('home.stat.games')}</span></div>
-          <div className="stat"><strong>5</strong><span>{t('home.stat.tables')}</span></div>
+          <div className="stat"><strong>8</strong><span>{t('home.stat.tables')}</span></div>
           <div className="stat"><strong>{t('home.stat.hours')}</strong><span>{t('home.stat.hoursSub')}</span></div>
         </div>
       </section>
@@ -113,12 +146,14 @@ export function Home() {
                 <span className={`pill ${e.type === 'external' ? 'ext' : ''}`}>
                   {e.type === 'internal' ? t('ev.internal') : t('ev.external')}
                 </span>
-                <h3>{e.title}</h3>
+                <h3>{homeContent(e.title, lang)}</h3>
                 <p className="muted">
                   {e.event_date}
                   {e.event_time ? ` · ${e.event_time}` : ''}
                 </p>
-                {e.description && <p className="muted ev-card-desc">{e.description}</p>}
+                {e.description && (
+                  <p className="muted ev-card-desc">{homeContent(e.description, lang)}</p>
+                )}
               </Link>
             ))}
           </div>
@@ -135,7 +170,7 @@ export function Home() {
         <div className="feature-grid">
           {games.slice(0, 6).map((g) => (
             <div className="feature-card" key={g.id}>
-              <span className="pill">{g.category}</span>
+              <span className="pill">{homeContent(g.category, lang)}</span>
               <h3>{g.title}</h3>
               <p className="muted">
                 {g.min_players}–{g.max_players} {t('players')}
@@ -155,9 +190,9 @@ export function Home() {
         <div className="feature-grid">
           {menu.slice(0, 4).map((m) => (
             <div className="feature-card" key={m.id}>
-              <span className="pill">{m.category}</span>
-              <h3>{m.name}</h3>
-              <p className="muted">{m.description}</p>
+              <span className="pill">{t(`menu.${m.category}`)}</span>
+              <h3>{homeContent(m.name, lang)}</h3>
+              <p className="muted">{homeContent(m.description, lang)}</p>
               <span className="price">{money(m.price_cents)}</span>
             </div>
           ))}
