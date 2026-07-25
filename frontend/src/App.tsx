@@ -25,7 +25,11 @@ function readInitialTheme(): Theme {
   } catch {
     /* localStorage may be unavailable */
   }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // Light is the brand default for first-time visitors. We deliberately do NOT
+  // follow prefers-color-scheme here — a visitor whose OS is in dark mode would
+  // otherwise land on the dark skin, which isn't the look we lead with. Anyone
+  // who picks dark via the toggle keeps it (handled by the saved value above).
+  return 'light';
 }
 
 export function App() {
@@ -37,6 +41,10 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
+    // Keep the mobile browser chrome (address bar) in step with the theme.
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'dark' ? '#0d0f14' : '#fffaf1');
     try {
       localStorage.setItem('cd_theme', theme);
     } catch {
