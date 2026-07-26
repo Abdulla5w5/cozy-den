@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
@@ -25,12 +25,19 @@ const GOOGLE_CLIENT_ID =
     | undefined) || undefined;
 
 let gisPromise: Promise<void> | null = null;
-function loadGis(): Promise<void> {
+/**
+ * `locale` on renderButton is ignored — GIS takes its language from the `hl`
+ * query param on the script itself, and without it Google falls back to the
+ * browser's own UI language, which is how an English visitor ended up with an
+ * Arabic button. The script loads once, so the language is fixed for the
+ * session; switching the site toggle reloads the page anyway.
+ */
+function loadGis(locale: string): Promise<void> {
   if (window.google?.accounts?.id) return Promise.resolve();
   if (gisPromise) return gisPromise;
   gisPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client';
+    s.src = `https://accounts.google.com/gsi/client?hl=${encodeURIComponent(locale)}`;
     s.async = true;
     s.defer = true;
     s.onload = () => resolve();
@@ -42,7 +49,7 @@ function loadGis(): Promise<void> {
 
 export function StaffLogin() {
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [mode, setMode] = useState<Mode>('signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -51,6 +58,13 @@ export function StaffLogin() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Google's own rendered button. One Tap (accounts.id.prompt) only offers
+  // sessions the browser already holds — with none, it shows nothing and there
+  // is no way to type an address. The rendered button opens the full account
+  // chooser, so an existing Gmail can always be entered, and signing up with
+  // Google works on a browser that has never seen the account.
+  const gsiRef = useRef<HTMLDivElement>(null);
+  const [gsiReady, setGsiReady] = useState(false);
 
   function afterAuth(u: AuthUser) {
     navigate(u.isStaff ? '/staff/dashboard' : '/');
@@ -74,33 +88,43 @@ export function StaffLogin() {
     }
   }
 
-  async function googleSignIn() {
-    setError(null);
-    setNote(null);
-    if (!GOOGLE_CLIENT_ID) {
-      setNote(t('auth.socialSoon'));
-      return;
-    }
+  const handleCredential = async (resp: { credential: string }) => {
     try {
-      await loadGis();
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: async (resp: { credential: string }) => {
-          try {
-            const { user } = await api.post<{ user: AuthUser }>('/auth/google', {
-              idToken: resp.credential,
-            });
-            afterAuth(user);
-          } catch (e) {
-            setError(e instanceof Error ? e.message : 'Google sign-in failed.');
-          }
-        },
+      const { user } = await api.post<{ user: AuthUser }>('/auth/google', {
+        idToken: resp.credential,
       });
-      window.google.accounts.id.prompt();
-    } catch {
-      setNote(t('auth.socialSoon'));
+      afterAuth(user);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Google sign-in failed.');
     }
-  }
+  };
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    let cancelled = false;
+    loadGis(lang)
+      .then(() => {
+        if (cancelled || !gsiRef.current) return;
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleCredential,
+        });
+        window.google.accounts.id.renderButton(gsiRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          shape: 'pill',
+          text: mode === 'signup' ? 'signup_with' : 'signin_with',
+          width: 320,
+        });
+        setGsiReady(true);
+      })
+      .catch(() => setGsiReady(false));
+    return () => {
+      cancelled = true;
+    };
+    // Re-render so the button label tracks sign-in vs sign-up.
+  }, [mode, lang]);
 
   function switchMode(m: Mode) {
     setMode(m);
@@ -236,7 +260,9 @@ export function StaffLogin() {
           </div>
 
           <div className="auth-social single">
-            <button type="button" onClick={googleSignIn} className="google-btn">
+            <div ref={gsiRef} />
+            {!gsiReady && (
+            <button type="button" onClick={() => setNote(t('auth.socialSoon'))} className="google-btn">
               <svg className="google-g" viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">
                 <path
                   fill="#EA4335"
@@ -257,6 +283,7 @@ export function StaffLogin() {
               </svg>
               {t('auth.google')}
             </button>
+            )}
           </div>
         </form>
 
