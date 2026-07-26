@@ -218,8 +218,13 @@ export async function finalizeCharge(
     throw new ApiError(500, 'Configured payment provider cannot retrieve charges.');
   }
 
-  const { rows } = await query<{ id: number; status: string; verification_code: string }>(
-    'SELECT id, status, verification_code FROM bookings WHERE payment_ref = $1',
+  const { rows } = await query<{
+    id: number;
+    status: string;
+    verification_code: string;
+    total_cents: number;
+  }>(
+    'SELECT id, status, verification_code, total_cents FROM bookings WHERE payment_ref = $1',
     [chargeId],
   );
   const booking = rows[0];
@@ -234,6 +239,23 @@ export async function finalizeCharge(
   }
 
   const status = await paymentProvider.retrieveCharge(chargeId);
+
+  // A 'paid' status alone only says money moved — not that the RIGHT money
+  // moved. Confirming a booking against a charge for some other amount or
+  // currency would hand out a table for whatever the payer chose, so treat a
+  // mismatch as unresolved: never confirm, never cancel (the money is real and
+  // belongs to someone), and leave it for staff to look at.
+  if (status.paid && status.amountCents !== undefined) {
+    const wrongAmount = status.amountCents !== booking.total_cents;
+    const wrongCurrency = (status.currency || '').toUpperCase() !== 'KWD';
+    if (wrongAmount || wrongCurrency) {
+      console.error(
+        `[tap] charge ${chargeId} settled ${status.amountCents} ${status.currency} but ` +
+          `booking ${booking.id} expects ${booking.total_cents} KWD — refusing to confirm`,
+      );
+      return { outcome: 'pending', code: booking.verification_code };
+    }
+  }
 
   if (status.paid) {
     // Only the first caller flips it; the WHERE guard makes this idempotent.
@@ -331,21 +353,49 @@ interface BookingRow {
   created_at: Date;
 }
 
-async function hydrate(row: BookingRow): Promise<BookingView> {
-  const { rows: itemRows } = await query<{
+/**
+ * Line items for a set of bookings, in ONE query rather than one per booking.
+ *
+ * Menu ordering was removed from checkout, so every booking made since the
+ * overhaul has none — but the read path still has to serve the legacy rows that
+ * do. Fetching per booking meant a customer's history cost 1 + N round trips to
+ * find nothing; batching makes it a flat 2. Mirrors what the staff day view
+ * already does.
+ */
+async function loadItems(bookingIds: number[]): Promise<Map<number, BookingItemView[]>> {
+  const byBooking = new Map<number, BookingItemView[]>();
+  if (bookingIds.length === 0) return byBooking;
+
+  const { rows } = await query<{
+    booking_id: number;
     menu_item_id: number;
     name: string;
     quantity: number;
     unit_price_cents: number;
   }>(
-    `SELECT bi.menu_item_id, m.name, bi.quantity, bi.unit_price_cents
+    `SELECT bi.booking_id, bi.menu_item_id, m.name, bi.quantity, bi.unit_price_cents
        FROM booking_items bi
        JOIN menu_items m ON m.id = bi.menu_item_id
-      WHERE bi.booking_id = $1
+      WHERE bi.booking_id = ANY($1::int[])
       ORDER BY m.name`,
-    [row.id]
+    [bookingIds]
   );
 
+  for (const i of rows) {
+    const list = byBooking.get(i.booking_id) ?? [];
+    list.push({
+      menuItemId: i.menu_item_id,
+      name: i.name,
+      quantity: i.quantity,
+      unitPriceCents: i.unit_price_cents,
+      lineTotalCents: i.unit_price_cents * i.quantity,
+    });
+    byBooking.set(i.booking_id, list);
+  }
+  return byBooking;
+}
+
+function hydrate(row: BookingRow, items: BookingItemView[]): BookingView {
   return {
     id: row.id,
     tableId: row.table_id,
@@ -359,20 +409,21 @@ async function hydrate(row: BookingRow): Promise<BookingView> {
     source: row.source,
     tableFeeCents: row.table_fee_cents,
     totalCents: row.total_cents,
-    items: itemRows.map((i) => ({
-      menuItemId: i.menu_item_id,
-      name: i.name,
-      quantity: i.quantity,
-      unitPriceCents: i.unit_price_cents,
-      lineTotalCents: i.unit_price_cents * i.quantity,
-    })),
+    items,
     createdAt: row.created_at.toISOString(),
   };
 }
 
+/** Fetch one booking row plus its items in two queries. */
+async function hydrateOne(row: BookingRow | undefined): Promise<BookingView | null> {
+  if (!row) return null;
+  const items = await loadItems([row.id]);
+  return hydrate(row, items.get(row.id) ?? []);
+}
+
 export async function getBookingById(id: number): Promise<BookingView | null> {
   const { rows } = await query<BookingRow>(`${BOOKING_SELECT} WHERE b.id = $1`, [id]);
-  return rows[0] ? hydrate(rows[0]) : null;
+  return hydrateOne(rows[0]);
 }
 
 /** Public lookup by verification code (the code itself is the capability). */
@@ -380,7 +431,7 @@ export async function getBookingByCode(code: string): Promise<BookingView | null
   const { rows } = await query<BookingRow>(`${BOOKING_SELECT} WHERE b.verification_code = $1`, [
     code.toUpperCase(),
   ]);
-  return rows[0] ? hydrate(rows[0]) : null;
+  return hydrateOne(rows[0]);
 }
 
 /** All bookings made with a given email (a signed-in customer's history). */
@@ -391,5 +442,6 @@ export async function getBookingsByEmail(email: string): Promise<BookingView[]> 
       ORDER BY b.booking_date DESC, b.time_slot DESC`,
     [email]
   );
-  return Promise.all(rows.map(hydrate));
+  const items = await loadItems(rows.map((r) => r.id));
+  return rows.map((r) => hydrate(r, items.get(r.id) ?? []));
 }

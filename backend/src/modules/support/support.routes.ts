@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate';
+
 import { requireAuth } from '../../middleware/auth';
 import { isStaffUser } from '../staff/team.service';
 import {
@@ -47,7 +48,9 @@ supportRouter.get('/', requireAuth, async (req, res, next) => {
 });
 
 // GET /api/support/:id — one thread. Staff may read any; customers only theirs.
-supportRouter.get('/:id', requireAuth, async (req, res, next) => {
+const idParam = z.object({ id: z.coerce.number().int().positive() });
+
+supportRouter.get('/:id', requireAuth, validate(idParam, 'params'), async (req, res, next) => {
   try {
     const isStaff = await isStaffUser(req.user!.sub);
     res.json(await getThread(Number(req.params.id), { id: req.user!.sub, isStaff }));
@@ -62,6 +65,7 @@ const replySchema = z.object({ body: z.string().trim().min(1).max(4000) });
 supportRouter.post(
   '/:id/messages',
   requireAuth,
+  validate(idParam, 'params'),
   validate(replySchema),
   async (req, res, next) => {
     try {

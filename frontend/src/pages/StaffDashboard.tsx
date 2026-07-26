@@ -29,14 +29,18 @@ export function StaffDashboard() {
   const { t } = useI18n();
   const [staffName, setStaffName] = useState<string | null>(null);
   const [staffEmail, setStaffEmail] = useState('');
+  // Team management is admin-only server-side; hide the tab so the UI can't
+  // offer an action that would just 403.
+  const [isAdmin, setIsAdmin] = useState(false);
   const [tab, setTab] = useState<Tab>('today');
 
   useEffect(() => {
     api
-      .get<{ user: { name: string; email: string; isStaff: boolean } }>('/auth/me')
+      .get<{ user: { name: string; email: string; isStaff: boolean; isAdmin: boolean } }>('/auth/me')
       .then((r) => {
         if (!r.user.isStaff) navigate('/'); // logged in but not staff
         else {
+          setIsAdmin(r.user.isAdmin);
           setStaffName(r.user.name);
           setStaffEmail(r.user.email);
         }
@@ -84,9 +88,11 @@ export function StaffDashboard() {
         <button className={tab === 'support' ? 'active' : ''} onClick={() => setTab('support')}>
           {t('staff.support')}
         </button>
-        <button className={tab === 'team' ? 'active' : ''} onClick={() => setTab('team')}>
-          {t('staff.team')}
-        </button>
+        {isAdmin && (
+          <button className={tab === 'team' ? 'active' : ''} onClick={() => setTab('team')}>
+            {t('staff.team')}
+          </button>
+        )}
       </div>
 
       {tab === 'today' ? (

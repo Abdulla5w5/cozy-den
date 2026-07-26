@@ -6,13 +6,13 @@ import { AUTH_COOKIE, requireAuth, signToken } from '../../middleware/auth';
 import { env } from '../../config/env';
 import {
   authenticateUser,
+  getAccountFlags,
   registerUser,
   upsertGoogleUser,
   verifyGoogleToken,
   UserRow,
 } from './auth.service';
 import { getBookingsByEmail } from '../bookings/bookings.service';
-import { isStaffUser } from '../staff/team.service';
 import {
   sendVerificationEmail,
   verifyEmailToken,
@@ -36,8 +36,7 @@ async function issueSession(res: Response, user: UserRow) {
   return {
     email: user.email,
     name: user.name,
-    isStaff: await isStaffUser(user.id),
-    emailVerified: await isEmailVerified(user.id),
+    ...(await getAccountFlags(user.id)),
   };
 }
 
@@ -120,8 +119,7 @@ authRouter.get('/me', requireAuth, async (req, res, next) => {
       user: {
         email: req.user!.email,
         name: req.user!.name,
-        isStaff: await isStaffUser(req.user!.sub),
-        emailVerified: await isEmailVerified(req.user!.sub),
+        ...(await getAccountFlags(req.user!.sub)),
       },
     });
   } catch (err) {

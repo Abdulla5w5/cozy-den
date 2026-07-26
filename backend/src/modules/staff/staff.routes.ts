@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate';
-import { requireStaff } from '../../middleware/auth';
+import { requireAdmin, requireStaff } from '../../middleware/auth';
 import { getBookingsForDate, confirmBooking, markPrinted } from './staff.service';
 import { getMonthlyAnalytics, getRecurrentCustomers } from './analytics.service';
 import { listTeam, grantStaff, revokeStaff } from './team.service';
@@ -139,7 +139,7 @@ staffRouter.get('/team', requireStaff, async (_req, res, next) => {
 const grantSchema = z.object({ email: z.string().trim().email().max(200) });
 
 // POST /api/staff/team — promote an existing account to staff.
-staffRouter.post('/team', requireStaff, validate(grantSchema), async (req, res, next) => {
+staffRouter.post('/team', requireAdmin, validate(grantSchema), async (req, res, next) => {
   try {
     const actor = { id: req.user!.sub, email: req.user!.email };
     res.status(201).json({ member: await grantStaff(actor, req.body.email) });
@@ -149,7 +149,7 @@ staffRouter.post('/team', requireStaff, validate(grantSchema), async (req, res, 
 });
 
 // DELETE /api/staff/team/:id — revoke staff access.
-staffRouter.delete('/team/:id', requireStaff, async (req, res, next) => {
+staffRouter.delete('/team/:id', requireAdmin, validate(idParam, 'params'), async (req, res, next) => {
   try {
     const actor = { id: req.user!.sub, email: req.user!.email };
     await revokeStaff(actor, Number(req.params.id));
@@ -189,6 +189,7 @@ const staffReplySchema = z.object({
 staffRouter.post(
   '/support/:id/messages',
   requireStaff,
+  validate(idParam, 'params'),
   validate(staffReplySchema),
   async (req, res, next) => {
     try {
@@ -215,6 +216,7 @@ const statusSchema = z.object({
 staffRouter.post(
   '/support/:id/status',
   requireStaff,
+  validate(idParam, 'params'),
   validate(statusSchema),
   async (req, res, next) => {
     try {

@@ -14,6 +14,26 @@ export interface UserRow {
 
 const SELECT = 'SELECT id, email, name, password_hash, provider FROM users';
 
+/**
+ * The two per-request account flags in one read. They live in the same `users`
+ * row, so asking for them separately (isStaffUser + isEmailVerified) meant two
+ * round trips on every login, every session issue and every /auth/me — the
+ * single most-called endpoint in the app, since the SPA calls it on boot.
+ */
+export async function getAccountFlags(
+  userId: number,
+): Promise<{ isStaff: boolean; isAdmin: boolean; emailVerified: boolean }> {
+  const { rows } = await query<{ is_staff: boolean; is_admin: boolean; email_verified: boolean }>(
+    'SELECT is_staff, is_admin, email_verified FROM users WHERE id = $1',
+    [userId],
+  );
+  return {
+    isStaff: rows[0]?.is_staff === true,
+    isAdmin: rows[0]?.is_admin === true,
+    emailVerified: rows[0]?.email_verified === true,
+  };
+}
+
 export async function getUserByEmail(email: string): Promise<UserRow | null> {
   const { rows } = await query<UserRow>(`${SELECT} WHERE email = $1`, [email.toLowerCase()]);
   return rows[0] ?? null;

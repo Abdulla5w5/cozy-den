@@ -19,6 +19,8 @@ import {
 
 interface TapCharge {
   id: string;
+  amount?: number;
+  currency?: string;
   status: string; // INITIATED | IN_PROGRESS | CAPTURED | AUTHORIZED | DECLINED | CANCELLED | FAILED | ...
   transaction?: { url?: string };
   reference?: { payment?: string; order?: string };
@@ -123,6 +125,10 @@ export class TapPaymentProvider implements PaymentProvider {
       status,
       reference: charge.id,
       metadata: charge.metadata,
+      // Surfaced so the caller can assert we were paid what we asked for
+      // rather than trusting the status word alone.
+      amountCents: typeof charge.amount === 'number' ? Math.round(charge.amount * 100) : undefined,
+      currency: charge.currency,
     };
   }
 }

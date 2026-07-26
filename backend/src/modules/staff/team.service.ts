@@ -19,6 +19,15 @@ export async function isStaffUser(userId: number): Promise<boolean> {
   return rows[0]?.is_staff === true;
 }
 
+/** Admin check — the tier that may change who has access. */
+export async function isAdminUser(userId: number): Promise<boolean> {
+  const { rows } = await pool.query<{ is_admin: boolean }>(
+    'SELECT is_admin FROM users WHERE id = $1',
+    [userId],
+  );
+  return rows[0]?.is_admin === true;
+}
+
 export async function listTeam(): Promise<TeamMember[]> {
   const { rows } = await pool.query(
     `SELECT id, email, name, provider, created_at
@@ -91,8 +100,20 @@ export async function revokeStaff(actor: { id: number; email: string }, targetId
   if (Number(countRows[0].n) <= 1) {
     throw new ApiError(400, 'Cannot revoke the last remaining staff member.');
   }
+  // Revoking staff also drops admin, so refuse to remove the last admin —
+  // otherwise the team page becomes unreachable for everyone.
+  const { rows: adminRows } = await pool.query<{ n: string }>(
+    'SELECT count(*)::text AS n FROM users WHERE is_admin',
+  );
+  const { rows: targetRows } = await pool.query<{ is_admin: boolean }>(
+    'SELECT is_admin FROM users WHERE id = $1',
+    [targetId],
+  );
+  if (targetRows[0]?.is_admin && Number(adminRows[0].n) <= 1) {
+    throw new ApiError(400, 'Cannot revoke the last remaining admin.');
+  }
   const { rows } = await pool.query(
-    'UPDATE users SET is_staff = FALSE WHERE id = $1 AND is_staff RETURNING id, email',
+    'UPDATE users SET is_staff = FALSE, is_admin = FALSE WHERE id = $1 AND is_staff RETURNING id, email',
     [targetId],
   );
   const row = rows[0];

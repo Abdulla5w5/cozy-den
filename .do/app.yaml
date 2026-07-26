@@ -41,8 +41,12 @@ services:
         value: "true"
         scope: RUN_TIME
         type: GENERAL
+      # Real gateway. Requires TAP_SECRET_KEY as a SECRET runtime variable on
+      # this service — the factory throws on boot without it, so a missing or
+      # misnamed key fails the health check and rolls the deploy back rather
+      # than quietly falling through to mock and taking bookings for free.
       - key: PAYMENT_PROVIDER
-        value: mock
+        value: tap
         scope: RUN_TIME
         type: GENERAL
       # Absolute site URL. Without it, email-verification links render relative

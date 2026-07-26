@@ -55,6 +55,7 @@ export function App() {
     name: string;
     email: string;
     isStaff: boolean;
+    isAdmin: boolean;
     emailVerified: boolean;
   } | null>(null);
   const loggedIn = user !== null;
@@ -62,7 +63,7 @@ export function App() {
   useEffect(() => {
     let active = true;
     api
-      .get<{ user: { name: string; email: string; isStaff: boolean; emailVerified: boolean } }>(
+      .get<{ user: { name: string; email: string; isStaff: boolean; isAdmin: boolean; emailVerified: boolean } }>(
         '/auth/me',
       )
       .then((r) => active && setUser(r.user))

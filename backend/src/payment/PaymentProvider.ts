@@ -60,6 +60,9 @@ export interface ChargeStatus {
   status: string;
   reference: string;
   metadata?: Record<string, string>;
+  /** Major-unit amount the gateway actually settled, in cents. */
+  amountCents?: number;
+  currency?: string;
 }
 
 export interface PaymentProvider {

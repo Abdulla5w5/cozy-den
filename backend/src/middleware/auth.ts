@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { ApiError } from './error';
-import { isStaffUser } from '../modules/staff/team.service';
+import { isAdminUser, isStaffUser } from '../modules/staff/team.service';
 
 export const AUTH_COOKIE = 'cd_session';
 
@@ -61,6 +61,25 @@ export async function requireStaff(req: Request, _res: Response, next: NextFunct
   try {
     if (!(await isStaffUser(claims.sub))) {
       return next(new ApiError(403, 'Staff access only.'));
+    }
+  } catch (err) {
+    return next(err);
+  }
+  req.user = claims;
+  next();
+}
+
+/**
+ * Authenticated AND flagged as an admin. Guards only the routes that change WHO
+ * has access — granting and revoking staff. Ordinary dashboard work stays on
+ * requireStaff, so this costs the counter nothing.
+ */
+export async function requireAdmin(req: Request, _res: Response, next: NextFunction) {
+  const claims = readClaims(req);
+  if (!claims) return next(new ApiError(401, 'Authentication required'));
+  try {
+    if (!(await isAdminUser(claims.sub))) {
+      return next(new ApiError(403, 'Only an admin can change team access.'));
     }
   } catch (err) {
     return next(err);
