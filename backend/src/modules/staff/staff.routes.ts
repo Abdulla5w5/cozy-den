@@ -11,6 +11,8 @@ import {
   setStatus,
   Status as SupportStatus,
 } from '../support/support.service';
+import { listPostsForStaff, moderatePost } from '../wanted/wanted.service';
+import { setReviewed } from '../support/support.service';
 import { staffCreateBookingSchema } from '../bookings/bookings.schema';
 import { createStaffBooking, getBookingById } from '../bookings/bookings.service';
 
@@ -226,4 +228,57 @@ staffRouter.post(
       next(err);
     }
   }
+);
+
+// ---------- Wanted Board (staff side) ----------
+
+const wantedQuery = z.object({
+  status: z.enum(['pending', 'open', 'completed', 'rejected']).optional(),
+});
+
+// GET /api/staff/wanted — full detail INCLUDING the identities and contact
+// details of everyone who registered interest. This is the only place those
+// are exposed; the public board returns counts alone.
+staffRouter.get('/wanted', requireStaff, validate(wantedQuery, 'query'), async (req, res, next) => {
+  try {
+    const status = (req.query as { status?: 'pending' | 'open' | 'completed' | 'rejected' }).status;
+    res.json({ posts: await listPostsForStaff(status) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']) });
+
+// POST /api/staff/wanted/:id/moderate — publish a pending post, or reject it.
+staffRouter.post(
+  '/wanted/:id/moderate',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(decisionSchema),
+  async (req, res, next) => {
+    try {
+      res.json({ post: await moderatePost(Number(req.params.id), req.body.decision) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const reviewedSchema = z.object({ reviewed: z.boolean() });
+
+// POST /api/staff/support/:id/reviewed — "I have read this", tracked separately
+// from the open/resolved workflow so it never implies action was taken.
+staffRouter.post(
+  '/support/:id/reviewed',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(reviewedSchema),
+  async (req, res, next) => {
+    try {
+      res.json({ request: await setReviewed(Number(req.params.id), req.body.reviewed) });
+    } catch (err) {
+      next(err);
+    }
+  },
 );

@@ -15,6 +15,7 @@ import { authRouter } from './modules/auth/auth.routes';
 import { eventsRouter } from './modules/events/events.routes';
 import { historyRouter } from './modules/history/history.routes';
 import { promoRouter } from './modules/promo/promo.routes';
+import { wantedRouter } from './modules/wanted/wanted.routes';
 
 function isSameOriginRequest(origin: string, req: express.Request) {
   const host = req.get('host');
@@ -59,6 +60,7 @@ export function createApp() {
   app.use('/api/events', eventsRouter);
   app.use('/api/history', historyRouter);
   app.use('/api/promo', promoRouter);
+  app.use('/api/wanted', wantedRouter);
   app.use('/api/support', supportRouter);
   app.use('/api/staff', staffRouter);
 

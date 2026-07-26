@@ -29,6 +29,7 @@ export interface SupportRequest {
   customerName?: string;
   customerEmail?: string;
   messageCount?: number;
+  reviewed?: boolean;
 }
 
 interface Actor {
@@ -49,6 +50,7 @@ function mapRequest(r: Record<string, unknown>): SupportRequest {
     ...(r.customer_name ? { customerName: r.customer_name as string } : {}),
     ...(r.customer_email ? { customerEmail: r.customer_email as string } : {}),
     ...(r.message_count !== undefined ? { messageCount: Number(r.message_count) } : {}),
+    reviewed: r.reviewed_at != null,
   };
 }
 
@@ -125,10 +127,11 @@ export async function listMyRequests(userId: number): Promise<SupportRequest[]> 
 
 export async function listAllRequests(status?: Status): Promise<SupportRequest[]> {
   const { rows } = await query(
-    `SELECT r.*, u.name AS customer_name, u.email AS customer_email,
+    `SELECT r.*, COALESCE(u.name, r.guest_name) AS customer_name,
+            COALESCE(u.email, r.guest_email) AS customer_email,
             count(m.id) AS message_count
        FROM support_requests r
-       JOIN users u ON u.id = r.user_id
+       LEFT JOIN users u ON u.id = r.user_id
        LEFT JOIN support_messages m ON m.request_id = r.id
       WHERE ($1::text IS NULL OR r.status = $1)
       GROUP BY r.id, u.name, u.email
@@ -150,9 +153,10 @@ export async function getThread(
   viewer: { id: number; isStaff: boolean },
 ): Promise<{ request: SupportRequest; messages: SupportMessage[]; statusHistory: unknown[] }> {
   const { rows } = await query(
-    `SELECT r.*, u.name AS customer_name, u.email AS customer_email
+    `SELECT r.*, COALESCE(u.name, r.guest_name) AS customer_name,
+            COALESCE(u.email, r.guest_email) AS customer_email
        FROM support_requests r
-       JOIN users u ON u.id = r.user_id
+       LEFT JOIN users u ON u.id = r.user_id
       WHERE r.id = $1 AND ($2::boolean OR r.user_id = $3)`,
     [requestId, viewer.isStaff, viewer.id],
   );
@@ -198,8 +202,10 @@ export async function addMessage(
 
   // Customers may only post to their own request; staff to any.
   const { rows: reqRows } = await query(
-    `SELECT r.id, r.subject, r.status, u.email AS customer_email, u.name AS customer_name
-       FROM support_requests r JOIN users u ON u.id = r.user_id
+    `SELECT r.id, r.subject, r.status,
+            COALESCE(u.email, r.guest_email) AS customer_email,
+            COALESCE(u.name, r.guest_name) AS customer_name
+       FROM support_requests r LEFT JOIN users u ON u.id = r.user_id
       WHERE r.id = $1 AND ($2::boolean OR r.user_id = $3)`,
     [requestId, role === 'staff', author.id],
   );
@@ -255,8 +261,10 @@ export async function setStatus(
   to: Status,
 ): Promise<SupportRequest> {
   const { rows: before } = await query(
-    `SELECT r.status, r.subject, u.email AS customer_email, u.name AS customer_name
-       FROM support_requests r JOIN users u ON u.id = r.user_id WHERE r.id = $1`,
+    `SELECT r.status, r.subject,
+            COALESCE(u.email, r.guest_email) AS customer_email,
+            COALESCE(u.name, r.guest_name) AS customer_name
+       FROM support_requests r LEFT JOIN users u ON u.id = r.user_id WHERE r.id = $1`,
     [requestId],
   );
   if (!before[0]) throw new ApiError(404, 'Request not found.');
@@ -281,5 +289,77 @@ export async function setStatus(
       customerEmail: before[0].customer_email,
     });
   }
+  return mapRequest(rows[0]);
+}
+
+/**
+ * Open a request from someone without an account (the public suggestions and
+ * feedback form). Same inbox, same workflow as a member's request — staff have
+ * one place to look — but the contact details live on the request itself since
+ * there is no users row behind it.
+ */
+export async function createGuestRequest(input: {
+  name: string;
+  email: string;
+  kind: Kind;
+  severity?: Severity;
+  subject: string;
+  body: string;
+}): Promise<SupportRequest> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `INSERT INTO support_requests (user_id, guest_name, guest_email, kind, severity, subject)
+       VALUES (NULL, $1, $2, $3, $4, $5)
+       RETURNING *`,
+      [
+        input.name,
+        input.email.toLowerCase(),
+        input.kind,
+        input.kind === 'complaint' ? (input.severity ?? 'normal') : null,
+        input.subject,
+      ],
+    );
+    const request = rows[0];
+    await client.query(
+      `INSERT INTO support_messages (request_id, author_id, author_name, author_role, body)
+       VALUES ($1, NULL, $2, 'customer', $3)`,
+      [request.id, input.name, input.body],
+    );
+    await client.query(
+      `INSERT INTO support_status_events (request_id, actor_id, actor_name, from_status, to_status)
+       VALUES ($1, NULL, $2, NULL, 'open')`,
+      [request.id, input.name],
+    );
+    await client.query('COMMIT');
+
+    if (request.kind === 'complaint') {
+      void notifyNewComplaint({
+        id: request.id,
+        subject: request.subject,
+        severity: request.severity,
+        customerName: input.name,
+        customerEmail: input.email,
+        body: input.body,
+      });
+    }
+    return mapRequest(request);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** "Staff has read this." Independent of open/resolved, which means acted on. */
+export async function setReviewed(requestId: number, reviewed: boolean): Promise<SupportRequest> {
+  const { rows } = await query(
+    `UPDATE support_requests SET reviewed_at = CASE WHEN $2 THEN now() END
+      WHERE id = $1 RETURNING *`,
+    [requestId, reviewed],
+  );
+  if (!rows[0]) throw new ApiError(404, 'Request not found.');
   return mapRequest(rows[0]);
 }

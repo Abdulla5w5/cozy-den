@@ -4,8 +4,10 @@ import { validate } from '../../middleware/validate';
 
 import { requireAuth } from '../../middleware/auth';
 import { isStaffUser } from '../staff/team.service';
+import { bookingLimiter } from '../../middleware/rateLimit';
 import {
   addMessage,
+  createGuestRequest,
   createRequest,
   getThread,
   listMyRequests,
@@ -15,6 +17,30 @@ import {
 // Customer-facing support. Every route is account-only: a request belongs to a
 // user, and ownership is checked in the query — never assumed from the UI.
 export const supportRouter = Router();
+
+const guestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    email: z.string().trim().email().max(200),
+    kind: z.enum(['suggestion', 'complaint', 'question']),
+    severity: z.enum(['low', 'normal', 'urgent']).optional(),
+    subject: z.string().trim().min(3).max(140),
+    body: z.string().trim().min(1).max(4000),
+  })
+  .refine((v) => v.kind === 'complaint' || v.severity === undefined, {
+    message: 'Severity applies to complaints only.',
+    path: ['severity'],
+  });
+
+// POST /api/support/public — suggestions & feedback from anyone, account or
+// not. Rate limited, since it is unauthenticated and writes to the inbox.
+supportRouter.post('/public', bookingLimiter, validate(guestSchema), async (req, res, next) => {
+  try {
+    res.status(201).json({ request: await createGuestRequest(req.body) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 const createSchema = z
   .object({

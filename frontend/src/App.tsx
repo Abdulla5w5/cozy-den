@@ -15,6 +15,8 @@ import { SupportPage, SupportThreadPage } from './pages/SupportPage';
 import { PromoModal } from './components/PromoModal';
 import { VerifyBanner } from './components/VerifyBanner';
 import { VerifyEmail } from './pages/VerifyEmail';
+import { WantedBoard } from './pages/WantedBoard';
+import { AboutPage } from './pages/AboutPage';
 
 type Theme = 'light' | 'dark';
 
@@ -98,6 +100,8 @@ export function App() {
           <NavLink to="/games">{t('nav.games')}</NavLink>
           <NavLink to="/menu">{t('nav.menu')}</NavLink>
           <NavLink to="/events">{t('nav.events')}</NavLink>
+          <NavLink to="/wanted">{t('nav.wanted')}</NavLink>
+          <NavLink to="/about">{t('nav.about')}</NavLink>
           {loggedIn && !user?.isStaff && (
             <NavLink to="/account">{t('nav.mybookings')}</NavLink>
           )}
@@ -143,6 +147,8 @@ export function App() {
           <Route path="/games" element={<GamesPage />} />
           <Route path="/menu" element={<MenuPage />} />
           <Route path="/events" element={<EventsPage />} />
+          <Route path="/wanted" element={<WantedBoard />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/support/:id" element={<SupportThreadPage />} />

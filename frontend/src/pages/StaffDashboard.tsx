@@ -6,8 +6,9 @@ import { useI18n } from '../i18n';
 import { MonthlyAnalytics, StaffBooking, Table, TableAvailability, TeamMember } from '../types';
 import { EventsTab, PromoTab } from './StaffContent';
 import { SupportTab } from './StaffSupport';
+import { StaffWanted } from './StaffWanted';
 
-type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support';
+type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support' | 'wanted';
 
 interface Customer {
   name: string;
@@ -85,6 +86,9 @@ export function StaffDashboard() {
         <button className={tab === 'promo' ? 'active' : ''} onClick={() => setTab('promo')}>
           {t('staff.promo')}
         </button>
+        <button className={tab === 'wanted' ? 'active' : ''} onClick={() => setTab('wanted')}>
+          {t('staff.wanted')}
+        </button>
         <button className={tab === 'support' ? 'active' : ''} onClick={() => setTab('support')}>
           {t('staff.support')}
         </button>
@@ -105,6 +109,8 @@ export function StaffDashboard() {
         <EventsTab />
       ) : tab === 'support' ? (
         <SupportTab />
+      ) : tab === 'wanted' ? (
+        <StaffWanted />
       ) : tab === 'team' ? (
         <TeamTab meEmail={staffEmail} />
       ) : (
