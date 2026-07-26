@@ -48,21 +48,42 @@ export async function authenticateUser(email: string, password: string): Promise
   return user;
 }
 
-/** Create the user on first Google sign-in, otherwise return the existing one. */
-export async function upsertGoogleUser(email: string, name: string): Promise<UserRow> {
+/**
+ * Create the user on first Google sign-in, otherwise return the existing one.
+ *
+ * Google has already proven the address belongs to the person signing in, so
+ * `googleVerified` carries that through to `users.email_verified` rather than
+ * making them confirm an address twice — booking history is gated on that flag.
+ */
+export async function upsertGoogleUser(
+  email: string,
+  name: string,
+  googleVerified: boolean,
+): Promise<UserRow> {
   const existing = await getUserByEmail(email);
-  if (existing) return existing;
+  if (existing) {
+    if (googleVerified) {
+      await query(
+        `UPDATE users SET email_verified = TRUE, email_verified_at = COALESCE(email_verified_at, now())
+          WHERE id = $1 AND NOT email_verified`,
+        [existing.id],
+      );
+    }
+    return existing;
+  }
   const { rows } = await query<UserRow>(
-    `INSERT INTO users (email, name, provider)
-     VALUES ($1, $2, 'google')
+    `INSERT INTO users (email, name, provider, email_verified, email_verified_at)
+     VALUES ($1, $2, 'google', $3, CASE WHEN $3 THEN now() END)
      RETURNING id, email, name, password_hash, provider`,
-    [email.toLowerCase(), name]
+    [email.toLowerCase(), name, googleVerified]
   );
   return rows[0];
 }
 
 /** Verify a Google ID token server-side. Requires GOOGLE_CLIENT_ID. */
-export async function verifyGoogleToken(idToken: string): Promise<{ email: string; name: string }> {
+export async function verifyGoogleToken(
+  idToken: string,
+): Promise<{ email: string; name: string; emailVerified: boolean }> {
   if (!env.googleClientId) {
     throw new ApiError(503, 'Google sign-in is not configured on this server.');
   }
@@ -75,5 +96,9 @@ export async function verifyGoogleToken(idToken: string): Promise<{ email: strin
     throw new ApiError(401, 'Invalid Google token.');
   }
   if (!payload?.email) throw new ApiError(401, 'Google token did not include an email.');
-  return { email: payload.email, name: payload.name || payload.email };
+  return {
+    email: payload.email,
+    name: payload.name || payload.email,
+    emailVerified: payload.email_verified === true,
+  };
 }

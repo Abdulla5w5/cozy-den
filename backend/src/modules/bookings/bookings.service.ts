@@ -263,6 +263,25 @@ export async function finalizeCharge(
 }
 
 /**
+ * Release a reservation whose payment never completed. The exclusion constraint
+ * counts every non-cancelled row, so a 'pending_payment' row holds its 2-hour
+ * window against everyone else — and an abandoned Tap charge sits at INITIATED
+ * indefinitely, which finalizeCharge reads as "still in flight" and never
+ * settles. Without this the window is held forever, for free, by anyone.
+ *
+ * Guarded on 'pending_payment' so it can never race a confirmation: if the
+ * customer paid a moment earlier, the row is already 'pending' and this no-ops.
+ */
+export async function expireHold(bookingId: number): Promise<boolean> {
+  const { rowCount } = await query(
+    `UPDATE bookings SET status = 'cancelled'
+      WHERE id = $1 AND status = 'pending_payment'`,
+    [bookingId],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/**
  * Staff manual entry for phone/WhatsApp bookings: no payment step, created
  * directly as 'pending' with source 'staff_manual'. Contact may be a phone
  * number or email — no receipt email is attempted.

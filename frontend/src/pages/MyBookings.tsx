@@ -9,11 +9,17 @@ export function MyBookings() {
   const navigate = useNavigate();
   const { t, money } = useI18n();
   const [bookings, setBookings] = useState<Booking[] | null>(null);
+  // The API withholds history until the address is confirmed — see
+  // auth.routes.ts. Distinguish that from a genuinely empty history.
+  const [unverified, setUnverified] = useState(false);
 
   useEffect(() => {
     api
-      .get<{ bookings: Booking[] }>('/auth/bookings')
-      .then((r) => setBookings(r.bookings))
+      .get<{ bookings: Booking[]; emailUnverified?: boolean }>('/auth/bookings')
+      .then((r) => {
+        setBookings(r.bookings);
+        setUnverified(r.emailUnverified === true);
+      })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 401) navigate('/register');
         else setBookings([]);
@@ -30,6 +36,10 @@ export function MyBookings() {
 
       {bookings === null ? (
         <p>{t('loading')}</p>
+      ) : unverified ? (
+        <div className="card">
+          <p className="muted">{t('acct.verifyFirst')}</p>
+        </div>
       ) : bookings.length === 0 ? (
         <div className="card">
           <p className="muted">{t('acct.empty')}</p>

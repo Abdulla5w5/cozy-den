@@ -289,6 +289,10 @@ const dict: Record<string, { en: string; ar: string }> = {
   'acct.title': { en: 'My Bookings', ar: 'حجوزاتي' },
   'acct.sub': { en: 'Your past and upcoming sessions.', ar: 'جلساتك السابقة والقادمة.' },
   'acct.empty': { en: "You haven't booked anything yet.", ar: 'ما حجزت شي بعد.' },
+  'acct.verifyFirst': {
+    en: 'Confirm your email address to see your bookings. Check your inbox for the link we sent you.',
+    ar: 'أكد إيميلك عشان تشوف حجوزاتك. شيّك على الرابط اللي أرسلناه لك.',
+  },
 
   // ---- recurrent customers (staff) ----
   'staff.customers': { en: 'Customers', ar: 'العملاء' },

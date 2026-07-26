@@ -80,7 +80,7 @@ const googleSchema = z.object({ idToken: z.string().min(10).max(5000) });
 authRouter.post('/google', loginLimiter, validate(googleSchema), async (req, res, next) => {
   try {
     const g = await verifyGoogleToken(req.body.idToken);
-    const user = await upsertGoogleUser(g.email, g.name);
+    const user = await upsertGoogleUser(g.email, g.name, g.emailVerified);
     res.json({ user: await issueSession(res, user) });
   } catch (err) {
     next(err);
@@ -94,8 +94,19 @@ authRouter.post('/logout', (_req, res) => {
 });
 
 // GET /api/auth/bookings — the signed-in user's own booking history.
+//
+// Guest checkout only ever collects an email, so history is matched on that
+// address alone. That makes a CONFIRMED address the thing standing between an
+// account and someone else's booking: anyone could register as a guest's email
+// and read their reservation — including its verification code, which is the
+// capability that gets you the table at the counter. So an unverified account
+// gets an empty list and a flag the UI turns into "confirm your email first".
 authRouter.get('/bookings', requireAuth, async (req, res, next) => {
   try {
+    if (!(await isEmailVerified(req.user!.sub))) {
+      res.json({ bookings: [], emailUnverified: true });
+      return;
+    }
     res.json({ bookings: await getBookingsByEmail(req.user!.email) });
   } catch (err) {
     next(err);
