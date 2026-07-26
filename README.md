@@ -16,8 +16,35 @@ DigitalOcean does not need to infer components from the monorepo root.
 
 When creating the app from the control panel, select this repository and branch
 `main`. The platform will read `.do/app.yaml`. Before the first deployment, add
-`JWT_SECRET` and `DATABASE_URL` to the `api` service as **Secret** runtime
-environment variables. Use a unique `JWT_SECRET` of at least 32 characters.
+`JWT_SECRET`, `DATABASE_URL` and `SMTP_URL` to the `api` service as **Secret**
+runtime environment variables. Use a unique `JWT_SECRET` of at least 32
+characters.
+
+`SMTP_URL` is not optional in production. Without it the mailer falls back to
+its console stub, so nothing is ever delivered — and because a customer can
+only see their booking history once they have confirmed their email address
+(the address is all that links a guest booking to an account), an app that
+cannot send the confirmation link is an app where no one has a booking history.
+Any provider works. Cozy Den sends through the `cozyden.noreply@gmail.com`
+Google account, so the value is:
+
+```
+smtps://cozyden.noreply@gmail.com:APP_PASSWORD@smtp.gmail.com:465
+```
+
+`APP_PASSWORD` is a Google **App Password** (Account → Security → 2-Step
+Verification → App passwords), not the account password — Google rejects the
+latter over SMTP. Paste it without the spaces Google displays it with.
+
+Free Gmail accounts cap outbound mail at roughly 500 messages/day; a Workspace
+account raises that to about 2,000. Booking receipts plus verification links
+run about two emails per booking, so plan a move to a domain sender well before
+that ceiling. The service logs a loud `[mailer]` error on boot when `SMTP_URL`
+is missing.
+
+`PUBLIC_URL` and `MAIL_FROM` are declared in `.do/app.yaml`; `PUBLIC_URL` binds
+to the platform's `${APP_URL}`, so it follows renames and custom domains
+without editing. Override `MAIL_FROM` if the sending domain differs.
 
 Production PostgreSQL runs on a separate Droplet in the same VPC, rather than
 an App Platform development database. Set `DATABASE_URL` to that database's

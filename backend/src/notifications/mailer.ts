@@ -16,6 +16,15 @@ export interface Mailer {
 
 class ConsoleMailer implements Mailer {
   async send(msg: { to: string; subject: string; text: string }): Promise<void> {
+    // In production the body is withheld: these messages carry verification
+    // links and booking codes, and this path already means the mail was never
+    // delivered — no reason to also spill the contents into the log stream.
+    if (env.isProd) {
+      console.error(
+        `[mailer] NOT DELIVERED (SMTP_URL unset) — to=${msg.to} subject=${msg.subject}`,
+      );
+      return;
+    }
     console.log('\n===== [STUB EMAIL — set SMTP_URL to send for real] =====');
     console.log(`To:      ${msg.to}`);
     console.log(`Subject: ${msg.subject}`);
@@ -43,7 +52,13 @@ class SmtpMailer implements Mailer {
 function createMailer(): Mailer {
   if (!env.smtpUrl) {
     if (env.isProd) {
-      console.warn('[mailer] SMTP_URL is not set — emails are logged, not delivered.');
+      console.error(
+        '[mailer] ***** SMTP_URL IS NOT SET IN PRODUCTION *****\n' +
+          '[mailer] No email leaves this server: booking receipts, email\n' +
+          '[mailer] verification links, and complaint alerts are all dropped.\n' +
+          '[mailer] Customers cannot confirm their address, which also means\n' +
+          '[mailer] they cannot see their booking history.',
+      );
     }
     return new ConsoleMailer();
   }

@@ -45,6 +45,26 @@ services:
         value: mock
         scope: RUN_TIME
         type: GENERAL
+      # Absolute site URL. Without it, email-verification links render relative
+      # (and so arrive broken), and gateway redirect/webhook URLs fall back to
+      # the request host, which for this service is the internal App Platform
+      # address rather than the public domain. ${APP_URL} is bound by the
+      # platform, so this stays correct across renames and custom domains.
+      - key: PUBLIC_URL
+        value: ${APP_URL}
+        scope: RUN_TIME
+        type: GENERAL
+      # Gmail rewrites the From header to whichever account SMTP authenticated
+      # as, so this must stay the same address as the one in SMTP_URL —
+      # anything else is silently replaced and only causes confusion.
+      - key: MAIL_FROM
+        value: Cozy Den <cozyden.noreply@gmail.com>
+        scope: RUN_TIME
+        type: GENERAL
+      # SMTP_URL is NOT declared here — it carries credentials. Add it in the
+      # control panel as a SECRET runtime variable on this service. Until it is
+      # set, every email (booking receipts, verification links, complaint
+      # alerts) is written to the logs and silently discarded.
 
 ingress:
   rules:
