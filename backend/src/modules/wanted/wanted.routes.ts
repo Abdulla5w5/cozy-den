@@ -15,7 +15,6 @@ export const wantedRouter = Router();
 const createSchema = z.object({
   gameId: z.number().int().positive().nullable().optional(),
   gameName: z.string().trim().min(1).max(160).nullable().optional(),
-  playersNeeded: z.number().int().min(1).max(50),
   minPlayers: z.number().int().min(1).max(50),
   maxPlayers: z.number().int().min(1).max(50),
   sessionType: z.enum(['males_only', 'females_only', 'open']),

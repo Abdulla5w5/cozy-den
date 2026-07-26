@@ -17,7 +17,6 @@ import { useI18n } from '../i18n';
 interface StaffPost {
   id: number;
   gameTitle: string;
-  playersNeeded: number;
   minPlayers: number;
   maxPlayers: number;
   sessionType: 'males_only' | 'females_only' | 'open';

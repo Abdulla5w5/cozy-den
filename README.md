@@ -54,6 +54,33 @@ Keep the database port bound to the Droplet's private address and allow port
 
 ---
 
+## Table pricing
+
+KD 3.500 per two-hour booking on **Thursday, Friday, Saturday and Kuwait
+national holidays**; KD 2.750 on every other day. Both are set by
+`TABLE_FEE_PEAK_CENTS` / `TABLE_FEE_OFFPEAK_CENTS` (hundredths of a KD) and
+always resolved server-side from the booking date, so the price cannot be
+influenced by the client.
+
+The date used is `booking_date`, which identifies the *evening* a session
+belongs to. Because the service day runs to 03:00, a 01:00 start on Friday
+morning belongs to Thursday evening and is priced as Thursday.
+
+Holidays live in the `holidays` table, not in code. National Day (25 Feb) and
+Liberation Day (26 Feb) are seeded through 2035. **The Islamic holidays — both
+Eids, the Hijri New Year, the Prophet's birthday and Isra & Miraj — shift about
+eleven days earlier each Gregorian year and must be added as they are
+announced:**
+
+```sql
+INSERT INTO holidays (holiday_date, name) VALUES ('2027-03-09', 'Eid al-Fitr');
+```
+
+A date missing from that table simply prices at the normal rate — no error, so
+a forgotten holiday undercharges rather than breaking checkout.
+
+---
+
 ## Repository layout
 
 ```

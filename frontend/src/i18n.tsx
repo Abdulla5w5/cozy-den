@@ -407,6 +407,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.wbNone': { en: 'No posts.', ar: 'ما في منشورات.' },
   'staff.wbPoster': { en: 'Posted by', ar: 'نشرها' },
   'staff.reviewed': { en: 'Reviewed', ar: 'تمت المراجعة' },
+  'bk.peakWeekend': { en: 'Weekend rate', ar: 'سعر نهاية الأسبوع' },
   'acct.verifyFirst': {
     en: 'Confirm your email address to see your bookings. Check your inbox for the link we sent you.',
     ar: 'أكد إيميلك عشان تشوف حجوزاتك. شيّك على الرابط اللي أرسلناه لك.',

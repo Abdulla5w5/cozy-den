@@ -23,7 +23,6 @@ interface Post {
   id: number;
   gameId: number | null;
   gameTitle: string;
-  playersNeeded: number;
   minPlayers: number;
   maxPlayers: number;
   sessionType: SessionType;
@@ -201,7 +200,6 @@ function PostForm({ onDone }: { onDone: () => void }) {
   const [games, setGames] = useState<Game[]>([]);
   const [gameId, setGameId] = useState<number | ''>('');
   const [gameName, setGameName] = useState('');
-  const [playersNeeded, setPlayersNeeded] = useState(2);
   const [minPlayers, setMinPlayers] = useState(2);
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [sessionType, setSessionType] = useState<SessionType>('open');
@@ -236,7 +234,6 @@ function PostForm({ onDone }: { onDone: () => void }) {
       await api.post('/wanted', {
         gameId: gameId === '' ? null : gameId,
         gameName: gameId === '' ? gameName.trim() : null,
-        playersNeeded,
         minPlayers,
         maxPlayers,
         sessionType,
@@ -277,16 +274,6 @@ function PostForm({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="row">
-        <label className="field inline">
-          {t('wb.needed')}
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={playersNeeded}
-            onChange={(e) => setPlayersNeeded(Number(e.target.value))}
-          />
-        </label>
         <label className="field inline">
           {t('wb.min')}
           <input

@@ -27,8 +27,11 @@ tablesRouter.get(
   async (req, res, next) => {
     try {
       const { date } = req.query as unknown as { date: string };
-      const availability = await getAvailability(date);
-      res.json({ date, slots: START_TIMES, availability });
+      const { tables, fee } = await getAvailability(date);
+      // fee travels with availability so the form always prices the date being
+      // viewed. The server re-derives it at checkout regardless — this is for
+      // display, never an input.
+      res.json({ date, slots: START_TIMES, availability: tables, fee });
     } catch (err) {
       next(err);
     }

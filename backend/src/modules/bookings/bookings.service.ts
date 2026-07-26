@@ -2,6 +2,7 @@ import { query } from '../../db/pool';
 import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
+import { getTableFee } from '../../utils/pricing';
 import { paymentProvider } from '../../payment';
 import { mailer, formatReceiptEmail } from '../../notifications/mailer';
 import { CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
@@ -98,7 +99,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
   await assertTableExists(input.tableId);
 
-  const feeCents = env.tableFeeCents;
+  const feeCents = (await getTableFee(input.date)).cents;
   const bookingId = await insertBooking({
     tableId: input.tableId,
     date: input.date,
@@ -166,7 +167,7 @@ export async function startBookingCheckout(
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
   await assertTableExists(input.tableId);
 
-  const feeCents = env.tableFeeCents;
+  const feeCents = (await getTableFee(input.date)).cents;
   const bookingId = await insertBooking({
     tableId: input.tableId,
     date: input.date,

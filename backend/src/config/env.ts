@@ -51,7 +51,10 @@ export const env = {
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean),
 
-  tableFeeCents: parseInt(optional('TABLE_FEE_CENTS', '500'), 10),
+  // Table fee per two-hour booking, in hundredths of a KD.
+  // Peak = Thu/Fri/Sat and Kuwait national holidays (KD 3.500); otherwise KD 2.750.
+  tableFeePeakCents: parseInt(optional('TABLE_FEE_PEAK_CENTS', '350'), 10),
+  tableFeeOffPeakCents: parseInt(optional('TABLE_FEE_OFFPEAK_CENTS', '275'), 10),
 
   paymentProvider: optional('PAYMENT_PROVIDER', 'mock'),
   paymentApiKey: process.env.PAYMENT_API_KEY || undefined,

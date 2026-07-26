@@ -28,7 +28,6 @@ export interface PublicPost {
   id: number;
   gameId: number | null;
   gameTitle: string;
-  playersNeeded: number;
   minPlayers: number;
   maxPlayers: number;
   sessionType: SessionType;
@@ -41,7 +40,6 @@ export interface PublicPost {
 export interface CreatePostInput {
   gameId?: number | null;
   gameName?: string | null;
-  playersNeeded: number;
   minPlayers: number;
   maxPlayers: number;
   sessionType: SessionType;
@@ -52,7 +50,7 @@ export interface CreatePostInput {
 // Public projection. Deliberately selects no member identity of any kind.
 const PUBLIC_SELECT = `
   SELECT p.id, p.game_id, COALESCE(g.title, p.game_name) AS game_title,
-         p.players_needed, p.min_players, p.max_players, p.session_type,
+         p.min_players, p.max_players, p.session_type,
          p.preferred_days, p.status, p.created_at,
          (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id) AS interest_count
     FROM wanted_posts p
@@ -62,7 +60,6 @@ interface PublicRow {
   id: number;
   game_id: number | null;
   game_title: string;
-  players_needed: number;
   min_players: number;
   max_players: number;
   session_type: SessionType;
@@ -77,7 +74,6 @@ function toPublic(r: PublicRow): PublicPost {
     id: r.id,
     gameId: r.game_id,
     gameTitle: r.game_title,
-    playersNeeded: r.players_needed,
     minPlayers: r.min_players,
     maxPlayers: r.max_players,
     sessionType: r.session_type,
@@ -110,15 +106,14 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
 
   const { rows } = await query<{ id: number }>(
     `INSERT INTO wanted_posts
-       (member_id, game_id, game_name, players_needed, min_players, max_players,
+       (member_id, game_id, game_name, min_players, max_players,
         session_type, preferred_days, acknowledgment_confirmed)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)
      RETURNING id`,
     [
       memberId,
       input.gameId ?? null,
       input.gameId ? null : input.gameName!.trim(),
-      input.playersNeeded,
       input.minPlayers,
       input.maxPlayers,
       input.sessionType,
@@ -238,7 +233,7 @@ export interface StaffPost extends PublicPost {
 export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[]> {
   const { rows } = await query<PublicRow & { poster_name: string; poster_email: string }>(
     `SELECT p.id, p.game_id, COALESCE(g.title, p.game_name) AS game_title,
-            p.players_needed, p.min_players, p.max_players, p.session_type,
+            p.min_players, p.max_players, p.session_type,
             p.preferred_days, p.status, p.created_at,
             (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id)
               AS interest_count,

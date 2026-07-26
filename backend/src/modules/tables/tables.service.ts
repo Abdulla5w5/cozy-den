@@ -1,5 +1,6 @@
 import { query } from '../../db/pool';
 import { START_TIMES, overlaps } from '../../utils/slots';
+import { getTableFee, TableFee } from '../../utils/pricing';
 
 export interface TableRow {
   id: number;
@@ -27,8 +28,13 @@ export interface TableAvailability {
  * open. A start is free iff its 2-hour window overlaps no live booking's
  * 2-hour window on that table (back-to-back sessions are fine).
  */
-export async function getAvailability(date: string): Promise<TableAvailability[]> {
+export async function getAvailability(
+  date: string,
+): Promise<{ tables: TableAvailability[]; fee: TableFee }> {
   const tables = await getTables();
+  // Returned with availability so the booking form always shows the price for
+  // the date being viewed, rather than a figure baked into the build.
+  const fee = await getTableFee(date);
 
   const { rows: booked } = await query<{ table_id: number; time_slot: string }>(
     `SELECT table_id, time_slot
@@ -44,7 +50,7 @@ export async function getAvailability(date: string): Promise<TableAvailability[]
     startsByTable.get(b.table_id)!.push(b.time_slot);
   }
 
-  return tables.map((t) => {
+  const mapped = tables.map((t) => {
     const existing = startsByTable.get(t.id) ?? [];
     const blocked = (s: string) => existing.some((b) => overlaps(s, b));
     return {
@@ -55,4 +61,5 @@ export async function getAvailability(date: string): Promise<TableAvailability[]
       takenSlots: START_TIMES.filter(blocked),
     };
   });
+  return { tables: mapped, fee };
 }

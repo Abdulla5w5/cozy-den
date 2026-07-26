@@ -69,7 +69,13 @@ export function BookingFlow() {
   const [guestEmail, setGuestEmail] = useState(draft?.guestEmail ?? '');
   const [submitting, setSubmitting] = useState(false);
 
-  const TABLE_FEE_CENTS = 500; // display only; server is the source of truth
+  // Priced by date on the server (Thu/Fri/Sat and Kuwait national holidays cost
+  // more). Display only — checkout re-derives it, so this can never set a price.
+  const [fee, setFee] = useState<{ cents: number; peak: boolean; reason: string | null }>({
+    cents: 275,
+    peak: false,
+    reason: null,
+  });
 
   useEffect(() => {
     setError(null);
@@ -80,12 +86,15 @@ export function BookingFlow() {
       setTimeSlot(null);
     }
     api
-      .get<{ slots: string[]; availability: TableAvailability[] }>(
-        `/tables/availability?date=${date}`
-      )
+      .get<{
+        slots: string[];
+        availability: TableAvailability[];
+        fee: { cents: number; peak: boolean; reason: string | null };
+      }>(`/tables/availability?date=${date}`)
       .then((r) => {
         setSlots(r.slots);
         setAvailability(r.availability);
+        setFee(r.fee);
         // Re-apply the saved table/time once the grid for its date has loaded.
         if (restoreRef.current && restoreRef.current.date === date) {
           setTableId(restoreRef.current.tableId);
@@ -230,11 +239,16 @@ export function BookingFlow() {
             </p>
             <ul>
               <li>
-                {t('bk.tableFee')} — {money(TABLE_FEE_CENTS)}
+                {t('bk.tableFee')} — {money(fee.cents)}
+                {fee.peak && (
+                  <span className="pill">
+                    {fee.reason === 'weekend' ? t('bk.peakWeekend') : fee.reason}
+                  </span>
+                )}
               </li>
             </ul>
             <p className="total">
-              {t('bk.total')} {money(TABLE_FEE_CENTS)}
+              {t('bk.total')} {money(fee.cents)}
             </p>
           </div>
 
@@ -265,7 +279,7 @@ export function BookingFlow() {
               disabled={submitting || !guestName || !guestEmail || !tableId || !timeSlot}
               onClick={submit}
             >
-              {submitting ? t('bk.processing') : t('bk.pay', { amount: money(TABLE_FEE_CENTS) })}
+              {submitting ? t('bk.processing') : t('bk.pay', { amount: money(fee.cents) })}
             </button>
           </div>
         </section>
