@@ -289,6 +289,14 @@ const dict: Record<string, { en: string; ar: string }> = {
   'acct.title': { en: 'My Bookings', ar: 'حجوزاتي' },
   'acct.sub': { en: 'Your past and upcoming sessions.', ar: 'جلساتك السابقة والقادمة.' },
   'acct.empty': { en: "You haven't booked anything yet.", ar: 'ما حجزت شي بعد.' },
+  'staff.imgSharePage': {
+    en: 'That is a share page, not an image. Drive, Docs, Dropbox and OneDrive links serve a web page, so the picture will not appear. Upload to a free image host (Cloudinary works well) and paste the direct link — it should end in .jpg, .png or .webp.',
+    ar: 'هذا رابط صفحة مشاركة مو صورة. روابط درايف ودروب بوكس تفتح صفحة ويب، فالصورة ما راح تظهر. ارفع الصورة على استضافة صور مجانية (مثل Cloudinary) والصق الرابط المباشر — لازم ينتهي بـ .jpg أو .png أو .webp.',
+  },
+  'staff.imgBad': {
+    en: 'This link did not load as an image. Check it opens the picture directly in a browser, with no page around it.',
+    ar: 'الرابط ما فتح كصورة. تأكد إنه يفتح الصورة مباشرة بالمتصفح بدون صفحة حولها.',
+  },
   'acct.verifyFirst': {
     en: 'Confirm your email address to see your bookings. Check your inbox for the link we sent you.',
     ar: 'أكد إيميلك عشان تشوف حجوزاتك. شيّك على الرابط اللي أرسلناه لك.',

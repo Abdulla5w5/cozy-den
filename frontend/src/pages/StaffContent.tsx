@@ -3,6 +3,56 @@ import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { EventItem, Promo } from '../types';
 
+
+/**
+ * Live proof that a pasted link is actually an image.
+ *
+ * Staff were pasting Google Drive share links, which serve an HTML page rather
+ * than image bytes — the field accepted them happily and the picture silently
+ * came out broken on the live site. Letting the browser try to load it is the
+ * only honest check: if it renders here, it renders for customers.
+ */
+function ImagePreview({ url }: { url: string }) {
+  const { t } = useI18n();
+  const [state, setState] = useState<'idle' | 'ok' | 'bad'>('idle');
+  const trimmed = url.trim();
+
+  useEffect(() => {
+    setState('idle');
+  }, [trimmed]);
+
+  if (!trimmed) return null;
+
+  // The mistake worth naming explicitly, because the URL looks perfectly valid.
+  const isSharePage = /drive\.google\.com|docs\.google\.com|dropbox\.com\/s\/|onedrive\.live\.com/i.test(
+    trimmed,
+  );
+
+  return (
+    <div className="img-preview">
+      {isSharePage ? (
+        <p className="muted">{t('staff.imgSharePage')}</p>
+      ) : (
+        <>
+          <img
+            src={trimmed}
+            alt=""
+            onLoad={() => setState('ok')}
+            onError={() => setState('bad')}
+            style={{
+              maxHeight: '120px',
+              maxWidth: '100%',
+              borderRadius: '8px',
+              display: state === 'bad' ? 'none' : 'block',
+            }}
+          />
+          {state === 'bad' && <p className="muted">{t('staff.imgBad')}</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 const blank = {
   title: '',
   description: '',
@@ -142,6 +192,7 @@ export function EventsTab() {
                 value={form.imageUrl}
                 onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
               />
+              <ImagePreview url={form.imageUrl} />
             </label>
           </div>
           <label className="field">
@@ -291,6 +342,7 @@ export function PromoTab() {
               value={form.imageUrl}
               onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
             />
+            <ImagePreview url={form.imageUrl} />
           </label>
           <label className="field inline">
             {t('staff.promoLink')}
