@@ -7,8 +7,9 @@ import { MonthlyAnalytics, StaffBooking, Table, TableAvailability, TeamMember } 
 import { EventsTab, PromoTab } from './StaffContent';
 import { SupportTab } from './StaffSupport';
 import { StaffWanted } from './StaffWanted';
+import { StaffPricing } from './StaffPricing';
 
-type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support' | 'wanted';
+type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support' | 'wanted' | 'pricing';
 
 interface Customer {
   name: string;
@@ -86,6 +87,9 @@ export function StaffDashboard() {
         <button className={tab === 'promo' ? 'active' : ''} onClick={() => setTab('promo')}>
           {t('staff.promo')}
         </button>
+        <button className={tab === 'pricing' ? 'active' : ''} onClick={() => setTab('pricing')}>
+          {t('staff.pricing')}
+        </button>
         <button className={tab === 'wanted' ? 'active' : ''} onClick={() => setTab('wanted')}>
           {t('staff.wanted')}
         </button>
@@ -109,6 +113,8 @@ export function StaffDashboard() {
         <EventsTab />
       ) : tab === 'support' ? (
         <SupportTab />
+      ) : tab === 'pricing' ? (
+        <StaffPricing />
       ) : tab === 'wanted' ? (
         <StaffWanted />
       ) : tab === 'team' ? (

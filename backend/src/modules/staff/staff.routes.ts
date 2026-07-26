@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate';
+import { ApiError } from '../../middleware/error';
 import { requireAdmin, requireStaff } from '../../middleware/auth';
 import { getBookingsForDate, confirmBooking, markPrinted } from './staff.service';
 import { getMonthlyAnalytics, getRecurrentCustomers } from './analytics.service';
@@ -13,6 +14,13 @@ import {
 } from '../support/support.service';
 import { listPostsForStaff, moderatePost } from '../wanted/wanted.service';
 import { setReviewed } from '../support/support.service';
+import {
+  deleteOverride,
+  getRates,
+  listOverrides,
+  setRates,
+  upsertOverride,
+} from '../../utils/pricing';
 import { staffCreateBookingSchema } from '../bookings/bookings.schema';
 import { createStaffBooking, getBookingById } from '../bookings/bookings.service';
 
@@ -277,6 +285,81 @@ staffRouter.post(
   async (req, res, next) => {
     try {
       res.json({ request: await setReviewed(Number(req.params.id), req.body.reviewed) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ---------- Price editor ----------
+//
+// Base weekday/weekend rates plus dated overrides. An override is just "on this
+// date, charge this" — holidays, discount days and event upcharges are all the
+// same thing, so staff never need a deploy to change a price.
+
+// GET /api/staff/pricing — current rates and every upcoming override.
+staffRouter.get('/pricing', requireStaff, async (_req, res, next) => {
+  try {
+    res.json({
+      rates: await getRates(),
+      overrides: await listOverrides(new Date().toISOString().slice(0, 10)),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const ratesSchema = z.object({
+  peakCents: z.number().int().min(0).max(100000),
+  offPeakCents: z.number().int().min(0).max(100000),
+});
+
+// PUT /api/staff/pricing/rates — the Thu/Fri/Sat and everyday rates.
+staffRouter.put('/pricing/rates', requireStaff, validate(ratesSchema), async (req, res, next) => {
+  try {
+    await setRates(req.body);
+    res.json({ rates: await getRates() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const overrideSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  label: z.string().trim().min(1).max(80),
+  feeCents: z.number().int().min(0).max(100000),
+});
+
+// PUT /api/staff/pricing/overrides — add or update one dated price.
+staffRouter.put(
+  '/pricing/overrides',
+  requireStaff,
+  validate(overrideSchema),
+  async (req, res, next) => {
+    try {
+      await upsertOverride(req.body);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const dateParam = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+});
+
+// DELETE /api/staff/pricing/overrides/:date — back to the normal rate.
+staffRouter.delete(
+  '/pricing/overrides/:date',
+  requireStaff,
+  validate(dateParam, 'params'),
+  async (req, res, next) => {
+    try {
+      if (!(await deleteOverride(req.params.date))) {
+        throw new ApiError(404, 'No override on that date.');
+      }
+      res.json({ ok: true });
     } catch (err) {
       next(err);
     }
