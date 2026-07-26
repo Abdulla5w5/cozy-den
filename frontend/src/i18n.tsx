@@ -408,6 +408,19 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.wbPoster': { en: 'Posted by', ar: 'نشرها' },
   'staff.reviewed': { en: 'Reviewed', ar: 'تمت المراجعة' },
   'bk.peakWeekend': { en: 'Weekend rate', ar: 'سعر نهاية الأسبوع' },
+  'team.role': { en: 'Role', ar: 'الصلاحية' },
+  'team.admin': { en: 'Admin', ar: 'مشرف' },
+  'team.staff': { en: 'Staff', ar: 'موظف' },
+  'team.makeAdmin': { en: 'Make admin', ar: 'ترقية لمشرف' },
+  'team.makeStaff': { en: 'Remove admin', ar: 'إزالة الإشراف' },
+  'team.confirmAdmin': {
+    en: 'Make {email} an admin? Admins can change prices and manage who has access.',
+    ar: 'تبي تخلي {email} مشرف؟ المشرفين يقدرون يغيرون الأسعار ويديرون الصلاحيات.',
+  },
+  'team.confirmUnadmin': {
+    en: 'Remove admin access from {email}? They stay a staff member.',
+    ar: 'تبي تشيل الإشراف عن {email}؟ بيضل موظف عادي.',
+  },
   'staff.pricing': { en: 'Pricing', ar: 'الأسعار' },
   'pr.baseTitle': { en: 'Standard rates', ar: 'الأسعار الأساسية' },
   'pr.baseHelp': {

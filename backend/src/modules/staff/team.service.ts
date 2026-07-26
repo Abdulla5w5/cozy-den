@@ -4,6 +4,7 @@ import { ApiError } from '../../middleware/error';
 
 export interface TeamMember {
   id: number;
+  isAdmin: boolean;
   email: string;
   name: string;
   provider: string;
@@ -30,13 +31,14 @@ export async function isAdminUser(userId: number): Promise<boolean> {
 
 export async function listTeam(): Promise<TeamMember[]> {
   const { rows } = await pool.query(
-    `SELECT id, email, name, provider, created_at
+    `SELECT id, email, name, provider, is_admin, created_at
        FROM users
       WHERE is_staff
-      ORDER BY created_at`,
+      ORDER BY is_admin DESC, created_at`,
   );
   return rows.map((r) => ({
     id: r.id,
+    isAdmin: r.is_admin === true,
     email: r.email,
     name: r.name,
     provider: r.provider,
@@ -69,7 +71,7 @@ export async function grantStaff(
   const { rows } = await pool.query(
     `UPDATE users SET is_staff = TRUE
       WHERE lower(email) = $1
-      RETURNING id, email, name, provider, created_at`,
+      RETURNING id, email, name, provider, is_admin, created_at`,
     [target],
   );
   const row = rows[0];
@@ -82,6 +84,7 @@ export async function grantStaff(
   await audit('grant', { id: row.id, email: row.email }, actor);
   return {
     id: row.id,
+    isAdmin: row.is_admin === true,
     email: row.email,
     name: row.name,
     provider: row.provider,
@@ -145,4 +148,57 @@ export async function bootstrapStaff(): Promise<void> {
   if (rows.length > 0) {
     console.log(`[cozy-den] bootstrapped staff access for ${rows.length} account(s)`);
   }
+}
+
+/**
+ * Admin tier management — the hierarchy's top rung, so only an admin may move
+ * anyone onto or off it.
+ *
+ * An admin can do things a counter shift should not: change what customers are
+ * charged, and decide who else holds that power. Promotion therefore requires
+ * the target to already be staff — you cannot jump a customer straight to the
+ * top — and the last admin cannot be demoted, or the café locks itself out of
+ * its own pricing and team pages.
+ */
+export async function grantAdmin(
+  actor: { id: number; email: string },
+  targetId: number,
+): Promise<TeamMember> {
+  const { rows } = await pool.query(
+    `UPDATE users SET is_admin = TRUE
+      WHERE id = $1 AND is_staff
+      RETURNING id, email, name, provider, is_admin, created_at`,
+    [targetId],
+  );
+  const row = rows[0];
+  if (!row) {
+    throw new ApiError(404, 'That account is not a staff member — grant staff access first.');
+  }
+  await audit('grant', { id: row.id, email: row.email }, actor);
+  return {
+    id: row.id,
+    isAdmin: true,
+    email: row.email,
+    name: row.name,
+    provider: row.provider,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+export async function revokeAdmin(actor: { id: number; email: string }, targetId: number) {
+  if (actor.id === targetId) {
+    throw new ApiError(400, 'You cannot remove your own admin access.');
+  }
+  const { rows: countRows } = await pool.query<{ n: string }>(
+    'SELECT count(*)::text AS n FROM users WHERE is_admin',
+  );
+  if (Number(countRows[0].n) <= 1) {
+    throw new ApiError(400, 'Cannot remove the last remaining admin.');
+  }
+  const { rows } = await pool.query(
+    'UPDATE users SET is_admin = FALSE WHERE id = $1 AND is_admin RETURNING id, email',
+    [targetId],
+  );
+  if (!rows[0]) throw new ApiError(404, 'That user is not an admin.');
+  await audit('revoke', { id: rows[0].id, email: rows[0].email }, actor);
 }

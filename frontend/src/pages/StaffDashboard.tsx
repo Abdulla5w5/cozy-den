@@ -87,9 +87,11 @@ export function StaffDashboard() {
         <button className={tab === 'promo' ? 'active' : ''} onClick={() => setTab('promo')}>
           {t('staff.promo')}
         </button>
-        <button className={tab === 'pricing' ? 'active' : ''} onClick={() => setTab('pricing')}>
-          {t('staff.pricing')}
-        </button>
+        {isAdmin && (
+          <button className={tab === 'pricing' ? 'active' : ''} onClick={() => setTab('pricing')}>
+            {t('staff.pricing')}
+          </button>
+        )}
         <button className={tab === 'wanted' ? 'active' : ''} onClick={() => setTab('wanted')}>
           {t('staff.wanted')}
         </button>
@@ -615,6 +617,20 @@ function TeamTab({ meEmail }: { meEmail: string }) {
     }
   }
 
+  // Admin is the top rung: only an admin can move anyone on or off it.
+  async function setAdmin(m: TeamMember, makeAdmin: boolean) {
+    if (!window.confirm(t(makeAdmin ? 'team.confirmAdmin' : 'team.confirmUnadmin', { email: m.email })))
+      return;
+    setError(null);
+    try {
+      if (makeAdmin) await api.post(`/staff/team/${m.id}/admin`);
+      else await api.del(`/staff/team/${m.id}/admin`);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed.');
+    }
+  }
+
   async function revoke(m: TeamMember) {
     if (!window.confirm(t('team.confirmRevoke', { email: m.email }))) return;
     setError(null);
@@ -656,6 +672,7 @@ function TeamTab({ meEmail }: { meEmail: string }) {
             <tr>
               <th>{t('bk.name')}</th>
               <th>{t('bk.email')}</th>
+              <th>{t('team.role')}</th>
               <th>{t('team.since')}</th>
               <th></th>
             </tr>
@@ -665,14 +682,22 @@ function TeamTab({ meEmail }: { meEmail: string }) {
               <tr key={m.id}>
                 <td>{m.name}</td>
                 <td>{m.email}</td>
+                <td>
+                  <span className="pill">{t(m.isAdmin ? 'team.admin' : 'team.staff')}</span>
+                </td>
                 <td>{m.createdAt.slice(0, 10)}</td>
                 <td>
                   {m.email === meEmail ? (
                     <span className="muted">{t('team.you')}</span>
                   ) : (
-                    <button className="link" onClick={() => revoke(m)}>
-                      {t('team.revoke')}
-                    </button>
+                    <>
+                      <button className="link" onClick={() => setAdmin(m, !m.isAdmin)}>
+                        {t(m.isAdmin ? 'team.makeStaff' : 'team.makeAdmin')}
+                      </button>{' '}
+                      <button className="link" onClick={() => revoke(m)}>
+                        {t('team.revoke')}
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>

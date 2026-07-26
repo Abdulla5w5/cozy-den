@@ -65,7 +65,7 @@ The date used is `booking_date`, which identifies the *evening* a session
 belongs to. Because the service day runs to 03:00, a 01:00 start on Friday
 morning belongs to Thursday evening and is priced as Thursday.
 
-Staff edit all of this from **Dashboard → Pricing**, with no deploy needed:
+**Admins** edit all of this from **Dashboard → Pricing**, with no deploy needed:
 the two standard rates, and a list of dated overrides. An override is simply
 "on this date, charge this instead", so a national holiday, a quiet-Monday
 discount and an event upcharge are the same operation. An override always wins
@@ -77,6 +77,23 @@ Isra & Miraj — shift about eleven days earlier each Gregorian year, so staff
 should add each year's dates once announced. A date with no override simply
 prices at the standard rate: a forgotten holiday undercharges rather than
 breaking checkout.
+
+---
+
+## Access tiers
+
+Three rungs, each granted by the one above:
+
+| Tier | Can do |
+|------|--------|
+| Customer | Book, post to the Wanted Board, see their own history |
+| Staff | Everything on the dashboard: bookings, check-in, analytics, events, promos, support, Wanted Board moderation |
+| Admin | Also: change prices, and grant or revoke staff and admin |
+
+Pricing and access control sit behind **admin** because they are the two things
+a single unattended counter login should not be able to change. Promotion to
+admin requires the target to already be staff, the last admin cannot be
+demoted, and nobody can remove their own admin access.
 
 ---
 

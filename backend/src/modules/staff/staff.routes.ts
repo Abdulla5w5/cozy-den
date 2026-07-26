@@ -5,7 +5,7 @@ import { ApiError } from '../../middleware/error';
 import { requireAdmin, requireStaff } from '../../middleware/auth';
 import { getBookingsForDate, confirmBooking, markPrinted } from './staff.service';
 import { getMonthlyAnalytics, getRecurrentCustomers } from './analytics.service';
-import { listTeam, grantStaff, revokeStaff } from './team.service';
+import { listTeam, grantStaff, revokeStaff, grantAdmin, revokeAdmin } from './team.service';
 import {
   addMessage,
   listAllRequests,
@@ -298,7 +298,7 @@ staffRouter.post(
 // same thing, so staff never need a deploy to change a price.
 
 // GET /api/staff/pricing — current rates and every upcoming override.
-staffRouter.get('/pricing', requireStaff, async (_req, res, next) => {
+staffRouter.get('/pricing', requireAdmin, async (_req, res, next) => {
   try {
     res.json({
       rates: await getRates(),
@@ -315,7 +315,7 @@ const ratesSchema = z.object({
 });
 
 // PUT /api/staff/pricing/rates — the Thu/Fri/Sat and everyday rates.
-staffRouter.put('/pricing/rates', requireStaff, validate(ratesSchema), async (req, res, next) => {
+staffRouter.put('/pricing/rates', requireAdmin, validate(ratesSchema), async (req, res, next) => {
   try {
     await setRates(req.body);
     res.json({ rates: await getRates() });
@@ -333,7 +333,7 @@ const overrideSchema = z.object({
 // PUT /api/staff/pricing/overrides — add or update one dated price.
 staffRouter.put(
   '/pricing/overrides',
-  requireStaff,
+  requireAdmin,
   validate(overrideSchema),
   async (req, res, next) => {
     try {
@@ -352,13 +352,50 @@ const dateParam = z.object({
 // DELETE /api/staff/pricing/overrides/:date — back to the normal rate.
 staffRouter.delete(
   '/pricing/overrides/:date',
-  requireStaff,
+  requireAdmin,
   validate(dateParam, 'params'),
   async (req, res, next) => {
     try {
       if (!(await deleteOverride(req.params.date))) {
         throw new ApiError(404, 'No override on that date.');
       }
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ---------- Admin tier (admins only) ----------
+//
+// Staff grant nothing; admins grant staff, and admins grant admin. Keeping
+// promotion to the top rung in admin hands is the whole point of the split —
+// otherwise any counter login could promote itself and edit prices.
+
+// POST /api/staff/team/:id/admin — promote an existing staff member to admin.
+staffRouter.post(
+  '/team/:id/admin',
+  requireAdmin,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      const actor = { id: req.user!.sub, email: req.user!.email };
+      res.json({ member: await grantAdmin(actor, Number(req.params.id)) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// DELETE /api/staff/team/:id/admin — demote to ordinary staff.
+staffRouter.delete(
+  '/team/:id/admin',
+  requireAdmin,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      const actor = { id: req.user!.sub, email: req.user!.email };
+      await revokeAdmin(actor, Number(req.params.id));
       res.json({ ok: true });
     } catch (err) {
       next(err);
