@@ -4,6 +4,7 @@ import { query } from '../../db/pool';
 import { validate } from '../../middleware/validate';
 import { requireStaff } from '../../middleware/auth';
 import { ApiError } from '../../middleware/error';
+import { isoDate } from '../../utils/dates';
 
 export const eventsRouter = Router();
 
@@ -48,7 +49,7 @@ eventsRouter.get('/', validate(listQuery, 'query'), async (req, res, next) => {
 const eventBody = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).default(''),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  date: isoDate(),
   time: z.string().trim().max(20).nullable().optional(),
   location: z.string().trim().max(300).default(''),
   type: z.enum(['internal', 'external']),

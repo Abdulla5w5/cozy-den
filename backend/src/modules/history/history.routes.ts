@@ -4,6 +4,7 @@ import { query } from '../../db/pool';
 import { validate } from '../../middleware/validate';
 import { requireAuth } from '../../middleware/auth';
 import { ApiError } from '../../middleware/error';
+import { isoDate } from '../../utils/dates';
 
 // "Games I've played" — account-only (guests have no history to attach to).
 export const historyRouter = Router();
@@ -38,9 +39,7 @@ historyRouter.get('/', requireAuth, async (req, res, next) => {
 
 const addSchema = z.object({
   gameId: z.number().int().positive(),
-  playedDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'playedDate must be YYYY-MM-DD')
+  playedDate: isoDate()
     .optional(),
   bookingId: z.number().int().positive().nullable().optional(),
 });

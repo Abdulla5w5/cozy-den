@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validate';
 import { getTables, getAvailability } from './tables.service';
 import { START_TIMES } from '../../utils/slots';
+import { isoDate } from '../../utils/dates';
 
 export const tablesRouter = Router();
 
@@ -16,7 +17,7 @@ tablesRouter.get('/', async (_req, res, next) => {
 });
 
 const availabilityQuery = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  date: isoDate(),
 });
 
 // GET /api/tables/availability?date=YYYY-MM-DD

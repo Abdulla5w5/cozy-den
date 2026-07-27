@@ -23,15 +23,14 @@ import {
 } from '../../utils/pricing';
 import { staffCreateBookingSchema } from '../bookings/bookings.schema';
 import { createStaffBooking, getBookingById } from '../bookings/bookings.service';
+import { isoDate, isoMonth } from '../../utils/dates';
 
 // Dashboard DATA endpoints. Auth (login/logout/me) lives in /api/auth.
 // Every route requires a signed-in user flagged as staff in the database.
 export const staffRouter = Router();
 
 const dateQuery = z.object({
-  date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
+  date: isoDate()
     .optional(),
 });
 
@@ -105,9 +104,7 @@ staffRouter.post(
 );
 
 const analyticsQuery = z.object({
-  month: z
-    .string()
-    .regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM')
+  month: isoMonth()
     .optional(),
 });
 
@@ -325,7 +322,7 @@ staffRouter.put('/pricing/rates', requireAdmin, validate(ratesSchema), async (re
 });
 
 const overrideSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  date: isoDate(),
   label: z.string().trim().min(1).max(80),
   feeCents: z.number().int().min(0).max(100000),
 });
@@ -346,7 +343,7 @@ staffRouter.put(
 );
 
 const dateParam = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  date: isoDate(),
 });
 
 // DELETE /api/staff/pricing/overrides/:date — back to the normal rate.

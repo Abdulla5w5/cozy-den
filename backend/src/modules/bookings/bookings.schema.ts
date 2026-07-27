@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { isValidStart } from '../../utils/slots';
+import { isoDate } from '../../utils/dates';
 
 // Guest checkout: table only — no game pre-selection, no food/drink ordering.
 // Payment is the flat table-holding fee (server-priced).
 export const createBookingSchema = z.object({
   tableId: z.number().int().positive(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  date: isoDate(),
   timeSlot: z
     .string()
     .refine(isValidStart, 'timeSlot must be a valid 30-minute start time within opening hours'),
@@ -22,7 +23,7 @@ export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 // a phone number or an email.
 export const staffCreateBookingSchema = z.object({
   tableId: z.number().int().positive(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  date: isoDate(),
   timeSlot: z
     .string()
     .refine(isValidStart, 'timeSlot must be a valid 30-minute start time within opening hours'),
