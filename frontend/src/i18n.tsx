@@ -431,6 +431,11 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Add, edit or remove food and drink. An item that appears on a past order is withdrawn instead of deleted, so old receipts stay correct.',
     ar: 'أضف أو عدّل أو احذف الأكل والشرب. الصنف اللي بطلب سابق ينسحب بدل ما ينحذف، عشان الفواتير القديمة تضل صحيحة.',
   },
+  'cat.priceHint': {
+    en: 'Set to 0 to keep the price off the website.',
+    ar: 'حط ٠ إذا ما تبي السعر يظهر بالموقع.',
+  },
+  'cat.priceHidden': { en: 'Not shown', ar: 'غير معروض' },
   'cat.addGame': { en: 'Add a game', ar: 'أضف لعبة' },
   'cat.addItem': { en: 'Add an item', ar: 'أضف صنف' },
   'cat.title': { en: 'Title', ar: 'الاسم' },

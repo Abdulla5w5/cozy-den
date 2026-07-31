@@ -193,7 +193,12 @@ export function Home() {
               <span className="pill">{t(`menu.${m.category}`)}</span>
               <h3>{homeContent(m.name, lang)}</h3>
               <p className="muted">{homeContent(m.description, lang)}</p>
-              <span className="price">{money(m.price_cents)}</span>
+              {/* Zero is not "free" — it is how staff mark an item whose
+                            price they have chosen not to publish. Show nothing
+                            rather than "KD 0.000", and never label it free. */}
+                        {m.price_cents > 0 && (
+                          <span className="price">{money(m.price_cents)}</span>
+                        )}
             </div>
           ))}
         </div>

@@ -732,6 +732,7 @@ export function MenuTab() {
                 value={priceKd}
                 onChange={(e) => setPriceKd(e.target.value)}
               />
+              <span className="muted">{t('cat.priceHint')}</span>
             </label>
           </div>
           <label className="field">
@@ -801,7 +802,13 @@ export function MenuTab() {
                 <tr key={m.id}>
                   <td>{m.name}</td>
                   <td>{t(m.category === 'food' ? 'menu.food' : 'menu.drink')}</td>
-                  <td>{money(m.price_cents)}</td>
+                  <td>
+                    {m.price_cents > 0 ? (
+                      money(m.price_cents)
+                    ) : (
+                      <span className="muted">{t('cat.priceHidden')}</span>
+                    )}
+                  </td>
                   <td>
                     <span className="pill">
                       {m.available === false ? t('cat.retiredTag') : t('cat.liveTag')}
