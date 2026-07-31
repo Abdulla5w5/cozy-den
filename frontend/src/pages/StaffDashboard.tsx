@@ -4,12 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { MonthlyAnalytics, StaffBooking, Table, TableAvailability, TeamMember } from '../types';
-import { EventsTab, PromoTab } from './StaffContent';
+import { EventsTab, PromoTab, GamesTab, MenuTab } from './StaffContent';
 import { SupportTab } from './StaffSupport';
 import { StaffWanted } from './StaffWanted';
 import { StaffPricing } from './StaffPricing';
 
-type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support' | 'wanted' | 'pricing';
+type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support' | 'wanted' | 'pricing' | 'games' | 'menu';
 
 interface Customer {
   name: string;
@@ -84,6 +84,12 @@ export function StaffDashboard() {
         <button className={tab === 'events' ? 'active' : ''} onClick={() => setTab('events')}>
           {t('staff.events')}
         </button>
+        <button className={tab === 'games' ? 'active' : ''} onClick={() => setTab('games')}>
+          {t('staff.games')}
+        </button>
+        <button className={tab === 'menu' ? 'active' : ''} onClick={() => setTab('menu')}>
+          {t('staff.menu')}
+        </button>
         <button className={tab === 'promo' ? 'active' : ''} onClick={() => setTab('promo')}>
           {t('staff.promo')}
         </button>
@@ -115,6 +121,10 @@ export function StaffDashboard() {
         <EventsTab />
       ) : tab === 'support' ? (
         <SupportTab />
+      ) : tab === 'games' ? (
+        <GamesTab />
+      ) : tab === 'menu' ? (
+        <MenuTab />
       ) : tab === 'pricing' ? (
         <StaffPricing />
       ) : tab === 'wanted' ? (

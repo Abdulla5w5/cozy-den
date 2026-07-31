@@ -21,6 +21,7 @@ export interface Game {
   description: string;
   image_url: string | null;
   purchase_url: string | null;
+  is_active?: boolean;
 }
 
 export interface EventItem {
@@ -60,6 +61,7 @@ export interface MenuItem {
   category: 'food' | 'drink';
   price_cents: number;
   description: string;
+  available?: boolean;
 }
 
 export interface BookingItemView {

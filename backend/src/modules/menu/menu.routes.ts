@@ -1,26 +1,103 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { query } from '../../db/pool';
+import { validate } from '../../middleware/validate';
+import { requireStaff } from '../../middleware/auth';
+import { ApiError } from '../../middleware/error';
+import { removeOrRetire } from '../../utils/catalogue';
 
 export const menuRouter = Router();
 
-interface MenuRow {
-  id: number;
-  name: string;
-  category: 'food' | 'drink';
-  price_cents: number;
-  description: string;
-}
+const SELECT = `SELECT id, name, category, price_cents, description, available
+                  FROM menu_items`;
 
-// GET /api/menu — available food & drink items.
+// GET /api/menu — what customers can order today.
 menuRouter.get('/', async (_req, res, next) => {
   try {
-    const { rows } = await query<MenuRow>(
-      `SELECT id, name, category, price_cents, description
-         FROM menu_items
-        WHERE available = TRUE
-        ORDER BY category, name`
-    );
+    const { rows } = await query(`${SELECT} WHERE available ORDER BY category, name`);
     res.json({ items: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/menu/all — staff editor: includes withdrawn items, so a seasonal
+// dish can be brought back rather than retyped.
+menuRouter.get('/all', requireStaff, async (_req, res, next) => {
+  try {
+    const { rows } = await query(`${SELECT} ORDER BY available DESC, category, name`);
+    res.json({ items: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const menuBody = z.object({
+  name: z.string().trim().min(1).max(200),
+  category: z.enum(['food', 'drink']),
+  // Integer fils — money is never a float anywhere in this app.
+  priceCents: z.number().int().min(0).max(1000000),
+  description: z.string().trim().max(2000).default(''),
+  available: z.boolean().default(true),
+});
+
+const idParam = z.object({ id: z.coerce.number().int().positive() });
+
+// POST /api/menu — staff create.
+menuRouter.post('/', requireStaff, validate(menuBody), async (req, res, next) => {
+  try {
+    const b = req.body;
+    const { rows } = await query<{ id: number }>(
+      `INSERT INTO menu_items (name, category, price_cents, description, available)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [b.name, b.category, b.priceCents, b.description, b.available],
+    );
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    if ((err as { code?: string }).code === '23505') {
+      return next(new ApiError(409, 'A menu item with that name already exists.'));
+    }
+    next(err);
+  }
+});
+
+// PUT /api/menu/:id — staff update.
+menuRouter.put(
+  '/:id',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(menuBody),
+  async (req, res, next) => {
+    try {
+      const b = req.body;
+      const { rowCount } = await query(
+        `UPDATE menu_items SET name=$1, category=$2, price_cents=$3, description=$4, available=$5
+          WHERE id=$6`,
+        [b.name, b.category, b.priceCents, b.description, b.available, Number(req.params.id)],
+      );
+      if (!rowCount) throw new ApiError(404, 'Menu item not found.');
+      res.json({ ok: true });
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') {
+        return next(new ApiError(409, 'A menu item with that name already exists.'));
+      }
+      next(err);
+    }
+  },
+);
+
+// DELETE /api/menu/:id — delete outright when nothing references the item,
+// otherwise withdraw it so past orders keep their line items.
+menuRouter.delete('/:id', requireStaff, validate(idParam, 'params'), async (req, res, next) => {
+  try {
+    res.json(
+      await removeOrRetire({
+        table: 'menu_items',
+        id: Number(req.params.id),
+        notFound: 'Menu item not found.',
+        references: [{ sql: 'SELECT 1 FROM booking_items WHERE menu_item_id = $1 LIMIT 1' }],
+      }),
+    );
   } catch (err) {
     next(err);
   }

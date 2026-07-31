@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
-import { EventItem, Promo } from '../types';
+import { EventItem, Game, MenuItem, Promo } from '../types';
 
 
 /**
@@ -375,6 +375,452 @@ export function PromoTab() {
           {saved && <span className="muted">✓</span>}
         </div>
       </form>
+    </section>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// Games and menu items: the same add / edit / remove shape as events above.
+//
+// One deliberate difference. An event has no dependents, so deleting one is
+// just a delete. A game can be attached to past bookings and to customers'
+// play history, and a menu item to past orders — so the API deletes only when
+// nothing references the row, and otherwise RETIRES it: gone from the customer
+// lists, every historical record intact. The response says which happened and
+// the UI repeats it, so "remove" is never silently something else.
+// ---------------------------------------------------------------------------
+
+const blankGame = {
+  title: '',
+  minPlayers: 2,
+  maxPlayers: 4,
+  category: '',
+  description: '',
+  imageUrl: '',
+  purchaseUrl: '',
+  isActive: true,
+};
+
+export function GamesTab() {
+  const { t } = useI18n();
+  const [games, setGames] = useState<Game[] | null>(null);
+  const [form, setForm] = useState<typeof blankGame | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function load() {
+    api
+      .get<{ games: Game[] }>('/games/all')
+      .then((r) => setGames(r.games))
+      .catch((e) => setError(e.message));
+  }
+  useEffect(load, []);
+
+  function startEdit(g: Game) {
+    setEditingId(g.id);
+    setNote(null);
+    setForm({
+      title: g.title,
+      minPlayers: g.min_players,
+      maxPlayers: g.max_players,
+      category: g.category,
+      description: g.description,
+      imageUrl: g.image_url ?? '',
+      purchaseUrl: g.purchase_url ?? '',
+      isActive: g.is_active !== false,
+    });
+  }
+
+  async function save(ev: FormEvent) {
+    ev.preventDefault();
+    if (!form) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        ...form,
+        imageUrl: form.imageUrl || null,
+        purchaseUrl: form.purchaseUrl || null,
+      };
+      if (editingId) await api.put(`/games/${editingId}`, body);
+      else await api.post('/games', body);
+      setForm(null);
+      setEditingId(null);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(g: Game) {
+    if (!window.confirm(t('cat.confirmRemove', { name: g.title }))) return;
+    setError(null);
+    try {
+      const r = await api.del<{ outcome: 'deleted' | 'retired' }>(`/games/${g.id}`);
+      setNote(t(r.outcome === 'retired' ? 'cat.retired' : 'cat.deleted', { name: g.title }));
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed.');
+    }
+  }
+
+  return (
+    <section>
+      <p className="muted">{t('cat.gamesHint')}</p>
+      {error && <div className="alert error">{error}</div>}
+      {note && <p className="muted">{note}</p>}
+
+      {form ? (
+        <form className="summary manual-form" onSubmit={save}>
+          <div className="row">
+            <label className="field inline">
+              {t('cat.title')}
+              <input
+                required
+                maxLength={200}
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
+            </label>
+            <label className="field inline">
+              {t('cat.category')}
+              <input
+                required
+                maxLength={60}
+                placeholder="Strategy"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              />
+            </label>
+            <label className="field inline">
+              {t('wb.min')}
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={form.minPlayers}
+                onChange={(e) => setForm({ ...form, minPlayers: Number(e.target.value) })}
+              />
+            </label>
+            <label className="field inline">
+              {t('wb.max')}
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={form.maxPlayers}
+                onChange={(e) => setForm({ ...form, maxPlayers: Number(e.target.value) })}
+              />
+            </label>
+          </div>
+          <label className="field">
+            {t('cat.description')}
+            <textarea
+              maxLength={2000}
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </label>
+          <div className="row">
+            <label className="field inline">
+              {t('staff.evImage')}
+              <input
+                placeholder="https://…"
+                value={form.imageUrl}
+                onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+              />
+              <ImagePreview url={form.imageUrl} />
+            </label>
+            <label className="field inline">
+              {t('cat.purchaseUrl')}
+              <input
+                placeholder="https://…"
+                value={form.purchaseUrl}
+                onChange={(e) => setForm({ ...form, purchaseUrl: e.target.value })}
+              />
+            </label>
+          </div>
+          <label className="field">
+            <span>
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              />{' '}
+              {t('cat.shownToCustomers')}
+            </span>
+          </label>
+          <div className="row">
+            <button className="primary" disabled={busy}>
+              {busy ? t('cat.saving') : t('cat.save')}
+            </button>
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setForm(null);
+                setEditingId(null);
+              }}
+            >
+              {t('cat.cancel')}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button className="primary" onClick={() => setForm({ ...blankGame })}>
+          {t('cat.addGame')}
+        </button>
+      )}
+
+      {games === null ? (
+        <p>{t('loading')}</p>
+      ) : games.length === 0 ? (
+        <p className="muted">{t('cat.noGames')}</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>{t('cat.title')}</th>
+                <th>{t('cat.category')}</th>
+                <th>{t('cat.players')}</th>
+                <th>{t('cat.visible')}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {games.map((g) => (
+                <tr key={g.id}>
+                  <td>{g.title}</td>
+                  <td>{g.category}</td>
+                  <td>
+                    {g.min_players}–{g.max_players}
+                  </td>
+                  <td>
+                    <span className="pill">
+                      {g.is_active === false ? t('cat.retiredTag') : t('cat.liveTag')}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="link" onClick={() => startEdit(g)}>
+                      {t('cat.edit')}
+                    </button>{' '}
+                    <button className="link" onClick={() => remove(g)}>
+                      {t('cat.remove')}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const blankItem = {
+  name: '',
+  category: 'food' as 'food' | 'drink',
+  priceCents: 0,
+  description: '',
+  available: true,
+};
+
+export function MenuTab() {
+  const { t, money } = useI18n();
+  const [items, setItems] = useState<MenuItem[] | null>(null);
+  const [form, setForm] = useState<typeof blankItem | null>(null);
+  const [priceKd, setPriceKd] = useState('0.000');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function load() {
+    api
+      .get<{ items: MenuItem[] }>('/menu/all')
+      .then((r) => setItems(r.items))
+      .catch((e) => setError(e.message));
+  }
+  useEffect(load, []);
+
+  function startEdit(m: MenuItem) {
+    setEditingId(m.id);
+    setNote(null);
+    setPriceKd((m.price_cents / 100).toFixed(3));
+    setForm({
+      name: m.name,
+      category: m.category,
+      priceCents: m.price_cents,
+      description: m.description,
+      available: m.available !== false,
+    });
+  }
+
+  async function save(ev: FormEvent) {
+    ev.preventDefault();
+    if (!form) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // Staff type KD; the API only ever deals in integer fils.
+      const body = { ...form, priceCents: Math.round(parseFloat(priceKd || '0') * 100) };
+      if (editingId) await api.put(`/menu/${editingId}`, body);
+      else await api.post('/menu', body);
+      setForm(null);
+      setEditingId(null);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(m: MenuItem) {
+    if (!window.confirm(t('cat.confirmRemove', { name: m.name }))) return;
+    setError(null);
+    try {
+      const r = await api.del<{ outcome: 'deleted' | 'retired' }>(`/menu/${m.id}`);
+      setNote(t(r.outcome === 'retired' ? 'cat.retired' : 'cat.deleted', { name: m.name }));
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed.');
+    }
+  }
+
+  return (
+    <section>
+      <p className="muted">{t('cat.menuHint')}</p>
+      {error && <div className="alert error">{error}</div>}
+      {note && <p className="muted">{note}</p>}
+
+      {form ? (
+        <form className="summary manual-form" onSubmit={save}>
+          <div className="row">
+            <label className="field inline">
+              {t('cat.name')}
+              <input
+                required
+                maxLength={200}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </label>
+            <label className="field inline">
+              {t('cat.category')}
+              <select
+                value={form.category}
+                onChange={(e) =>
+                  setForm({ ...form, category: e.target.value as 'food' | 'drink' })
+                }
+              >
+                <option value="food">{t('menu.food')}</option>
+                <option value="drink">{t('menu.drink')}</option>
+              </select>
+            </label>
+            <label className="field inline">
+              {t('pr.price')}
+              <input
+                inputMode="decimal"
+                value={priceKd}
+                onChange={(e) => setPriceKd(e.target.value)}
+              />
+            </label>
+          </div>
+          <label className="field">
+            {t('cat.description')}
+            <textarea
+              maxLength={2000}
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>
+              <input
+                type="checkbox"
+                checked={form.available}
+                onChange={(e) => setForm({ ...form, available: e.target.checked })}
+              />{' '}
+              {t('cat.shownToCustomers')}
+            </span>
+          </label>
+          <div className="row">
+            <button className="primary" disabled={busy}>
+              {busy ? t('cat.saving') : t('cat.save')}
+            </button>
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setForm(null);
+                setEditingId(null);
+              }}
+            >
+              {t('cat.cancel')}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button
+          className="primary"
+          onClick={() => {
+            setForm({ ...blankItem });
+            setPriceKd('0.000');
+          }}
+        >
+          {t('cat.addItem')}
+        </button>
+      )}
+
+      {items === null ? (
+        <p>{t('loading')}</p>
+      ) : items.length === 0 ? (
+        <p className="muted">{t('cat.noItems')}</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>{t('cat.name')}</th>
+                <th>{t('cat.category')}</th>
+                <th>{t('pr.price')}</th>
+                <th>{t('cat.visible')}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((m) => (
+                <tr key={m.id}>
+                  <td>{m.name}</td>
+                  <td>{t(m.category === 'food' ? 'menu.food' : 'menu.drink')}</td>
+                  <td>{money(m.price_cents)}</td>
+                  <td>
+                    <span className="pill">
+                      {m.available === false ? t('cat.retiredTag') : t('cat.liveTag')}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="link" onClick={() => startEdit(m)}>
+                      {t('cat.edit')}
+                    </button>{' '}
+                    <button className="link" onClick={() => remove(m)}>
+                      {t('cat.remove')}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

@@ -5,20 +5,11 @@ import { validate } from '../../middleware/validate';
 import { requireStaff } from '../../middleware/auth';
 import { ApiError } from '../../middleware/error';
 import { isoDate } from '../../utils/dates';
+import { linkish } from '../../utils/catalogue';
 
 export const eventsRouter = Router();
 
 
-// Accept either an absolute URL (https://…) or a root-relative path (/events),
-// so staff can link to internal pages as well as external sites.
-const linkish = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .refine((v) => v === '' || v.startsWith('/') || /^https?:\/\//i.test(v), 'must be a URL or a /path')
-    .nullable()
-    .optional();
 
 const SELECT = `SELECT id, title, description,
                        to_char(event_date, 'YYYY-MM-DD') AS event_date,
