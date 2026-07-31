@@ -44,10 +44,10 @@ export function Home() {
   const [events, setEvents] = useState<EventItem[]>([]);
 
   useEffect(() => {
-    api.get<{ games: Game[] }>('/games').then((r) => setGames(r.games)).catch(() => {});
-    api.get<{ items: MenuItem[] }>('/menu').then((r) => setMenu(r.items)).catch(() => {});
+    api.getCached<{ games: Game[] }>('/games').then((r) => setGames(r.games)).catch(() => {});
+    api.getCached<{ items: MenuItem[] }>('/menu').then((r) => setMenu(r.items)).catch(() => {});
     api
-      .get<{ events: EventItem[] }>('/events?featured=true')
+      .getCached<{ events: EventItem[] }>('/events?featured=true')
       .then((r) => setEvents(r.events))
       .catch(() => {});
   }, []);

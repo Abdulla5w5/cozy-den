@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { api } from './api/client';
+import { api, notifyAuthChanged, AUTH_CHANGED } from './api/client';
 import { useI18n } from './i18n';
 import { Home } from './pages/Home';
 import { GamesPage } from './pages/GamesPage';
@@ -60,6 +60,7 @@ export function App() {
     isAdmin: boolean;
     emailVerified: boolean;
   } | null>(null);
+  const [authTick, setAuthTick] = useState(0);
   const loggedIn = user !== null;
 
   useEffect(() => {
@@ -73,11 +74,28 @@ export function App() {
     return () => {
       active = false;
     };
+    // Deliberately NOT keyed on the route. Identity does not change because
+    // someone clicked "Menu", and refetching it on every navigation put a
+    // round trip in front of each menu click. Sign-in and sign-out announce
+    // themselves instead, via the AUTH_CHANGED event handled below.
+  }, [authTick]);
+
+  // Router navigation keeps the previous scroll offset, so arriving at a new
+  // page part-way down read as the page having "not changed" on short pages.
+  useEffect(() => {
+    window.scrollTo(0, 0);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const bump = () => setAuthTick((n) => n + 1);
+    window.addEventListener(AUTH_CHANGED, bump);
+    return () => window.removeEventListener(AUTH_CHANGED, bump);
+  }, []);
 
   async function logout() {
     await api.post('/auth/logout').catch(() => {});
     setUser(null);
+    notifyAuthChanged();
     navigate('/');
   }
 

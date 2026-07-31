@@ -73,7 +73,7 @@ export function GamesPage() {
   const [filter, setFilter] = useState('All');
 
   useEffect(() => {
-    api.get<{ games: Game[] }>('/games').then((r) => setGames(r.games)).catch(() => {});
+    api.getCached<{ games: Game[] }>('/games').then((r) => setGames(r.games)).catch(() => {});
   }, []);
 
   const categories = useMemo(

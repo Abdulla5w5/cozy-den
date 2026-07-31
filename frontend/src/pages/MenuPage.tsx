@@ -13,7 +13,7 @@ export function MenuPage() {
   const [filter, setFilter] = useState<Filter>('All');
 
   useEffect(() => {
-    api.get<{ items: MenuItem[] }>('/menu').then((r) => setMenu(r.items)).catch(() => {});
+    api.getCached<{ items: MenuItem[] }>('/menu').then((r) => setMenu(r.items)).catch(() => {});
   }, []);
 
   const sections = useMemo(() => {

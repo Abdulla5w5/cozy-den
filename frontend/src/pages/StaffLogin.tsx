@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, notifyAuthChanged } from '../api/client';
 import { useI18n } from '../i18n';
 
 type Mode = 'login' | 'signup';
@@ -67,6 +67,7 @@ export function StaffLogin() {
   const [gsiReady, setGsiReady] = useState(false);
 
   function afterAuth(u: AuthUser) {
+    notifyAuthChanged();
     navigate(u.isStaff ? '/staff/dashboard' : '/');
   }
 

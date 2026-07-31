@@ -14,4 +14,15 @@ export default defineConfig({
       },
     },
   },
+  // Same proxy for `vite preview`, so a production build can be exercised
+  // locally the way the deployed app is — no StrictMode double-effects, no HMR.
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+    },
+  },
 });
