@@ -217,16 +217,9 @@ export function StaffLogin() {
             <div className="auth-row">
               <label>{t('staff.password')}</label>
               {mode === 'login' && (
-                <a
-                  className="auth-forgot"
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setNote(t('auth.socialSoon'));
-                  }}
-                >
+                <Link className="auth-forgot" to="/forgot-password">
                   {t('auth.forgot')}
-                </a>
+                </Link>
               )}
             </div>
             <div className="auth-input">
@@ -253,12 +246,6 @@ export function StaffLogin() {
           <button className="auth-submit" disabled={busy} type="submit">
             {busy ? t('staff.signing') : mode === 'login' ? t('auth.enter') : t('auth.create')}
           </button>
-
-          {mode === 'login' && (
-            <p className="muted">
-              <Link to="/forgot-password">{t('fp.link')}</Link>
-            </p>
-          )}
 
           <div className="auth-divider">
             <span className="line" />

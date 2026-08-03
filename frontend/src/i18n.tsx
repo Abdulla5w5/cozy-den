@@ -421,7 +421,6 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Remove admin access from {email}? They stay a staff member.',
     ar: 'تبي تشيل الإشراف عن {email}؟ بيضل موظف عادي.',
   },
-  'fp.link': { en: 'Forgot your password?', ar: 'نسيت كلمة السر؟' },
   'fp.eyebrow': { en: 'Account', ar: 'الحساب' },
   'fp.title': { en: 'Reset your password', ar: 'إعادة تعيين كلمة السر' },
   'fp.sub': {
