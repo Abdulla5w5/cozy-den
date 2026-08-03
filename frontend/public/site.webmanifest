@@ -1,0 +1,14 @@
+{
+  "name": "Cozy Den — Board Game Café",
+  "short_name": "Cozy Den",
+  "description": "Book a table, pick a game, and order when you arrive.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fffaf1",
+  "theme_color": "#fffaf1",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
