@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { api, notifyAuthChanged } from '../api/client';
 import { useI18n } from '../i18n';
 
@@ -253,6 +253,12 @@ export function StaffLogin() {
           <button className="auth-submit" disabled={busy} type="submit">
             {busy ? t('staff.signing') : mode === 'login' ? t('auth.enter') : t('auth.create')}
           </button>
+
+          {mode === 'login' && (
+            <p className="muted">
+              <Link to="/forgot-password">{t('fp.link')}</Link>
+            </p>
+          )}
 
           <div className="auth-divider">
             <span className="line" />

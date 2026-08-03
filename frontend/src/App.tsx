@@ -17,6 +17,7 @@ import { VerifyBanner } from './components/VerifyBanner';
 import { VerifyEmail } from './pages/VerifyEmail';
 import { WantedBoard } from './pages/WantedBoard';
 import { AboutPage } from './pages/AboutPage';
+import { ForgotPassword, ResetPassword } from './pages/ForgotPassword';
 
 type Theme = 'light' | 'dark';
 
@@ -174,6 +175,8 @@ export function App() {
           <Route path="/confirmation/:code" element={<Confirmation />} />
           {/* Public auth page — separate from the staff namespace. */}
           <Route path="/register" element={<StaffLogin />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/account" element={<MyBookings />} />
           <Route path="/staff/dashboard" element={<StaffDashboard />} />
           {/* Bare /staff just points at the dashboard (which guards itself). */}

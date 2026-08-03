@@ -421,6 +421,43 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Remove admin access from {email}? They stay a staff member.',
     ar: 'تبي تشيل الإشراف عن {email}؟ بيضل موظف عادي.',
   },
+  'fp.link': { en: 'Forgot your password?', ar: 'نسيت كلمة السر؟' },
+  'fp.eyebrow': { en: 'Account', ar: 'الحساب' },
+  'fp.title': { en: 'Reset your password', ar: 'إعادة تعيين كلمة السر' },
+  'fp.sub': {
+    en: "Enter your email and we'll send you a link to choose a new password.",
+    ar: 'اكتب إيميلك ونرسل لك رابط تختار منه كلمة سر جديدة.',
+  },
+  'fp.send': { en: 'Send reset link', ar: 'أرسل الرابط' },
+  'fp.sending': { en: 'Sending…', ar: 'جاري الإرسال…' },
+  'fp.sentBody': {
+    en: 'If that email has a Cozy Den account, a reset link is on its way. It works once and expires in an hour. Check your spam folder if it does not arrive.',
+    ar: 'إذا هالإيميل عنده حساب في كوزي دن، الرابط في طريقه لك. يشتغل مرة وحدة وينتهي خلال ساعة. شيّك على الرسائل غير المرغوبة إذا ما وصل.',
+  },
+  'fp.failed': { en: 'Could not send the link. Please try again.', ar: 'ما قدرنا نرسل الرابط. حاول مرة ثانية.' },
+  'rp.title': { en: 'Choose a new password', ar: 'اختر كلمة سر جديدة' },
+  'rp.sub': {
+    en: 'Pick something you have not used elsewhere — at least 8 characters.',
+    ar: 'اختر كلمة سر ما استخدمتها بمكان ثاني — ٨ خانات على الأقل.',
+  },
+  'rp.newPassword': { en: 'New password', ar: 'كلمة السر الجديدة' },
+  'rp.confirmPassword': { en: 'Confirm new password', ar: 'أكد كلمة السر' },
+  'rp.save': { en: 'Set new password', ar: 'احفظ كلمة السر' },
+  'rp.saving': { en: 'Saving…', ar: 'جاري الحفظ…' },
+  'rp.mismatch': { en: 'The two passwords do not match.', ar: 'كلمتا السر مو متطابقات.' },
+  'rp.tooShort': { en: 'Use at least 8 characters.', ar: 'استخدم ٨ خانات على الأقل.' },
+  'rp.noToken': {
+    en: 'This page needs a reset link from your email.',
+    ar: 'هالصفحة تحتاج رابط من إيميلك.',
+  },
+  'rp.failed': {
+    en: 'This reset link is invalid or has expired. Request a new one.',
+    ar: 'الرابط غير صالح أو منتهي. اطلب رابط جديد.',
+  },
+  'rp.doneBody': {
+    en: 'Your password is set. For safety, everywhere you were signed in has been signed out — sign in again with your new password.',
+    ar: 'تم تعيين كلمة السر. للأمان، سجّلنا خروجك من كل الأجهزة — سجّل دخولك من جديد بكلمة السر الجديدة.',
+  },
   'staff.games': { en: 'Game library', ar: 'مكتبة الألعاب' },
   'staff.menu': { en: 'Menu', ar: 'المنيو' },
   'cat.gamesHint': {

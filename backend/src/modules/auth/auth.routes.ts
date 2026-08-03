@@ -13,6 +13,7 @@ import {
   UserRow,
 } from './auth.service';
 import { getBookingsByEmail } from '../bookings/bookings.service';
+import { requestPasswordReset, resetPassword } from './passwordReset';
 import {
   sendVerificationEmail,
   verifyEmailToken,
@@ -148,6 +149,39 @@ authRouter.post('/resend-verification', requireAuth, async (req, res, next) => {
       email: req.user!.email,
     });
     res.json({ sent: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const forgotSchema = z.object({ email: z.string().trim().email().max(200) });
+
+// POST /api/auth/forgot-password — email a reset link.
+//
+// Always answers the same, whether or not the address has an account. Varying
+// the response (or the timing, or the status code) would turn this into a way
+// to discover which of our customers' emails are registered.
+authRouter.post('/forgot-password', loginLimiter, validate(forgotSchema), async (req, res, next) => {
+  try {
+    await requestPasswordReset(req.body.email);
+    res.json({ sent: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const resetSchema = z.object({
+  token: z.string().trim().min(32).max(200),
+  password: z.string().min(8).max(200),
+});
+
+// POST /api/auth/reset-password — redeem the link and set a new password.
+// Signs the user in afterwards, since they have just proven both inbox access
+// and knowledge of the new password.
+authRouter.post('/reset-password', loginLimiter, validate(resetSchema), async (req, res, next) => {
+  try {
+    await resetPassword(req.body.token, req.body.password);
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
