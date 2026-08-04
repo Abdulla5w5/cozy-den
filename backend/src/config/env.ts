@@ -51,6 +51,10 @@ export const env = {
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean),
 
+  // Booking-creation cap per IP per 10 minutes. Configurable so a load test or
+  // a genuinely busy launch night can be accommodated without a code change.
+  bookingRateMax: parseInt(optional('BOOKING_RATE_MAX', '15'), 10),
+
   // Table pricing lives in the database (pricing_rates + price_overrides) so
   // staff can change it without a deploy — see utils/pricing.ts.
 

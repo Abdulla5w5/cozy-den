@@ -54,8 +54,14 @@ services:
       # the request host, which for this service is the internal App Platform
       # address rather than the public domain. ${APP_URL} is bound by the
       # platform, so this stays correct across renames and custom domains.
+      # Pinned to the custom domain rather than ${APP_URL}. The platform
+      # variable resolves to the cozy-den-*.ondigitalocean.app hostname even
+      # after a custom domain is attached, which sent verification and reset
+      # links — and, worse, Tap's post-payment redirect — to the old address.
+      # A customer who has just paid should land back on cozyden.com.kw, not on
+      # a hostname they have never seen.
       - key: PUBLIC_URL
-        value: ${APP_URL}
+        value: https://cozyden.com.kw
         scope: RUN_TIME
         type: GENERAL
       # Gmail rewrites the From header to whichever account SMTP authenticated

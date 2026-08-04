@@ -55,14 +55,32 @@ interface InsertParams {
   totalCents: number;
 }
 
+const ALREADY_BOOKED = 'That table is already booked for an overlapping 2-hour session.';
+
 /**
  * Insert a booking row. The bookings_no_overlap exclusion constraint makes the
  * 2-hour-window reservation atomic — a concurrent overlapping insert loses with
- * SQLSTATE 23P01, which we surface as a 409. Retries only cover the
- * astronomically-rare verification-code collision (23505).
+ * SQLSTATE 23P01, which we surface as a 409.
+ *
+ * Two other outcomes are retried rather than thrown:
+ *
+ *  - 23505, the astronomically-rare verification-code collision.
+ *
+ *  - 40P01 / 40001, deadlock and serialisation failure. When several customers
+ *    race for the SAME window, Postgres takes speculative locks while testing
+ *    the exclusion constraint and can pick a deadlock victim instead of
+ *    reporting a plain conflict. Measured with ten simultaneous bookings on one
+ *    slot: one won and NINE came back as deadlocks. No double booking — the
+ *    constraint held — but nine customers saw "Internal server error" when the
+ *    honest answer was "someone just took it". Retrying resolves it: by the
+ *    second attempt the winner has committed, so the constraint reports a clean
+ *    conflict and the customer gets a 409.
+ *
+ * The backoff is jittered so retrying clients do not simply collide again.
  */
 async function insertBooking(p: InsertParams): Promise<number> {
-  for (let attempt = 0; attempt < 5; attempt++) {
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const code = generateVerificationCode();
     try {
       const { rows } = await query<{ id: number }>(
@@ -77,9 +95,18 @@ async function insertBooking(p: InsertParams): Promise<number> {
     } catch (err) {
       const e = err as { code?: string; constraint?: string };
       if (e.code === '23P01' && e.constraint === 'bookings_no_overlap') {
-        throw new ApiError(409, 'That table is already booked for an overlapping 2-hour session.');
+        throw new ApiError(409, ALREADY_BOOKED);
       }
       if (e.code === '23505') continue; // verification_code collision — retry
+      if (e.code === '40P01' || e.code === '40001') {
+        if (attempt === MAX_ATTEMPTS - 1) {
+          // Still contended after five tries. Someone else is winning this
+          // window, so say so plainly rather than blaming the server.
+          throw new ApiError(409, ALREADY_BOOKED);
+        }
+        await new Promise((r) => setTimeout(r, 20 * (attempt + 1) + Math.random() * 30));
+        continue;
+      }
       throw err;
     }
   }

@@ -72,7 +72,7 @@ export const globalLimiter = failOpen(
 export const bookingLimiter = failOpen(
   rateLimit({
     windowMs: 10 * 60 * 1000,
-    max: 15,
+    max: env.bookingRateMax,
     standardHeaders: true,
     legacyHeaders: false,
     store: redisStore('rl:booking:'),
