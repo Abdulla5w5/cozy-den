@@ -1,5 +1,7 @@
 import express from 'express';
+import fs from 'fs';
 import helmet from 'helmet';
+import path from 'path';
 import cors, { CorsOptions } from 'cors';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env';
@@ -30,8 +32,26 @@ export function createApp() {
   // client IPs (rate limiting) and Secure cookies work correctly.
   app.set('trust proxy', 1);
 
-  // Security headers.
-  app.use(helmet());
+  // Security headers apply to both the API and the production SPA. The Google
+  // Identity script/frame are the only third-party executable origins needed
+  // by the frontend; images remain https-capable because staff can publish
+  // externally hosted event and promotion artwork.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", 'https://accounts.google.com'],
+          frameSrc: ["'self'", 'https://accounts.google.com'],
+          connectSrc: ["'self'", 'https://accounts.google.com'],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
+          frameAncestors: ["'none'"],
+        },
+      },
+    })
+  );
 
   // Explicit CORS allow-list — never '*'. Credentials on so the auth cookie flows.
   app.use(
@@ -48,7 +68,8 @@ export function createApp() {
 
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
-  app.use(globalLimiter);
+  // Static assets should never consume the API request budget.
+  app.use('/api', globalLimiter);
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
@@ -63,6 +84,30 @@ export function createApp() {
   app.use('/api/wanted', wantedRouter);
   app.use('/api/support', supportRouter);
   app.use('/api/staff', staffRouter);
+
+  // Keep unknown API routes JSON-only; they must not fall through to the SPA.
+  app.use('/api', notFound);
+
+  // In production the React build is created alongside the backend and served
+  // by this process, so Helmet protects the HTML as well as the API. During
+  // backend-only development/deployments the directory is absent and the API
+  // continues to work normally.
+  const frontendDist = path.resolve(process.cwd(), 'frontend/dist');
+  const frontendIndex = path.join(frontendDist, 'index.html');
+  if (fs.existsSync(frontendIndex)) {
+    app.use(
+      express.static(frontendDist, {
+        index: false,
+        setHeaders(res, filePath) {
+          if (filePath === frontendIndex) res.setHeader('Cache-Control', 'no-store');
+        },
+      })
+    );
+    app.get('*', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store');
+      res.sendFile(frontendIndex);
+    });
+  }
 
   app.use(notFound);
   app.use(errorHandler);

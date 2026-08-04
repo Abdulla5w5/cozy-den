@@ -1,0 +1,9 @@
+{
+  "name": "cozy-den",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend && npm run build --prefix backend",
+    "start": "node backend/dist/src/index.js"
+  }
+}

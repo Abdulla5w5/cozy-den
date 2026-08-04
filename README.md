@@ -42,9 +42,10 @@ run about two emails per booking, so plan a move to a domain sender well before
 that ceiling. The service logs a loud `[mailer]` error on boot when `SMTP_URL`
 is missing.
 
-`PUBLIC_URL` and `MAIL_FROM` are declared in `.do/app.yaml`; `PUBLIC_URL` binds
-to the platform's `${APP_URL}`, so it follows renames and custom domains
-without editing. Override `MAIL_FROM` if the sending domain differs.
+`PUBLIC_URL` and `MAIL_FROM` are declared in `.do/app.yaml`; `PUBLIC_URL` is
+pinned to `https://cozyden.com.kw` so customer emails and payment redirects use
+the public domain rather than the App Platform starter hostname. Override
+`MAIL_FROM` if the sending domain differs.
 
 Production PostgreSQL runs on a separate Droplet in the same VPC, rather than
 an App Platform development database. Set `DATABASE_URL` to that database's
@@ -101,7 +102,7 @@ demoted, and nobody can remove their own admin access.
 
 ```
 cozy-den/
-├── backend/                # Express API + PostgreSQL
+├── backend/                # Express API + production frontend host + PostgreSQL
 │   ├── db/
 │   │   ├── migrations/     # raw .sql schema migrations (001_init.sql)
 │   │   └── seed.sql        # sample tables/games/menu

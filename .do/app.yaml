@@ -1,19 +1,10 @@
 name: cozy-den
 region: fra
 
-# App Platform serves the React build and routes same-origin API calls to the
-# Express service. PostgreSQL runs on a private Droplet in this VPC; set its
-# DATABASE_URL as a Secret runtime variable in the App Platform control panel.
-static_sites:
-  - name: web
-    github:
-      repo: Abdulla5w5/cozy-den
-      branch: main
-      deploy_on_push: true
-    source_dir: /frontend
-    environment_slug: node-js
-    build_command: npm ci && npm run build
-    output_dir: dist
+# The Express service serves both the React build and the API so one Helmet
+# policy protects every HTML and API response. PostgreSQL runs on a private
+# Droplet in this VPC; set its DATABASE_URL as a Secret runtime variable in the
+# App Platform control panel.
 
 services:
   - name: api
@@ -21,10 +12,10 @@ services:
       repo: Abdulla5w5/cozy-den
       branch: main
       deploy_on_push: true
-    source_dir: /backend
+    source_dir: /
     environment_slug: node-js
-    build_command: npm ci && npm run build
-    run_command: node dist/scripts/migrate.js && node dist/scripts/seed.js && node dist/src/index.js
+    build_command: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend && npm run build --prefix backend && npm prune --omit=dev --prefix backend
+    run_command: node backend/dist/scripts/migrate.js && node backend/dist/scripts/seed.js && node backend/dist/src/index.js
     http_port: 4000
     health_check:
       http_path: /api/health
@@ -40,6 +31,10 @@ services:
       - key: COOKIE_SECURE
         value: "true"
         scope: RUN_TIME
+        type: GENERAL
+      - key: VITE_GOOGLE_CLIENT_ID
+        value: 499925933256-fvkpaf45350r3jbte5iavrf6m8359q7m.apps.googleusercontent.com
+        scope: BUILD_TIME
         type: GENERAL
       # Real gateway. Requires TAP_SECRET_KEY as a SECRET runtime variable on
       # this service — the factory throws on boot without it, so a missing or
@@ -80,15 +75,9 @@ ingress:
   rules:
     - match:
         path:
-          prefix: /api
-      component:
-        name: api
-        preserve_path_prefix: true
-    - match:
-        path:
           prefix: /
       component:
-        name: web
+        name: api
 
 alerts:
   - rule: DEPLOYMENT_FAILED
