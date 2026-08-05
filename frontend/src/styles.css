@@ -4139,6 +4139,8 @@ button.link {
 }
 @media (max-width: 720px) {
   .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 0.5rem;
     padding: 0.55rem 1rem 0.7rem;
   }
   .brand-lockup {
@@ -4146,7 +4148,13 @@ button.link {
     height: 48px;
   }
   .nav-actions .nav-cta {
-    display: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.82rem;
+    line-height: 1;
   }
   .topbar .mainnav,
   .mainnav.guest {
@@ -4228,6 +4236,23 @@ button.link {
   }
   .footer {
     padding-bottom: 6.5rem;
+  }
+}
+@media (max-width: 360px) {
+  .topbar {
+    column-gap: 0.35rem;
+    padding-inline: 0.75rem;
+  }
+  .brand-lockup {
+    width: 76px;
+    height: 44px;
+  }
+  .nav-actions {
+    gap: 0.25rem;
+  }
+  .nav-actions .nav-cta {
+    padding-inline: 0.5rem;
+    font-size: 0.75rem;
   }
 }
 @media (max-width: 520px) {
