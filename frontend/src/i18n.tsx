@@ -46,8 +46,8 @@ const dict: Record<string, { en: string; ar: string }> = {
   'footer.dashboard': { en: 'Dashboard', ar: 'لوحة التحكم' },
   'footer.instagram': { en: 'Cozy Den on Instagram', ar: 'كوزي دن على إنستقرام' },
   'footer.legal': {
-    en: '© 2026 Cozy Den Board Game Café · Prototype — payments & email are stubbed.',
-    ar: '© 2026 كوزي دن · نسخة تجريبية — الدفع والإيصالات حالياً للتجربة.',
+    en: '© 2026 Cozy Den Board Game Café. All rights reserved.',
+    ar: '© ٢٠٢٦ كوزي دن كافيه ألعاب البورد. جميع الحقوق محفوظة.',
   },
 
   // ---- home ----
@@ -157,7 +157,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'menu.ctaTitle': { en: 'Hungry yet?', ar: 'جوعان؟' },
   'menu.ctaSub': {
     en: 'Order at the counter when you arrive — your table will be ready.',
-    ar: 'اطلب من الكاونتر لين توصل — طاولتك بتكون جاهزة.',
+    ar: 'اطلب من الكاونتر أول ما توصل — وطاولتك بتكون جاهزة.',
   },
   'menu.book': { en: 'Book a Table', ar: 'احجز طاولة' },
 
@@ -218,8 +218,8 @@ const dict: Record<string, { en: string; ar: string }> = {
   // ---- confirmation ----
   'conf.title': { en: 'Booking confirmed!', ar: 'تم تأكيد الحجز!' },
   'conf.emailed': {
-    en: 'A receipt has been emailed to {email} (stubbed in this prototype).',
-    ar: 'انرسل الإيصال على {email} (تجريبي بهالنسخة).',
+    en: 'A booking receipt has been emailed to {email}.',
+    ar: 'أرسلنا إيصال الحجز إلى {email}.',
   },
   'conf.show': { en: 'Show this code at the counter', ar: 'وري هذا الكود عند الكاونتر' },
   'conf.game': { en: 'Game:', ar: 'اللعبة:' },
@@ -278,13 +278,9 @@ const dict: Record<string, { en: string; ar: string }> = {
   'auth.quick': { en: 'Quick Connect', ar: 'دخول سريع' },
   'auth.google': { en: 'Google', ar: 'جوجل' },
   'auth.discord': { en: 'Discord', ar: 'ديسكورد' },
-  'auth.soon': {
-    en: 'Customer accounts are coming soon — staff can sign in on the Sign In tab.',
-    ar: 'حسابات العملاء قريباً — الموظفين يسجلون دخول من تبويب «تسجيل دخول».',
-  },
   'auth.socialSoon': {
-    en: "Social sign-in isn't available in this prototype yet.",
-    ar: 'الدخول عبر الحسابات الاجتماعية مو متوفر بهالنسخة.',
+    en: 'Google sign-in is currently unavailable. Please use your email and password.',
+    ar: 'تسجيل الدخول عبر جوجل غير متاح حالياً. استخدم بريدك الإلكتروني وكلمة المرور.',
   },
 
   // ---- account / my bookings ----
