@@ -49,6 +49,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
  * another's session.
  */
 const TTL_MS = 60_000;
+const MAX_CACHE_ENTRIES = 16;
 const cache = new Map<string, { at: number; data: unknown }>();
 const inFlight = new Map<string, Promise<unknown>>();
 
@@ -72,12 +73,25 @@ export function notifyAuthChanged() {
   window.dispatchEvent(new Event(AUTH_CHANGED));
 }
 
-function deduped<T>(path: string): Promise<T> {
+function remember(path: string, data: unknown) {
+  // Public catalogue endpoints are few, but keep the cache bounded so a future
+  // parameterized public endpoint cannot turn it into an unbounded browser map.
+  if (!cache.has(path) && cache.size >= MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(path, { at: Date.now(), data });
+}
+
+function deduped<T>(path: string, persist = false): Promise<T> {
   const existing = inFlight.get(path);
   if (existing) return existing as Promise<T>;
   const p = request<T>(path)
     .then((data) => {
-      cache.set(path, { at: Date.now(), data });
+      // Ordinary GETs include bookings, support threads and staff data. They
+      // benefit from sharing an in-flight request but must not accumulate in a
+      // long-lived cache. Only getCached() opts public catalogue data in.
+      if (persist) remember(path, data);
       return data;
     })
     .finally(() => inFlight.delete(path));
@@ -98,7 +112,7 @@ export const api = {
     if (hit) {
       const fresh = Date.now() - hit.at < TTL_MS;
       if (!fresh) {
-        void deduped<T>(path)
+        void deduped<T>(path, true)
           .then((d) => {
             if (onFresh && JSON.stringify(d) !== JSON.stringify(hit.data)) onFresh(d);
           })
@@ -108,7 +122,7 @@ export const api = {
       }
       return Promise.resolve(hit.data as T);
     }
-    return deduped<T>(path);
+    return deduped<T>(path, true);
   },
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),

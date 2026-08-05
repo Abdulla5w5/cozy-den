@@ -99,7 +99,18 @@ export function createApp() {
       express.static(frontendDist, {
         index: false,
         setHeaders(res, filePath) {
-          if (filePath === frontendIndex) res.setHeader('Cache-Control', 'no-store');
+          if (filePath === frontendIndex) {
+            res.setHeader('Cache-Control', 'no-store');
+            return;
+          }
+          // Vite filenames under /assets contain a content hash, so a changed
+          // deployment always gets a new URL. Let browsers and Cloudflare keep
+          // those immutable JS/CSS files instead of asking this Node process on
+          // every visit. Unversioned images/fonts retain Express's safe default.
+          const relative = path.relative(frontendDist, filePath);
+          if (relative.startsWith(`assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
         },
       })
     );

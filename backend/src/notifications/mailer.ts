@@ -7,7 +7,7 @@
  * Gmail app passwords, etc. Example:
  *   smtps://user:pass@smtp.eu-west-1.amazonaws.com:465
  */
-import nodemailer, { Transporter } from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 import { env } from '../config/env';
 
 export interface Mailer {
@@ -34,18 +34,28 @@ class ConsoleMailer implements Mailer {
 }
 
 class SmtpMailer implements Mailer {
-  private transport: Transporter;
+  private transport: Transporter | undefined;
 
-  constructor(url: string) {
+  constructor(private readonly url: string) {}
+
+  private getTransport(): Transporter {
+    if (this.transport) return this.transport;
+    // SMTP is configured in production, but many processes serve only page and
+    // catalogue traffic. Load Nodemailer on the first actual email and retain
+    // the transport after that. A two-connection pool queues bursts while
+    // bounding sockets and buffers on the 512 MB service instance.
+    const nodemailer = require('nodemailer') as typeof import('nodemailer');
     // Pooled so a burst of staff notifications reuses one connection.
     // Options ride on the URL (nodemailer parses query params) because the
     // typed (url, defaults) overload treats the second argument as defaults.
-    const pooled = url.includes('?') ? `${url}&pool=true` : `${url}?pool=true`;
+    const separator = this.url.includes('?') ? '&' : '?';
+    const pooled = `${this.url}${separator}pool=true&maxConnections=2&maxMessages=100`;
     this.transport = nodemailer.createTransport(pooled);
+    return this.transport;
   }
 
   async send(msg: { to: string; subject: string; text: string }): Promise<void> {
-    await this.transport.sendMail({ from: env.mailFrom, ...msg });
+    await this.getTransport().sendMail({ from: env.mailFrom, ...msg });
   }
 }
 

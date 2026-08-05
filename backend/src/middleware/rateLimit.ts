@@ -1,7 +1,5 @@
 import { NextFunction, Request, RequestHandler, Response } from 'express';
 import rateLimit, { Store } from 'express-rate-limit';
-import { RedisStore } from 'rate-limit-redis';
-import { createClient } from 'redis';
 import { env } from '../config/env';
 
 /**
@@ -12,12 +10,20 @@ import { env } from '../config/env';
  * OPEN (request proceeds, un-counted) rather than 500-ing the whole API. A
  * degraded limiter is a smaller problem than an outage.
  */
-type RedisClient = ReturnType<typeof createClient>;
+type RedisClient = ReturnType<(typeof import('redis'))['createClient']>;
+type RedisStoreConstructor = (typeof import('rate-limit-redis'))['RedisStore'];
 
 let client: RedisClient | undefined;
+let RedisStoreClass: RedisStoreConstructor | undefined;
 let redisReady = false;
 
 if (env.redisUrl) {
+  // Redis is optional and production currently runs one API instance. Loading
+  // the Redis client eagerly cost tens of MB even when REDIS_URL was unset.
+  // Keep the shared-store path available for horizontal scaling, but do not
+  // pay for it until it is actually configured.
+  const { createClient } = require('redis') as typeof import('redis');
+  ({ RedisStore: RedisStoreClass } = require('rate-limit-redis') as typeof import('rate-limit-redis'));
   client = createClient({
     url: env.redisUrl,
     socket: { reconnectStrategy: (retries) => Math.min(retries * 200, 5000) },
@@ -36,8 +42,8 @@ if (env.redisUrl) {
 }
 
 function redisStore(prefix: string): Store | undefined {
-  if (!client) return undefined;
-  return new RedisStore({
+  if (!client || !RedisStoreClass) return undefined;
+  return new RedisStoreClass({
     prefix,
     sendCommand: async (...args: string[]) => client!.sendCommand(args),
   }) as unknown as Store;

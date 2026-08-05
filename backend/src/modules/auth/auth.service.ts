@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { OAuth2Client } from 'google-auth-library';
+import type { OAuth2Client } from 'google-auth-library';
 import { query } from '../../db/pool';
 import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
@@ -13,6 +13,21 @@ export interface UserRow {
 }
 
 const SELECT = 'SELECT id, email, name, password_hash, provider FROM users';
+let googleClient: OAuth2Client | undefined;
+
+function getGoogleClient(): OAuth2Client {
+  if (!env.googleClientId) {
+    throw new ApiError(503, 'Google sign-in is not configured on this server.');
+  }
+  if (!googleClient) {
+    // Google sign-in is optional for any individual request. Load its sizeable
+    // certificate/JWT client on first use and then reuse one instance so normal
+    // page/API traffic does not carry the startup cost or repeat allocations.
+    const { OAuth2Client } = require('google-auth-library') as typeof import('google-auth-library');
+    googleClient = new OAuth2Client(env.googleClientId);
+  }
+  return googleClient;
+}
 
 /**
  * The two per-request account flags in one read. They live in the same `users`
@@ -104,10 +119,7 @@ export async function upsertGoogleUser(
 export async function verifyGoogleToken(
   idToken: string,
 ): Promise<{ email: string; name: string; emailVerified: boolean }> {
-  if (!env.googleClientId) {
-    throw new ApiError(503, 'Google sign-in is not configured on this server.');
-  }
-  const client = new OAuth2Client(env.googleClientId);
+  const client = getGoogleClient();
   let payload;
   try {
     const ticket = await client.verifyIdToken({ idToken, audience: env.googleClientId });

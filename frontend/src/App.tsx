@@ -1,23 +1,29 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { api, notifyAuthChanged, AUTH_CHANGED } from './api/client';
 import { useI18n } from './i18n';
 import { Home } from './pages/Home';
-import { GamesPage } from './pages/GamesPage';
-import { MenuPage } from './pages/MenuPage';
-import { BookingFlow } from './pages/BookingFlow';
-import { Confirmation } from './pages/Confirmation';
-import { StaffLogin } from './pages/StaffLogin';
-import { StaffDashboard } from './pages/StaffDashboard';
-import { MyBookings } from './pages/MyBookings';
-import { EventsPage } from './pages/EventsPage';
-import { SupportPage, SupportThreadPage } from './pages/SupportPage';
 import { PromoModal } from './components/PromoModal';
 import { VerifyBanner } from './components/VerifyBanner';
-import { VerifyEmail } from './pages/VerifyEmail';
-import { WantedBoard } from './pages/WantedBoard';
-import { AboutPage } from './pages/AboutPage';
-import { ForgotPassword, ResetPassword } from './pages/ForgotPassword';
+
+// The home shell is eager; secondary and staff pages load only when visited.
+// This keeps staff/admin code out of every customer's initial browser heap and
+// lets the browser release never-requested route modules entirely.
+const GamesPage = lazy(() => import('./pages/GamesPage').then((m) => ({ default: m.GamesPage })));
+const MenuPage = lazy(() => import('./pages/MenuPage').then((m) => ({ default: m.MenuPage })));
+const BookingFlow = lazy(() => import('./pages/BookingFlow').then((m) => ({ default: m.BookingFlow })));
+const Confirmation = lazy(() => import('./pages/Confirmation').then((m) => ({ default: m.Confirmation })));
+const StaffLogin = lazy(() => import('./pages/StaffLogin').then((m) => ({ default: m.StaffLogin })));
+const StaffDashboard = lazy(() => import('./pages/StaffDashboard').then((m) => ({ default: m.StaffDashboard })));
+const MyBookings = lazy(() => import('./pages/MyBookings').then((m) => ({ default: m.MyBookings })));
+const EventsPage = lazy(() => import('./pages/EventsPage').then((m) => ({ default: m.EventsPage })));
+const SupportPage = lazy(() => import('./pages/SupportPage').then((m) => ({ default: m.SupportPage })));
+const SupportThreadPage = lazy(() => import('./pages/SupportPage').then((m) => ({ default: m.SupportThreadPage })));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail').then((m) => ({ default: m.VerifyEmail })));
+const WantedBoard = lazy(() => import('./pages/WantedBoard').then((m) => ({ default: m.WantedBoard })));
+const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then((m) => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import('./pages/ForgotPassword').then((m) => ({ default: m.ResetPassword })));
 
 type Theme = 'light' | 'dark';
 
@@ -161,28 +167,30 @@ export function App() {
       </header>
 
       <main className="content">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/games" element={<GamesPage />} />
-          <Route path="/menu" element={<MenuPage />} />
-          <Route path="/events" element={<EventsPage />} />
-          <Route path="/wanted" element={<WantedBoard />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/support" element={<SupportPage />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
-          <Route path="/support/:id" element={<SupportThreadPage />} />
-          <Route path="/book" element={<BookingFlow />} />
-          <Route path="/confirmation/:code" element={<Confirmation />} />
-          {/* Public auth page — separate from the staff namespace. */}
-          <Route path="/register" element={<StaffLogin />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/account" element={<MyBookings />} />
-          <Route path="/staff/dashboard" element={<StaffDashboard />} />
-          {/* Bare /staff just points at the dashboard (which guards itself). */}
-          <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
-          <Route path="*" element={<p>Page not found.</p>} />
-        </Routes>
+        <Suspense fallback={<p aria-live="polite">{t('loading')}</p>}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/games" element={<GamesPage />} />
+            <Route path="/menu" element={<MenuPage />} />
+            <Route path="/events" element={<EventsPage />} />
+            <Route path="/wanted" element={<WantedBoard />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/support" element={<SupportPage />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/support/:id" element={<SupportThreadPage />} />
+            <Route path="/book" element={<BookingFlow />} />
+            <Route path="/confirmation/:code" element={<Confirmation />} />
+            {/* Public auth page — separate from the staff namespace. */}
+            <Route path="/register" element={<StaffLogin />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/account" element={<MyBookings />} />
+            <Route path="/staff/dashboard" element={<StaffDashboard />} />
+            {/* Bare /staff just points at the dashboard (which guards itself). */}
+            <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
+            <Route path="*" element={<p>Page not found.</p>} />
+          </Routes>
+        </Suspense>
       </main>
 
       <footer className="footer">

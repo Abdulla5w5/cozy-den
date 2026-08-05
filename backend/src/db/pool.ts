@@ -1,4 +1,5 @@
 import { Pool, PoolClient, QueryResultRow } from 'pg';
+import type { PoolConfig } from 'pg';
 import { env } from '../config/env';
 
 // A single shared pool. If DATABASE_URL is unset, pg falls back to the
@@ -11,16 +12,23 @@ const requiresTls = ['prefer', 'require', 'verify-ca', 'verify-full'].includes(s
 // option below. Remove it after recording the intent so our TLS settings win.
 databaseUrl?.searchParams.delete('sslmode');
 
+// The service has one 512 MB instance and the database's queries are short.
+// Five concurrent PostgreSQL sessions are enough to keep the CPU busy; extra
+// requests wait in pg's queue instead of creating ten Node/TLS/Postgres client
+// stacks during a burst. This is a concurrency bound, not a user limit.
+const sharedPoolConfig: PoolConfig = { max: 5 };
+
 export const pool = new Pool(
   databaseUrl
     ? {
+        ...sharedPoolConfig,
         connectionString: databaseUrl.toString(),
         // App Platform's managed PostgreSQL endpoint uses a platform-issued
         // certificate. The URL explicitly opts into TLS, so keep encryption
         // while allowing that certificate chain.
         ssl: requiresTls ? { rejectUnauthorized: false } : undefined,
       }
-    : {}
+    : sharedPoolConfig
 );
 
 pool.on('error', (err) => {
