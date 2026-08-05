@@ -207,6 +207,10 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Your payment is still being confirmed. Check your bookings in a moment.',
     ar: 'دفعتك لسه قيد التأكيد. راجع حجوزاتك بعد شوي.',
   },
+  'bk.payReview': {
+    en: 'Your payment was received after the booking changed. We recorded it for staff review—please contact us so we can confirm the table or refund you.',
+    ar: 'وصلت دفعتك بعد ما تغيّرت حالة الحجز، وسجّلناها لمراجعة الفريق. تواصل معنا عشان نأكد الطاولة أو نرجّع لك المبلغ.',
+  },
   'bk.pay': { en: 'Pay {amount} & book', ar: 'ادفع {amount} واحجز' },
   'bk.processing': { en: 'Processing…', ar: 'جاري المعالجة…' },
   'bk.wrong': { en: 'Something went wrong.', ar: 'صار في خطأ.' },

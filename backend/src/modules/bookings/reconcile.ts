@@ -1,6 +1,10 @@
 import { query } from '../../db/pool';
 import { paymentProvider } from '../../payment';
 import { expireHold, finalizeCharge } from './bookings.service';
+import {
+  PAYMENT_HOLD_EXPIRY_MINUTES,
+  PAYMENT_RECONCILE_AFTER_MINUTES,
+} from '../../payment/constants';
 
 /**
  * Reconciliation sweep for redirect payments (Tap). Does two jobs.
@@ -27,12 +31,40 @@ import { expireHold, finalizeCharge } from './bookings.service';
  */
 
 // Give a real payment time to complete before we consider a booking stuck.
-const STALE_AFTER_MIN = 15;
+const STALE_AFTER_MIN = PAYMENT_RECONCILE_AFTER_MINUTES;
 // Past this, an unsettled hold is treated as abandoned and the window freed.
-// Comfortably longer than a hosted-page session plus a KNET/3DS detour, so a
-// customer who is still typing their PIN can never lose their table.
-const HOLD_EXPIRY_MIN = 25;
+// Tap is explicitly configured to expire first; the remaining buffer allows
+// delayed KNET/3DS completion and webhook delivery before local release.
+const HOLD_EXPIRY_MIN = PAYMENT_HOLD_EXPIRY_MINUTES;
 const BATCH = 50;
+
+/**
+ * Migration 018 labels historical cancelled charge rows honestly as unknown.
+ * Re-fetch each exactly once (successful observations leave that legacy state)
+ * so existing late captures become visible review items instead of staying
+ * ambiguous forever. With today's data this is six calls, then zero thereafter.
+ */
+async function reconcileLegacyCancelledPayments(): Promise<number> {
+  const { rows } = await query<{ provider_charge_id: string }>(
+    `SELECT provider_charge_id
+       FROM payments
+      WHERE provider = 'tap' AND state = 'legacy_cancelled'
+      ORDER BY created_at
+      LIMIT ${BATCH}`,
+  );
+
+  for (const row of rows) {
+    try {
+      await finalizeCharge(row.provider_charge_id, 'reconcile');
+    } catch (err) {
+      console.error('[reconcile] legacy cancelled payment check failed', err);
+    }
+  }
+  if (rows.length > 0) {
+    console.log(`[reconcile] checked ${rows.length} legacy cancelled payments`);
+  }
+  return rows.length;
+}
 
 export async function reconcilePendingPayments(): Promise<{
   checked: number;
@@ -48,12 +80,15 @@ export async function reconcilePendingPayments(): Promise<{
   // No upper age bound: rows stranded before this sweep existed still hold their
   // windows, so the backlog has to drain too, not just new arrivals.
   const { rows } = await query<{ id: number; payment_ref: string | null; expirable: boolean }>(
-    `SELECT id, payment_ref,
-            created_at < now() - ($2 || ' minutes')::interval AS expirable
-       FROM bookings
-      WHERE status = 'pending_payment'
-        AND created_at < now() - ($1 || ' minutes')::interval
-      ORDER BY created_at
+    `SELECT b.id, b.payment_ref,
+            b.created_at < now() - ($2 || ' minutes')::interval AS expirable
+       FROM bookings b
+       LEFT JOIN payments p
+         ON p.provider = 'tap' AND p.provider_charge_id = b.payment_ref
+      WHERE b.status = 'pending_payment'
+        AND b.created_at < now() - ($1 || ' minutes')::interval
+        AND COALESCE(p.state, '') <> 'review'
+      ORDER BY b.created_at
       LIMIT ${BATCH}`,
     [String(STALE_AFTER_MIN), String(HOLD_EXPIRY_MIN)],
   );
@@ -71,12 +106,12 @@ export async function reconcilePendingPayments(): Promise<{
         continue;
       }
 
-      const { outcome } = await finalizeCharge(row.payment_ref);
+      const { outcome } = await finalizeCharge(row.payment_ref, 'reconcile');
       if (outcome === 'paid') confirmed++;
       else if (outcome === 'failed') cancelled++;
       // 'pending' = Tap has no terminal answer. Before HOLD_EXPIRY_MIN that's a
       // customer mid-payment; after it, an abandoned checkout squatting a table.
-      else if (row.expirable && (await expireHold(row.id))) expired++;
+      else if (outcome === 'pending' && row.expirable && (await expireHold(row.id))) expired++;
     } catch (err) {
       console.error('[reconcile] finalize failed for booking', row.id, err);
     }
@@ -92,13 +127,25 @@ export async function reconcilePendingPayments(): Promise<{
 }
 
 let timer: NodeJS.Timeout | undefined;
+let running = false;
 
 /** Start the periodic sweep. No-op unless a redirect gateway is configured. */
 export function startReconciler(intervalMs = 5 * 60 * 1000): void {
   if (paymentProvider.kind !== 'redirect') return;
   if (timer) return;
-  const run = () =>
-    reconcilePendingPayments().catch((err) => console.error('[reconcile] sweep error', err));
+  const run = async () => {
+    // Do not stack sweeps if Tap is temporarily slow; one active batch is enough.
+    if (running) return;
+    running = true;
+    try {
+      await reconcileLegacyCancelledPayments();
+      await reconcilePendingPayments();
+    } catch (err) {
+      console.error('[reconcile] sweep error', err);
+    } finally {
+      running = false;
+    }
+  };
   timer = setInterval(run, intervalMs);
   // Don't let the sweep keep the process alive on shutdown.
   if (typeof timer.unref === 'function') timer.unref();

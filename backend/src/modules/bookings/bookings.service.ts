@@ -4,6 +4,14 @@ import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
 import { getTableFee } from '../../utils/pricing';
 import { paymentProvider } from '../../payment';
+import { TAP_CHARGE_EXPIRY_MINUTES } from '../../payment/constants';
+import {
+  attachPayment,
+  expirePaymentHold,
+  getPaymentContext,
+  PaymentObservationSource,
+  recordPaymentObservation,
+} from '../../payment/ledger';
 import { mailer, formatReceiptEmail } from '../../notifications/mailer';
 import { CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
 
@@ -147,15 +155,28 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
     metadata: { bookingId: String(bookingId) },
   });
 
+  try {
+    await attachPayment({
+      bookingId,
+      provider: paymentProvider.name,
+      chargeId: charge.reference,
+      providerStatus: charge.success ? 'CAPTURED' : 'DECLINED',
+      requestedAmountMillis: feeCents * 10,
+      currency: 'KWD',
+      state: charge.success ? 'captured' : 'failed',
+      source: 'direct',
+    });
+  } catch (err) {
+    await query(`UPDATE bookings SET status = 'cancelled' WHERE id = $1`, [bookingId]);
+    throw err;
+  }
+
   if (!charge.success) {
     await query(`UPDATE bookings SET status = 'cancelled' WHERE id = $1`, [bookingId]);
     throw new ApiError(402, charge.declineReason || 'Payment was declined.');
   }
 
-  await query(`UPDATE bookings SET status = 'pending', payment_ref = $1 WHERE id = $2`, [
-    charge.reference,
-    bookingId,
-  ]);
+  await query(`UPDATE bookings SET status = 'pending' WHERE id = $1`, [bookingId]);
 
   const view = await getBookingById(bookingId);
   if (!view) throw new ApiError(500, 'Booking vanished after creation.');
@@ -222,9 +243,17 @@ export async function startBookingCheckout(
       webhookUrl: base.webhookUrl,
       customer: { name: input.guestName, email: input.guestEmail },
       metadata: { bookingId: String(bookingId), code },
+      expiryMinutes: TAP_CHARGE_EXPIRY_MINUTES,
     });
-    // Store the gateway charge id so the return/webhook can find this booking.
-    await query('UPDATE bookings SET payment_ref = $1 WHERE id = $2', [charge.chargeId, bookingId]);
+    // Store the gateway id and its first ledger event atomically.
+    await attachPayment({
+      bookingId,
+      provider: paymentProvider.name,
+      chargeId: charge.chargeId,
+      providerStatus: charge.status?.toUpperCase(),
+      requestedAmountMillis: feeCents * 10,
+      currency: 'KWD',
+    });
     return { redirectUrl: charge.transactionUrl, code };
   } catch (err) {
     // Couldn't open a charge — free the window rather than stranding it.
@@ -241,75 +270,131 @@ export async function startBookingCheckout(
  */
 export async function finalizeCharge(
   chargeId: string,
-): Promise<{ outcome: 'paid' | 'failed' | 'pending'; code: string | null }> {
+  source: PaymentObservationSource = 'reconcile',
+): Promise<{ outcome: 'paid' | 'failed' | 'pending' | 'review'; code: string | null }> {
   if (!paymentProvider.retrieveCharge) {
     throw new ApiError(500, 'Configured payment provider cannot retrieve charges.');
   }
 
-  const { rows } = await query<{
-    id: number;
-    status: string;
-    verification_code: string;
-    total_cents: number;
-  }>(
-    'SELECT id, status, verification_code, total_cents FROM bookings WHERE payment_ref = $1',
-    [chargeId],
-  );
-  const booking = rows[0];
-  if (!booking) return { outcome: 'failed', code: null };
+  const payment = await getPaymentContext(chargeId);
+  if (!payment) return { outcome: 'failed', code: null };
 
   // Already resolved by the other path — report the settled state, no re-work.
-  if (booking.status === 'pending' || booking.status === 'order_complete') {
-    return { outcome: 'paid', code: booking.verification_code };
-  }
-  if (booking.status === 'cancelled') {
-    return { outcome: 'failed', code: booking.verification_code };
+  if (
+    payment.bookingStatus === 'pending' ||
+    payment.bookingStatus === 'print_receipt' ||
+    payment.bookingStatus === 'order_complete'
+  ) {
+    return { outcome: 'paid', code: payment.verificationCode };
   }
 
+  // Cancelled bookings are deliberately re-checked. Tap may have captured in
+  // the narrow interval around local expiry; ignoring that callback loses money.
   const status = await paymentProvider.retrieveCharge(chargeId);
+  const expectedMillis = payment.totalCents * 10;
+  const wrongAmount =
+    status.paid && status.amountMillis !== undefined && status.amountMillis !== expectedMillis;
+  const wrongCurrency = status.paid && (status.currency || '').toUpperCase() !== 'KWD';
+  const capturedAfterCancellation = status.paid && payment.bookingStatus === 'cancelled';
+  const cancelledStillPayable =
+    payment.bookingStatus === 'cancelled' && !status.paid && !status.failed;
 
-  // A 'paid' status alone only says money moved — not that the RIGHT money
-  // moved. Confirming a booking against a charge for some other amount or
-  // currency would hand out a table for whatever the payer chose, so treat a
-  // mismatch as unresolved: never confirm, never cancel (the money is real and
-  // belongs to someone), and leave it for staff to look at.
-  if (status.paid && status.amountCents !== undefined) {
-    const wrongAmount = status.amountCents !== booking.total_cents;
-    const wrongCurrency = (status.currency || '').toUpperCase() !== 'KWD';
-    if (wrongAmount || wrongCurrency) {
-      console.error(
-        `[tap] charge ${chargeId} settled ${status.amountCents} ${status.currency} but ` +
-          `booking ${booking.id} expects ${booking.total_cents} KWD — refusing to confirm`,
-      );
-      return { outcome: 'pending', code: booking.verification_code };
-    }
+  // Money received against a cancelled booking, or with the wrong amount or
+  // currency, is preserved as an explicit staff-review state. Never silently
+  // turn it into either a successful booking or a failed payment.
+  if (wrongAmount || wrongCurrency || capturedAfterCancellation || cancelledStillPayable) {
+    await recordPaymentObservation({
+      paymentId: payment.paymentId,
+      state: 'review',
+      providerStatus: status.status,
+      source,
+      amountMillis: status.amountMillis,
+      currency: status.currency,
+      responseCode: status.responseCode,
+      responseMessage: status.responseMessage,
+      requiresReview: true,
+    });
+    console.error(
+      `[tap] payment review required for booking ${payment.bookingId}: ` +
+        `status=${status.status} amount=${status.amountMillis ?? 'unknown'} ` +
+        `currency=${status.currency ?? 'unknown'} bookingStatus=${payment.bookingStatus}`,
+    );
+    return { outcome: 'review', code: payment.verificationCode };
   }
 
   if (status.paid) {
+    // Record capture first. If the process stops before the booking update, the
+    // reconciler will safely finish the pending booking on its next pass.
+    await recordPaymentObservation({
+      paymentId: payment.paymentId,
+      state: 'captured',
+      providerStatus: status.status,
+      source,
+      amountMillis: status.amountMillis,
+      currency: status.currency,
+      responseCode: status.responseCode,
+      responseMessage: status.responseMessage,
+    });
     // Only the first caller flips it; the WHERE guard makes this idempotent.
     const upd = await query(
       `UPDATE bookings SET status = 'pending'
         WHERE id = $1 AND status = 'pending_payment'
         RETURNING id`,
-      [booking.id],
+      [payment.bookingId],
     );
     if (upd.rows.length > 0) {
-      const view = await getBookingById(booking.id);
+      const view = await getBookingById(payment.bookingId);
       if (view) sendReceipt(view);
+      return { outcome: 'paid', code: payment.verificationCode };
     }
-    return { outcome: 'paid', code: booking.verification_code };
+
+    // Local expiry won the race after Tap captured. Preserve the capture as a
+    // visible exception instead of returning a confirmation for a cancelled row.
+    await recordPaymentObservation({
+      paymentId: payment.paymentId,
+      state: 'review',
+      providerStatus: status.status,
+      source,
+      amountMillis: status.amountMillis,
+      currency: status.currency,
+      responseCode: status.responseCode,
+      responseMessage: status.responseMessage,
+      requiresReview: true,
+    });
+    console.error(`[tap] captured payment raced local expiry for booking ${payment.bookingId}`);
+    return { outcome: 'review', code: payment.verificationCode };
   }
 
   if (status.failed) {
+    await recordPaymentObservation({
+      paymentId: payment.paymentId,
+      state: 'failed',
+      providerStatus: status.status,
+      source,
+      amountMillis: status.amountMillis,
+      currency: status.currency,
+      responseCode: status.responseCode,
+      responseMessage: status.responseMessage,
+    });
     await query(
       `UPDATE bookings SET status = 'cancelled' WHERE id = $1 AND status = 'pending_payment'`,
-      [booking.id],
+      [payment.bookingId],
     );
-    return { outcome: 'failed', code: booking.verification_code };
+    return { outcome: 'failed', code: payment.verificationCode };
   }
 
+  await recordPaymentObservation({
+    paymentId: payment.paymentId,
+    state: 'pending',
+    providerStatus: status.status,
+    source,
+    amountMillis: status.amountMillis,
+    currency: status.currency,
+    responseCode: status.responseCode,
+    responseMessage: status.responseMessage,
+  });
   // Still in flight (INITIATED / IN_PROGRESS) — leave it held.
-  return { outcome: 'pending', code: booking.verification_code };
+  return { outcome: 'pending', code: payment.verificationCode };
 }
 
 /**
@@ -323,12 +408,7 @@ export async function finalizeCharge(
  * customer paid a moment earlier, the row is already 'pending' and this no-ops.
  */
 export async function expireHold(bookingId: number): Promise<boolean> {
-  const { rowCount } = await query(
-    `UPDATE bookings SET status = 'cancelled'
-      WHERE id = $1 AND status = 'pending_payment'`,
-    [bookingId],
-  );
-  return (rowCount ?? 0) > 0;
+  return expirePaymentHold(bookingId);
 }
 
 /**

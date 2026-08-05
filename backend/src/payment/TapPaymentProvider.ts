@@ -4,6 +4,7 @@ import {
   RedirectCharge,
   RedirectChargeRequest,
 } from './PaymentProvider';
+import { TAP_CHARGE_EXPIRY_MINUTES } from './constants';
 
 /**
  * Tap Payments (https://tap.company) — the Kuwait/GCC gateway.
@@ -28,10 +29,22 @@ interface TapCharge {
   metadata?: Record<string, string>;
 }
 
-// Statuses that mean the money is settled/authorised for capture.
-const PAID = new Set(['CAPTURED', 'AUTHORIZED']);
+// This integration creates Charges, not Authorizations. Tap documents CAPTURED
+// as the successful terminal Charge state; AUTHORIZED belongs to its separate
+// authorize/capture flow and must not confirm a booking here.
+const PAID = new Set(['CAPTURED']);
 // Terminal failures — the window should be freed.
-const FAILED = new Set(['DECLINED', 'CANCELLED', 'FAILED', 'RESTRICTED', 'EXPIRED', 'VOID', 'TIMEDOUT', 'UNKNOWN']);
+const FAILED = new Set([
+  'ABANDONED',
+  'DECLINED',
+  'CANCELLED',
+  'FAILED',
+  'RESTRICTED',
+  'EXPIRED',
+  'VOID',
+  'TIMEDOUT',
+  'UNKNOWN',
+]);
 
 export class TapPaymentProvider implements PaymentProvider {
   readonly name = 'tap';
@@ -82,6 +95,10 @@ export class TapPaymentProvider implements PaymentProvider {
     // Tap happy and avoids float drift.
     const amount = Number((req.amountCents / 100).toFixed(3));
     const [first, ...restName] = req.customer.name.trim().split(/\s+/);
+    const expiryMinutes = req.expiryMinutes ?? TAP_CHARGE_EXPIRY_MINUTES;
+    if (expiryMinutes < 5 || expiryMinutes > 60) {
+      throw new Error('Tap charge expiry must be between 5 and 60 minutes.');
+    }
 
     const charge = await this.call('/charges', {
       method: 'POST',
@@ -101,6 +118,7 @@ export class TapPaymentProvider implements PaymentProvider {
         // src_all presents every method enabled on the account (KNET, cards,
         // Apple Pay, Benefit…) on Tap's hosted page.
         source: { id: 'src_all' },
+        transaction: { expiry: { period: expiryMinutes, type: 'MINUTE' } },
         post: { url: req.webhookUrl },
         redirect: { url: req.redirectUrl },
       }),
@@ -127,8 +145,10 @@ export class TapPaymentProvider implements PaymentProvider {
       metadata: charge.metadata,
       // Surfaced so the caller can assert we were paid what we asked for
       // rather than trusting the status word alone.
-      amountCents: typeof charge.amount === 'number' ? Math.round(charge.amount * 100) : undefined,
+      amountMillis: typeof charge.amount === 'number' ? Math.round(charge.amount * 1000) : undefined,
       currency: charge.currency,
+      responseCode: charge.response?.code,
+      responseMessage: charge.response?.message,
     };
   }
 }

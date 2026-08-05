@@ -126,9 +126,11 @@ export function BookingFlow() {
       ? t('bk.payFailed')
       : payStatus === 'error'
         ? t('bk.payError')
-        : payStatus === 'pending'
-          ? t('bk.payPending')
-          : null;
+        : payStatus === 'review'
+          ? t('bk.payReview')
+          : payStatus === 'pending'
+            ? t('bk.payPending')
+            : null;
 
   async function submit() {
     if (!tableId || !timeSlot) return; // guarded by the button, belt-and-braces

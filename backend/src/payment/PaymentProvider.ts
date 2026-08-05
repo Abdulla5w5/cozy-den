@@ -41,6 +41,8 @@ export interface RedirectChargeRequest {
   webhookUrl: string;
   customer: { name: string; email: string };
   metadata?: Record<string, string>;
+  /** Hosted-payment lifetime. Kept shorter than the local table hold. */
+  expiryMinutes?: number;
 }
 
 export interface RedirectCharge {
@@ -60,9 +62,11 @@ export interface ChargeStatus {
   status: string;
   reference: string;
   metadata?: Record<string, string>;
-  /** Major-unit amount the gateway actually settled, in cents. */
-  amountCents?: number;
+  /** Amount returned by the gateway in thousandths of the major unit. */
+  amountMillis?: number;
   currency?: string;
+  responseCode?: string;
+  responseMessage?: string;
 }
 
 export interface PaymentProvider {

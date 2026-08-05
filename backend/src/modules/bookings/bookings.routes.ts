@@ -56,8 +56,9 @@ bookingsRouter.get('/tap/return', async (req, res) => {
   const chargeId = String(req.query.tap_id || '');
   if (!chargeId) return res.redirect(`${site}/book?payment=error`);
   try {
-    const { outcome, code } = await finalizeCharge(chargeId);
+    const { outcome, code } = await finalizeCharge(chargeId, 'return');
     if (outcome === 'paid' && code) return res.redirect(`${site}/confirmation/${code}`);
+    if (outcome === 'review') return res.redirect(`${site}/book?payment=review`);
     if (outcome === 'pending') return res.redirect(`${site}/book?payment=pending`);
     return res.redirect(`${site}/book?payment=failed`);
   } catch (err) {
@@ -74,7 +75,7 @@ bookingsRouter.get('/tap/return', async (req, res) => {
 bookingsRouter.post('/tap/webhook', async (req, res) => {
   try {
     const chargeId = String(req.body?.id || '');
-    if (chargeId) await finalizeCharge(chargeId);
+    if (chargeId) await finalizeCharge(chargeId, 'webhook');
   } catch (err) {
     console.error('[tap] webhook handler failed', err);
   }
