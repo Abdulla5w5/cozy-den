@@ -38,6 +38,12 @@ export function createApp() {
   // externally hosted event and promotion artwork.
   app.use(
     helmet({
+      // Google Identity Services uses a popup to return the selected account's
+      // credential to this page. Helmet's stricter `same-origin` default cuts
+      // that opener channel in browsers that are not using FedCM, leaving the
+      // Google window blank after account selection. This remains isolated
+      // from arbitrary framing by CSP frame-ancestors and X-Frame-Options.
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],

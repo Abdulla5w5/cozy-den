@@ -39,3 +39,71 @@ test('optional integrations stay out of the normal API startup path', () => {
     nodemailer: false,
   });
 });
+
+test('Google token verification loads its client on first use', () => {
+  const script = `
+    const assert = require('node:assert/strict');
+    const { verifyGoogleToken } = require('./dist/src/modules/auth/auth.service.js');
+    const googleLoaded = () => Object.keys(require.cache).some((p) => p.includes('/google-auth-library/'));
+
+    (async () => {
+      assert.equal(googleLoaded(), false);
+      await assert.rejects(
+        verifyGoogleToken('invalid-token-value'),
+        (error) => error?.status === 401 && error?.message === 'Invalid Google token.',
+      );
+      assert.equal(googleLoaded(), true);
+      console.log('RESULT:ok');
+    })().catch((error) => {
+      console.error(error);
+      process.exit(1);
+    });
+  `;
+
+  const stdout = execFileSync(process.execPath, ['-e', script], {
+    cwd: path.join(__dirname, '..'),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      JWT_SECRET: 'test-only-secret-that-is-at-least-32-chars',
+      GOOGLE_CLIENT_ID: 'test-client-id',
+    },
+  });
+
+  assert.match(stdout, /RESULT:ok/);
+});
+
+test('security headers keep Google popups functional without allowing framing', () => {
+  const script = `
+    const assert = require('node:assert/strict');
+    const { createApp } = require('./dist/src/app.js');
+    const server = createApp().listen(0, '127.0.0.1', async () => {
+      try {
+        const { port } = server.address();
+        const response = await fetch('http://127.0.0.1:' + port + '/api/health');
+        assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
+        assert.match(response.headers.get('content-security-policy') || '', /frame-ancestors 'none'/);
+        assert.equal(response.headers.get('x-frame-options'), 'SAMEORIGIN');
+        console.log('RESULT:ok');
+        server.close();
+      } catch (error) {
+        console.error(error);
+        server.close(() => process.exit(1));
+      }
+    });
+  `;
+
+  const stdout = execFileSync(process.execPath, ['-e', script], {
+    cwd: path.join(__dirname, '..'),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      JWT_SECRET: 'test-only-secret-that-is-at-least-32-chars',
+      PAYMENT_PROVIDER: 'mock',
+    },
+  });
+
+  assert.match(stdout, /RESULT:ok/);
+});
