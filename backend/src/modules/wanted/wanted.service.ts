@@ -292,3 +292,13 @@ export async function moderatePost(id: number, decision: 'approve' | 'reject'): 
   if (!post) throw new ApiError(404, 'Post not found.');
   return post;
 }
+
+/**
+ * Permanently remove one post. Its interest rows are removed by the database's
+ * ON DELETE CASCADE foreign key, keeping the operation atomic even if a post
+ * has many interested members. Authorization belongs to the admin-only route.
+ */
+export async function deletePost(id: number): Promise<void> {
+  const { rowCount } = await query('DELETE FROM wanted_posts WHERE id = $1', [id]);
+  if (!rowCount) throw new ApiError(404, 'Post not found.');
+}

@@ -456,6 +456,15 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.wanted': { en: 'Wanted Board', ar: 'لوحة الطلبات' },
   'staff.wbApprove': { en: 'Approve & publish', ar: 'وافق وانشر' },
   'staff.wbReject': { en: 'Reject', ar: 'ارفض' },
+  'staff.wbDelete': { en: 'Delete post', ar: 'احذف المنشور' },
+  'staff.wbDeleteConfirm': {
+    en: 'Permanently delete the wanted post for {game}? This also removes its interested-member list and cannot be undone.',
+    ar: 'تبي تحذف منشور الطلب للعبة {game} نهائياً؟ راح تنحذف معاه قائمة المهتمين وما تقدر تتراجع.',
+  },
+  'staff.wbActionFailed': {
+    en: 'Could not update this post. Please try again.',
+    ar: 'ما قدرنا نحدّث المنشور. حاول مرة ثانية.',
+  },
   'staff.wbInterested': { en: 'Interested members', ar: 'الأعضاء المهتمون' },
   'staff.wbNone': { en: 'No posts.', ar: 'ما في منشورات.' },
   'staff.wbPoster': { en: 'Posted by', ar: 'نشرها' },

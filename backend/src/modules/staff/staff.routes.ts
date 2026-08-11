@@ -12,7 +12,7 @@ import {
   setStatus,
   Status as SupportStatus,
 } from '../support/support.service';
-import { listPostsForStaff, moderatePost } from '../wanted/wanted.service';
+import { deletePost, listPostsForStaff, moderatePost } from '../wanted/wanted.service';
 import { setReviewed } from '../support/support.service';
 import {
   deleteOverride,
@@ -264,6 +264,22 @@ staffRouter.post(
   async (req, res, next) => {
     try {
       res.json({ post: await moderatePost(Number(req.params.id), req.body.decision) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// DELETE /api/staff/wanted/:id — destructive moderation is admin-only. The
+// server guard is authoritative; hiding the button from ordinary staff is not.
+staffRouter.delete(
+  '/wanted/:id',
+  requireAdmin,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      await deletePost(Number(req.params.id));
+      res.json({ ok: true });
     } catch (err) {
       next(err);
     }

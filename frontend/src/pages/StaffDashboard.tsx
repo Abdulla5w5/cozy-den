@@ -129,7 +129,7 @@ export function StaffDashboard() {
       ) : tab === 'pricing' ? (
         <StaffPricing />
       ) : tab === 'wanted' ? (
-        <StaffWanted />
+        <StaffWanted isAdmin={isAdmin} />
       ) : tab === 'team' ? (
         <TeamTab meEmail={staffEmail} />
       ) : (

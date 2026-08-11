@@ -114,7 +114,7 @@ export async function requireAdmin(req: Request, _res: Response, next: NextFunct
     const session = await loadSession(req);
     if (!session) return next(new ApiError(401, 'Authentication required'));
     if (!session.isAdmin) {
-      return next(new ApiError(403, 'Only an admin can change team access.'));
+      return next(new ApiError(403, 'Admin access only.'));
     }
     req.user = session.claims;
     next();
