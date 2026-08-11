@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
@@ -9,6 +9,52 @@ import { Booking, TableAvailability } from '../types';
 type CheckoutResponse = { booking?: Booking; redirectUrl?: string };
 
 type Step = 1 | 2;
+
+type FloorShape = 'small' | 'round' | 'wide' | 'communal' | 'floor';
+
+interface FloorPlacement {
+  x: number;
+  y: number;
+  shape: FloorShape;
+  angle?: number;
+}
+
+// These coordinates describe the physical cafe sketch, not booking data. The
+// API remains the source of truth for which tables exist and which slots are
+// free; an unknown future table still receives a sensible fallback position.
+const FLOOR_PLACEMENTS: Record<string, FloorPlacement> = {
+  'Small Table 1': { x: 18, y: 24, shape: 'small', angle: -4 },
+  'Small Table 2': { x: 43, y: 19, shape: 'small', angle: 3 },
+  'Small Table 3': { x: 78, y: 23, shape: 'small', angle: -2 },
+  'Big Table 1': { x: 24, y: 61, shape: 'wide', angle: 2 },
+  'Big Table 2': { x: 49, y: 43, shape: 'round', angle: -2 },
+  'Big Table 3': { x: 72, y: 67, shape: 'wide', angle: -2 },
+  'Big Table 4 (D&D)': { x: 45, y: 76, shape: 'communal', angle: 1 },
+  'Floor Table': { x: 83, y: 46, shape: 'floor', angle: 3 },
+};
+
+const FALLBACK_PLACEMENTS: FloorPlacement[] = [
+  { x: 16, y: 20, shape: 'small' },
+  { x: 40, y: 20, shape: 'small' },
+  { x: 68, y: 20, shape: 'small' },
+  { x: 20, y: 58, shape: 'wide' },
+  { x: 50, y: 47, shape: 'round' },
+  { x: 75, y: 62, shape: 'wide' },
+  { x: 45, y: 78, shape: 'communal' },
+  { x: 84, y: 42, shape: 'floor' },
+];
+
+function floorPlacement(label: string, index: number) {
+  return FLOOR_PLACEMENTS[label] ?? FALLBACK_PLACEMENTS[index % FALLBACK_PLACEMENTS.length];
+}
+
+function mapTableName(label: string) {
+  if (label.includes('(D&D)')) return 'D&D';
+  return label
+    .replace('Small Table ', 'S')
+    .replace('Big Table ', 'B')
+    .replace('Floor Table', 'Floor');
+}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -50,6 +96,8 @@ export function BookingFlow() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t, money } = useI18n();
+  const bookingCardRef = useRef<HTMLDivElement | null>(null);
+  const hasRenderedStepRef = useRef(false);
 
   // Captured once, synchronously on first render, so the availability effect
   // below can re-apply the saved table/time after it reloads.
@@ -61,6 +109,7 @@ export function BookingFlow() {
 
   const [date, setDate] = useState(draft?.date ?? todayIso());
   const [availability, setAvailability] = useState<TableAvailability[]>([]);
+  const [loadingAvailability, setLoadingAvailability] = useState(true);
   const [slots, setSlots] = useState<string[]>([]);
   const [tableId, setTableId] = useState<number | null>(null);
   const [timeSlot, setTimeSlot] = useState<string | null>(null);
@@ -79,6 +128,7 @@ export function BookingFlow() {
 
   useEffect(() => {
     setError(null);
+    setLoadingAvailability(true);
     // Clear a prior selection only on a genuine user date change — not while
     // restoring a draft for this same date after a returned payment.
     if (restoreRef.current?.date !== date) {
@@ -94,7 +144,9 @@ export function BookingFlow() {
       .then((r) => {
         setSlots(r.slots);
         setAvailability(r.availability);
-        setFee(r.fee);
+        // Older API instances did not include fee details in availability.
+        // Keep the safe display default until checkout when that field is absent.
+        if (r.fee) setFee(r.fee);
         // Re-apply the saved table/time once the grid for its date has loaded.
         if (restoreRef.current && restoreRef.current.date === date) {
           setTableId(restoreRef.current.tableId);
@@ -102,7 +154,8 @@ export function BookingFlow() {
           restoreRef.current = null;
         }
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(e.message))
+      .finally(() => setLoadingAvailability(false));
   }, [date]);
 
   useEffect(() => {
@@ -115,6 +168,16 @@ export function BookingFlow() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    // The map can be much taller than checkout. Keep a step change from leaving
+    // the customer stranded at the old scroll offset below the shorter panel.
+    if (!hasRenderedStepRef.current) {
+      hasRenderedStepRef.current = true;
+      return;
+    }
+    bookingCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [step]);
 
   const selectedTable = availability.find((tb) => tb.tableId === tableId) || null;
 
@@ -174,58 +237,201 @@ export function BookingFlow() {
   }
 
   return (
-    <div className="card">
+    <div ref={bookingCardRef} className={`card booking-card ${step === 2 ? 'booking-checkout' : ''}`}>
       <Stepper step={step} />
       {error && <div className="alert error">{error}</div>}
 
       {step === 1 && (
-        <section>
-          <h2>{t('bk.s1title')}</h2>
-          <p className="muted">{t('bk.sessionHint')}</p>
-          <label className="field">
-            {t('bk.date')}
-            <input
-              type="date"
-              min={todayIso()}
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </label>
-
-          <div className="table-grid">
-            {availability.map((tb) => (
-              <div key={tb.tableId} className={`table-card ${tableId === tb.tableId ? 'sel' : ''}`}>
-                <div className="table-head">
-                  <strong>{tb.label}</strong>
-                  <span className="pill">{t('bk.seats', { n: tb.capacity })}</span>
-                </div>
-                <div className="slots">
-                  {slots.map((s) => {
-                    const free = tb.freeSlots.includes(s);
-                    const active = tableId === tb.tableId && timeSlot === s;
-                    return (
-                      <button
-                        key={s}
-                        disabled={!free}
-                        className={`slot ${active ? 'active' : ''}`}
-                        onClick={() => {
-                          setTableId(tb.tableId);
-                          setTimeSlot(s);
-                        }}
-                      >
-                        {s}
-                      </button>
-                    );
-                  })}
-                </div>
+        <section className="floor-booking-step">
+          <header className="booking-intro">
+            <div>
+              <span className="booking-kicker">{t('bk.mapKicker')}</span>
+              <h1>{t('bk.mapTitle')}</h1>
+              <p>{t('bk.mapSub')}</p>
+            </div>
+            <div className="booking-hours" aria-label={t('bk.hours')}>
+              <span className="booking-status-dot" aria-hidden="true" />
+              <div>
+                <strong>{t('bk.hours')}</strong>
+                <span>{t('bk.lastSeating')}</span>
               </div>
-            ))}
+            </div>
+          </header>
+
+          <div className="booking-date-tray">
+            <div className="booking-date-copy">
+              <span>{t('bk.chooseDate')}</span>
+              <strong>{t('bk.chooseDateHint')}</strong>
+            </div>
+            <label className="booking-date-field">
+              <span>{t('bk.date')}</span>
+              <input
+                type="date"
+                min={todayIso()}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </label>
           </div>
 
-          <div className="actions">
-            <button className="primary" disabled={!tableId || !timeSlot} onClick={() => setStep(2)}>
-              {t('bk.nextDetails')}
-            </button>
+          <div className="floor-booking-layout">
+            <div className="cafe-map-shell">
+              <div className="map-heading">
+                <div>
+                  <span className="map-title">{t('bk.floorPlan')}</span>
+                  <span className="map-hint">{t('bk.floorHint')}</span>
+                </div>
+                <span className="map-live-badge">
+                  <i aria-hidden="true" /> {t('bk.liveAvailability')}
+                </span>
+              </div>
+
+              <div className="cafe-floor-plan" aria-label={t('bk.floorPlan')}>
+                <div className="floor-window floor-window-one" aria-hidden="true" />
+                <div className="floor-window floor-window-two" aria-hidden="true" />
+                <div className="floor-counter" aria-hidden="true">
+                  <span>{t('bk.counter')}</span>
+                  <i>☕</i>
+                </div>
+                <div className="floor-shelf" aria-hidden="true">
+                  <i>♟</i>
+                  <span>{t('bk.gameWall')}</span>
+                </div>
+                <span className="floor-plant plant-one" aria-hidden="true">✦</span>
+                <span className="floor-plant plant-two" aria-hidden="true">✦</span>
+                <span className="floor-entrance" aria-hidden="true">{t('bk.entrance')}</span>
+
+                {loadingAvailability && (
+                  <div className="floor-loading" aria-live="polite">
+                    <span className="floor-loading-die" aria-hidden="true">⚄</span>
+                    {t('bk.loadingTables')}
+                  </div>
+                )}
+
+                {!loadingAvailability && availability.map((tb, index) => {
+                  const placement = floorPlacement(tb.label, index);
+                  const selected = tableId === tb.tableId;
+                  const soldOut = tb.freeSlots.length === 0;
+                  const style = {
+                    '--table-x': `${placement.x}%`,
+                    '--table-y': `${placement.y}%`,
+                    '--table-angle': `${placement.angle ?? 0}deg`,
+                  } as CSSProperties;
+                  return (
+                    <button
+                      key={tb.tableId}
+                      type="button"
+                      style={style}
+                      className={`floor-table floor-table-${placement.shape} ${selected ? 'selected' : ''} ${soldOut ? 'sold-out' : ''}`}
+                      aria-pressed={selected}
+                      aria-label={t('bk.tableMapLabel', {
+                        table: tb.label,
+                        seats: tb.capacity,
+                        slots: tb.freeSlots.length,
+                      })}
+                      onClick={() => {
+                        if (tableId !== tb.tableId) setTimeSlot(null);
+                        setTableId(tb.tableId);
+                      }}
+                    >
+                      <span className="floor-table-surface">
+                        <strong>{mapTableName(tb.label)}</strong>
+                        <small>{t('bk.seatsShort', { n: tb.capacity })}</small>
+                      </span>
+                      <span className="floor-table-tooltip" aria-hidden="true">
+                        <strong>{tb.label}</strong>
+                        <small>
+                          {soldOut ? t('bk.noOpenSlots') : t('bk.openSlots', { n: tb.freeSlots.length })}
+                        </small>
+                        {!soldOut && <em>{tb.freeSlots.slice(0, 3).join(' · ')}</em>}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="floor-legend" aria-label={t('bk.legend')}>
+                <span><i className="available" />{t('bk.available')}</span>
+                <span><i className="selected" />{t('bk.selected')}</span>
+                <span><i className="unavailable" />{t('bk.unavailable')}</span>
+              </div>
+            </div>
+
+            <aside className={`booking-slot-panel ${selectedTable ? 'has-table' : ''}`} aria-live="polite">
+              {selectedTable ? (
+                <>
+                  <div className="slot-panel-head">
+                    <span className="slot-panel-kicker">{t('bk.yourTable')}</span>
+                    <h2>{selectedTable.label}</h2>
+                    <div className="slot-panel-meta">
+                      <span>♟ {t('bk.seats', { n: selectedTable.capacity })}</span>
+                      <span className={selectedTable.freeSlots.length ? 'open' : 'closed'}>
+                        <i aria-hidden="true" />
+                        {selectedTable.freeSlots.length
+                          ? t('bk.openSlots', { n: selectedTable.freeSlots.length })
+                          : t('bk.noOpenSlots')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="slot-panel-body">
+                    <div className="slot-panel-title">
+                      <div>
+                        <strong>{t('bk.pickTime')}</strong>
+                        <span>{t('bk.sessionHint')}</span>
+                      </div>
+                      {timeSlot && <span className="chosen-time">{timeSlot}</span>}
+                    </div>
+
+                    <div className="booking-slots">
+                      {slots.map((slot) => {
+                        const free = selectedTable.freeSlots.includes(slot);
+                        const active = timeSlot === slot;
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            disabled={!free}
+                            className={`booking-slot ${active ? 'active' : ''}`}
+                            aria-pressed={active}
+                            onClick={() => setTimeSlot(slot)}
+                          >
+                            <span>{slot}</span>
+                            <small>{free ? t('bk.open') : t('bk.taken')}</small>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="slot-panel-action">
+                    <div>
+                      <span>{t('bk.selection')}</span>
+                      <strong>
+                        {timeSlot ? `${selectedTable.label} · ${timeSlot}` : t('bk.chooseTime')}
+                      </strong>
+                    </div>
+                    <button
+                      className="primary"
+                      disabled={!timeSlot}
+                      onClick={() => setStep(2)}
+                    >
+                      {t('bk.nextDetails')} <span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="slot-panel-empty">
+                  <span className="empty-map-pin" aria-hidden="true">⌖</span>
+                  <h2>{t('bk.selectPrompt')}</h2>
+                  <p>{t('bk.selectPromptSub')}</p>
+                  <div className="empty-tip">
+                    <span aria-hidden="true">↗</span>
+                    {t('bk.hoverTip')}
+                  </div>
+                </div>
+              )}
+            </aside>
           </div>
         </section>
       )}
