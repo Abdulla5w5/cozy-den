@@ -61,7 +61,7 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Book a 2-hour table session online, then pick from 100+ tabletop games and order great food when you arrive. Your den, your rules.',
     ar: 'احجز طاولتك ساعتين أونلاين، ولما توصل اختار من أكثر من ١٠٠ لعبة واطلب اللي يعجبك. المكان مكانكم والجو جوّكم.',
   },
-  'home.claim': { en: 'Claim Your Table', ar: 'احجز طاولتك' },
+  'home.claim': { en: 'Book Your Table', ar: 'احجز طاولتك' },
   'home.explore': { en: 'Explore Games', ar: 'تصفّح الألعاب' },
   'home.stat.games': { en: 'Games on shelf', ar: 'لعبة على الرف' },
   'home.stat.tables': { en: 'Cozy tables', ar: 'طاولات حق جمعتكم' },

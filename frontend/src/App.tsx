@@ -114,7 +114,7 @@ export function App() {
       )}
       <header className="topbar">
         <Link to="/" className="brand brand-lockup" aria-label={t('brand.home')}>
-          <img src="/brand/cozy-den-wordmark.png" alt="Cozy Den" />
+          <img src="/brand/cozy-den-header-stacked.png" alt={t('brand.logoAlt')} />
         </Link>
         {/* Guests see four links, which fit without scrolling; signed-in users
             get extra links and the row becomes swipeable. */}
