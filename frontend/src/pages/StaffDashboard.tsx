@@ -14,9 +14,10 @@ type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | '
 interface Customer {
   name: string;
   email: string;
+  phone: string | null;
   visits: number;
   totalCents: number;
-  lastVisit: string;
+  lastVisit: string | null;
 }
 
 function todayIso() {
@@ -547,6 +548,7 @@ function CustomersTab() {
             <tr>
               <th>{t('bk.name')}</th>
               <th>{t('bk.email')}</th>
+              <th>{t('auth.phone')}</th>
               <th>{t('cust.visits')}</th>
               <th>{t('cust.spent')}</th>
               <th>{t('cust.last')}</th>
@@ -561,9 +563,18 @@ function CustomersTab() {
                     {c.email}
                   </a>
                 </td>
+                <td>
+                  {c.phone ? (
+                    <a href={`tel:${c.phone}`} className="card-link" dir="ltr">
+                      {c.phone}
+                    </a>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </td>
                 <td>{c.visits}</td>
                 <td>{money(c.totalCents)}</td>
-                <td>{c.lastVisit}</td>
+                <td>{c.lastVisit ?? '—'}</td>
               </tr>
             ))}
           </tbody>

@@ -25,6 +25,14 @@ const GOOGLE_CLIENT_ID =
     | undefined) || undefined;
 
 let gisPromise: Promise<void> | null = null;
+
+function isKuwaitPhone(value: string) {
+  const western = value.replace(/[٠-٩۰-۹]/g, (digit) =>
+    String('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'.indexOf(digit) % 10),
+  );
+  const digits = western.replace(/\D/g, '').replace(/^(?:00965|965)/, '');
+  return /^(?:[2569]\d{7}|41\d{6})$/.test(digits);
+}
 /**
  * `locale` on renderButton is ignored — GIS takes its language from the `hl`
  * query param on the script itself, and without it Google falls back to the
@@ -54,6 +62,8 @@ export function StaffLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const phoneRef = useRef('');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -75,11 +85,15 @@ export function StaffLogin() {
     e.preventDefault();
     setError(null);
     setNote(null);
+    if (mode === 'signup' && !isKuwaitPhone(phone)) {
+      setError(t('auth.phoneInvalid'));
+      return;
+    }
     setBusy(true);
     try {
       const path = mode === 'login' ? '/auth/login' : '/auth/register';
       const body =
-        mode === 'login' ? { email, password } : { email, name, password };
+        mode === 'login' ? { email, password } : { email, name, phone, password };
       const { user } = await api.post<{ user: AuthUser }>(path, body);
       afterAuth(user);
     } catch (err) {
@@ -90,9 +104,14 @@ export function StaffLogin() {
   }
 
   const handleCredential = async (resp: { credential: string }) => {
+    if (mode === 'signup' && !isKuwaitPhone(phoneRef.current)) {
+      setError(t('auth.phoneInvalid'));
+      return;
+    }
     try {
       const { user } = await api.post<{ user: AuthUser }>('/auth/google', {
         idToken: resp.credential,
+        ...(mode === 'signup' ? { phone: phoneRef.current } : {}),
       });
       afterAuth(user);
     } catch (e) {
@@ -131,6 +150,11 @@ export function StaffLogin() {
     setMode(m);
     setError(null);
     setNote(null);
+  }
+
+  function updatePhone(value: string) {
+    setPhone(value);
+    phoneRef.current = value;
   }
 
   return (
@@ -198,19 +222,40 @@ export function StaffLogin() {
           </div>
 
           {mode === 'signup' && (
-            <div className="auth-field">
-              <label>{t('auth.username')}</label>
-              <div className="auth-input">
-                <span className="ico">👤</span>
-                <input
-                  type="text"
-                  required
-                  placeholder={t('auth.usernamePh')}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
+            <>
+              <div className="auth-field">
+                <label>{t('auth.username')}</label>
+                <div className="auth-input">
+                  <span className="ico">👤</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder={t('auth.usernamePh')}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
+              <div className="auth-field">
+                <label>{t('auth.phone')}</label>
+                <div className="auth-input">
+                  <span className="ico">📱</span>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    required
+                    dir="ltr"
+                    maxLength={20}
+                    placeholder={t('auth.phonePh')}
+                    value={phone}
+                    onChange={(e) => updatePhone(e.target.value)}
+                    aria-describedby="signup-phone-hint"
+                  />
+                </div>
+                <small id="signup-phone-hint" className="muted">{t('auth.phoneHint')}</small>
+              </div>
+            </>
           )}
 
           <div className="auth-field">

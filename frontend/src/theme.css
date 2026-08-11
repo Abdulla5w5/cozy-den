@@ -378,3 +378,92 @@
     justify-content: center;
   }
 }
+
+/* Booking map keeps the hand-drawn room readable at night while its controls
+   become true dark surfaces instead of a simple colour inversion. */
+[data-theme='dark'] .booking-card {
+  border-color: rgba(246, 239, 227, 0.72);
+  background:
+    linear-gradient(145deg, rgba(244, 119, 0, 0.09), transparent 30%),
+    var(--surface-container);
+}
+[data-theme='dark'] .booking-hours,
+[data-theme='dark'] .cafe-map-shell,
+[data-theme='dark'] .booking-slot-panel {
+  border-color: rgba(246, 239, 227, 0.72);
+  background: #171a21;
+  box-shadow: 5px 5px 0 #050608;
+}
+[data-theme='dark'] .booking-date-tray,
+[data-theme='dark'] .slot-panel-action {
+  border-color: #07080b;
+  background: linear-gradient(135deg, #ffd83b, #f5b91e);
+  color: #17120d;
+  box-shadow: 4px 4px 0 #050608;
+}
+[data-theme='dark'] .booking-date-field input {
+  border-color: #17120d;
+  background: #fff8e9;
+  color: #17120d;
+}
+[data-theme='dark'] .cafe-floor-plan {
+  border-color: rgba(246, 239, 227, 0.64);
+  background:
+    linear-gradient(90deg, transparent 49.6%, rgba(255, 224, 180, 0.045) 50%, transparent 50.4%),
+    linear-gradient(0deg, transparent 49.6%, rgba(255, 224, 180, 0.045) 50%, transparent 50.4%),
+    radial-gradient(circle at 13px 13px, rgba(255, 255, 255, 0.035) 1px, transparent 1.2px),
+    #27231e;
+  background-size: 72px 72px, 72px 72px, 26px 26px, auto;
+  box-shadow: inset 0 0 65px rgba(0, 0, 0, 0.42);
+}
+[data-theme='dark'] .cafe-floor-plan::before,
+[data-theme='dark'] .cafe-floor-plan::after {
+  border-color: rgba(255, 235, 205, 0.25);
+}
+[data-theme='dark'] .floor-entrance {
+  background: #27231e;
+  color: rgba(246, 239, 227, 0.65);
+}
+[data-theme='dark'] .floor-loading {
+  background: rgba(23, 26, 33, 0.78);
+}
+[data-theme='dark'] .map-live-badge,
+[data-theme='dark'] .slot-panel-meta > span {
+  border-color: rgba(246, 239, 227, 0.65);
+  background: #20242d;
+  color: var(--ink);
+}
+[data-theme='dark'] .slot-panel-head {
+  border-color: rgba(246, 239, 227, 0.62);
+  background:
+    radial-gradient(circle at 95% 5%, rgba(255, 210, 28, 0.14), transparent 8rem),
+    #20242d;
+}
+[data-theme='dark'] .booking-slot {
+  border-color: #464b55;
+  background: #20242d;
+  color: var(--ink);
+}
+[data-theme='dark'] .booking-slot:hover:not(:disabled) {
+  border-color: rgba(246, 239, 227, 0.75);
+  background: #292e38;
+  box-shadow: 2px 2px 0 #050608;
+}
+[data-theme='dark'] .booking-slot.active {
+  border-color: #07080b;
+  background: var(--primary);
+  color: #17120d;
+  box-shadow: 2px 2px 0 #050608;
+}
+[data-theme='dark'] .booking-slot.active small {
+  color: #17120d;
+}
+[data-theme='dark'] .empty-tip {
+  border-color: #535863;
+  background: #20242d;
+}
+[data-theme='dark'] .slot-panel-action .primary {
+  border-color: #07080b;
+  color: #fff;
+  box-shadow: 3px 3px 0 #050608;
+}

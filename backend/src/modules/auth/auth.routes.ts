@@ -19,6 +19,7 @@ import {
   verifyEmailToken,
   isEmailVerified,
 } from './verification';
+import { kuwaitPhoneSchema } from '../../utils/phone';
 
 export const authRouter = Router();
 
@@ -44,13 +45,14 @@ async function issueSession(res: Response, user: UserRow) {
 const registerSchema = z.object({
   email: z.string().trim().email().max(200),
   name: z.string().trim().min(1).max(120),
+  phone: kuwaitPhoneSchema,
   password: z.string().min(8).max(200),
 });
 
 // POST /api/auth/register — universal sign up (auto-signs in).
 authRouter.post('/register', loginLimiter, validate(registerSchema), async (req, res, next) => {
   try {
-    const user = await registerUser(req.body.email, req.body.name, req.body.password);
+    const user = await registerUser(req.body.email, req.body.name, req.body.phone, req.body.password);
     // New self-registered accounts start unverified; email the confirm link.
     void sendVerificationEmail({ id: user.id, name: user.name, email: user.email });
     res.status(201).json({ user: await issueSession(res, user) });
@@ -74,13 +76,18 @@ authRouter.post('/login', loginLimiter, validate(loginSchema), async (req, res, 
   }
 });
 
-const googleSchema = z.object({ idToken: z.string().min(10).max(5000) });
+const googleSchema = z.object({
+  idToken: z.string().min(10).max(5000),
+  // Existing Google accounts can sign in without re-entering contact details;
+  // creating a new Google account still requires this in the service below.
+  phone: kuwaitPhoneSchema.optional(),
+});
 
 // POST /api/auth/google — verify a Google ID token, then create/login the user.
 authRouter.post('/google', loginLimiter, validate(googleSchema), async (req, res, next) => {
   try {
     const g = await verifyGoogleToken(req.body.idToken);
-    const user = await upsertGoogleUser(g.email, g.name, g.emailVerified);
+    const user = await upsertGoogleUser(g.email, g.name, g.emailVerified, req.body.phone);
     res.json({ user: await issueSession(res, user) });
   } catch (err) {
     next(err);

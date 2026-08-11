@@ -8,11 +8,12 @@ export interface UserRow {
   id: number;
   email: string;
   name: string;
+  phone: string | null;
   password_hash: string | null;
   provider: string;
 }
 
-const SELECT = 'SELECT id, email, name, password_hash, provider FROM users';
+const SELECT = 'SELECT id, email, name, phone, password_hash, provider FROM users';
 let googleClient: OAuth2Client | undefined;
 
 function getGoogleClient(): OAuth2Client {
@@ -57,6 +58,7 @@ export async function getUserByEmail(email: string): Promise<UserRow | null> {
 export async function registerUser(
   email: string,
   name: string,
+  phone: string,
   password: string
 ): Promise<UserRow> {
   if (await getUserByEmail(email)) {
@@ -64,10 +66,10 @@ export async function registerUser(
   }
   const hash = await bcrypt.hash(password, 10);
   const { rows } = await query<UserRow>(
-    `INSERT INTO users (email, name, password_hash, provider)
-     VALUES ($1, $2, $3, 'local')
-     RETURNING id, email, name, password_hash, provider`,
-    [email.toLowerCase(), name, hash]
+    `INSERT INTO users (email, name, phone, password_hash, provider)
+     VALUES ($1, $2, $3, $4, 'local')
+     RETURNING id, email, name, phone, password_hash, provider`,
+    [email.toLowerCase(), name, phone, hash]
   );
   return rows[0];
 }
@@ -94,6 +96,7 @@ export async function upsertGoogleUser(
   email: string,
   name: string,
   googleVerified: boolean,
+  phone?: string,
 ): Promise<UserRow> {
   const existing = await getUserByEmail(email);
   if (existing) {
@@ -104,13 +107,22 @@ export async function upsertGoogleUser(
         [existing.id],
       );
     }
+    // Lets a legacy Google account acquire its missing phone when the owner
+    // intentionally uses the sign-up form, without overwriting known contact.
+    if (!existing.phone && phone) {
+      await query('UPDATE users SET phone = $1 WHERE id = $2 AND phone IS NULL', [phone, existing.id]);
+      return { ...existing, phone };
+    }
     return existing;
   }
+  if (!phone) {
+    throw new ApiError(400, 'A valid Kuwait phone number is required to create an account.');
+  }
   const { rows } = await query<UserRow>(
-    `INSERT INTO users (email, name, provider, email_verified, email_verified_at)
-     VALUES ($1, $2, 'google', $3, CASE WHEN $3 THEN now() END)
-     RETURNING id, email, name, password_hash, provider`,
-    [email.toLowerCase(), name, googleVerified]
+    `INSERT INTO users (email, name, phone, provider, email_verified, email_verified_at)
+     VALUES ($1, $2, $3, 'google', $4, CASE WHEN $4 THEN now() END)
+     RETURNING id, email, name, phone, password_hash, provider`,
+    [email.toLowerCase(), name, phone, googleVerified]
   );
   return rows[0];
 }

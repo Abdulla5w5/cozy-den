@@ -3,38 +3,46 @@ import { query } from '../../db/pool';
 export interface CustomerRow {
   name: string;
   email: string;
+  phone: string | null;
   visits: number;
   totalCents: number;
-  lastVisit: string;
+  lastVisit: string | null;
 }
 
 /**
- * Recurrent customers across all time — grouped by email, most-visits first.
- * Gives the counter/sales a contact list (name + email) for events & offers.
+ * Registered customers with their all-time booking totals. Starting from users
+ * makes a new signup contactable before their first visit; the bounded result
+ * keeps response and browser memory constant as the customer base grows.
  */
 export async function getRecurrentCustomers(limit = 200): Promise<CustomerRow[]> {
   const { rows } = await query<{
     name: string;
     email: string;
+    phone: string | null;
     visits: string;
     total_cents: string;
     last_visit: string;
   }>(
-    `SELECT max(guest_name) AS name,
-            guest_email     AS email,
-            count(*)        AS visits,
-            coalesce(sum(total_cents), 0) AS total_cents,
-            to_char(max(booking_date), 'YYYY-MM-DD') AS last_visit
-       FROM bookings
-      WHERE status <> 'cancelled'
-      GROUP BY guest_email
-      ORDER BY visits DESC, total_cents DESC
+    `SELECT u.name,
+            u.email,
+            u.phone,
+            count(b.id) AS visits,
+            coalesce(sum(b.total_cents), 0) AS total_cents,
+            to_char(max(b.booking_date), 'YYYY-MM-DD') AS last_visit
+       FROM users u
+       LEFT JOIN bookings b
+         ON lower(b.guest_email) = u.email
+        AND b.status <> 'cancelled'
+      WHERE NOT u.is_staff
+      GROUP BY u.id
+      ORDER BY visits DESC, last_visit DESC NULLS LAST, u.created_at DESC
       LIMIT $1`,
     [limit]
   );
   return rows.map((r) => ({
     name: r.name,
     email: r.email,
+    phone: r.phone,
     visits: parseInt(r.visits, 10),
     totalCents: parseInt(r.total_cents, 10),
     lastVisit: r.last_visit,
