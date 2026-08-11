@@ -407,6 +407,8 @@
   color: #17120d;
 }
 [data-theme='dark'] .cafe-floor-plan {
+  --floor-cutout: #171a21;
+  --floor-surface: #27231e;
   border-color: rgba(246, 239, 227, 0.64);
   background:
     linear-gradient(90deg, transparent 49.6%, rgba(255, 224, 180, 0.045) 50%, transparent 50.4%),
@@ -457,6 +459,14 @@
 }
 [data-theme='dark'] .booking-slot.active small {
   color: #17120d;
+}
+[data-theme='dark'] .floor-table,
+[data-theme='dark'] .floor-table:hover:not(:disabled),
+[data-theme='dark'] .floor-table:focus-visible {
+  border-color: transparent;
+  background: transparent;
+  color: #fff;
+  box-shadow: none;
 }
 [data-theme='dark'] .empty-tip {
   border-color: #535863;

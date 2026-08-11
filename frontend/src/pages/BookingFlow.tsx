@@ -23,14 +23,14 @@ interface FloorPlacement {
 // API remains the source of truth for which tables exist and which slots are
 // free; an unknown future table still receives a sensible fallback position.
 const FLOOR_PLACEMENTS: Record<string, FloorPlacement> = {
-  'Small Table 1': { x: 18, y: 24, shape: 'small', angle: -4 },
-  'Small Table 2': { x: 43, y: 19, shape: 'small', angle: 3 },
-  'Small Table 3': { x: 78, y: 23, shape: 'small', angle: -2 },
-  'Big Table 1': { x: 24, y: 61, shape: 'wide', angle: 2 },
-  'Big Table 2': { x: 49, y: 43, shape: 'round', angle: -2 },
-  'Big Table 3': { x: 72, y: 67, shape: 'wide', angle: -2 },
-  'Big Table 4 (D&D)': { x: 45, y: 76, shape: 'communal', angle: 1 },
-  'Floor Table': { x: 83, y: 46, shape: 'floor', angle: 3 },
+  'Small Table 1': { x: 52, y: 39, shape: 'small', angle: 0 },
+  'Small Table 2': { x: 80, y: 50, shape: 'small', angle: 1 },
+  'Small Table 3': { x: 65, y: 18, shape: 'small', angle: -1 },
+  'Big Table 1': { x: 38, y: 18, shape: 'wide', angle: 0 },
+  'Big Table 2': { x: 53, y: 65, shape: 'round', angle: 0 },
+  'Big Table 3': { x: 72, y: 82, shape: 'wide', angle: 0 },
+  'Big Table 4 (D&D)': { x: 14, y: 84, shape: 'communal', angle: 0 },
+  'Floor Table': { x: 85, y: 19, shape: 'floor', angle: 2 },
 };
 
 const FALLBACK_PLACEMENTS: FloorPlacement[] = [
@@ -54,6 +54,49 @@ function mapTableName(label: string) {
     .replace('Small Table ', 'S')
     .replace('Big Table ', 'B')
     .replace('Floor Table', 'Floor');
+}
+
+interface ChairPosition {
+  x: number;
+  y: number;
+  angle: number;
+}
+
+function chairPositions(shape: FloorShape, count: number): ChairPosition[] {
+  // Round, floor and D&D tables read best with seats following their silhouette.
+  if (shape === 'round' || shape === 'floor' || shape === 'communal') {
+    const start = shape === 'communal' ? -90 : -90;
+    return Array.from({ length: count }, (_, index) => {
+      const degrees = start + (360 / count) * index;
+      const radians = (degrees * Math.PI) / 180;
+      const radiusX = shape === 'round' ? 60 : shape === 'communal' ? 59 : 57;
+      const radiusY = shape === 'round' ? 60 : shape === 'communal' ? 59 : 61;
+      return {
+        x: 50 + Math.cos(radians) * radiusX,
+        y: 50 + Math.sin(radians) * radiusY,
+        angle: degrees + 90,
+      };
+    });
+  }
+
+  // Rectangular tables place extension chairs along their long edges, with the
+  // remaining chairs at the ends. This keeps 12-seat tables readable as tables
+  // that extend beyond their standard eight-seat setup.
+  const sideCount = Math.min(2, count);
+  const edgeCount = count - sideCount;
+  const topCount = Math.ceil(edgeCount / 2);
+  const bottomCount = Math.floor(edgeCount / 2);
+  const positions: ChairPosition[] = [];
+  const addEdge = (amount: number, y: number, angle: number) => {
+    for (let index = 0; index < amount; index += 1) {
+      positions.push({ x: ((index + 1) / (amount + 1)) * 100, y, angle });
+    }
+  };
+  addEdge(topCount, -10, 0);
+  addEdge(bottomCount, 110, 180);
+  if (sideCount >= 1) positions.push({ x: -8, y: 50, angle: 90 });
+  if (sideCount >= 2) positions.push({ x: 108, y: 50, angle: -90 });
+  return positions;
 }
 
 function todayIso() {
@@ -97,6 +140,8 @@ export function BookingFlow() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { t, money } = useI18n();
   const bookingCardRef = useRef<HTMLDivElement | null>(null);
+  const slotPanelRef = useRef<HTMLElement | null>(null);
+  const slotListRef = useRef<HTMLDivElement | null>(null);
   const hasRenderedStepRef = useRef(false);
 
   // Captured once, synchronously on first render, so the availability effect
@@ -110,6 +155,7 @@ export function BookingFlow() {
   const [date, setDate] = useState(draft?.date ?? todayIso());
   const [availability, setAvailability] = useState<TableAvailability[]>([]);
   const [loadingAvailability, setLoadingAvailability] = useState(true);
+  const [availabilityRetry, setAvailabilityRetry] = useState(0);
   const [slots, setSlots] = useState<string[]>([]);
   const [tableId, setTableId] = useState<number | null>(null);
   const [timeSlot, setTimeSlot] = useState<string | null>(null);
@@ -156,7 +202,7 @@ export function BookingFlow() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoadingAvailability(false));
-  }, [date]);
+  }, [date, availabilityRetry]);
 
   useEffect(() => {
     // Prefill from the signed-in account so bookings link to their history.
@@ -180,6 +226,35 @@ export function BookingFlow() {
   }, [step]);
 
   const selectedTable = availability.find((tb) => tb.tableId === tableId) || null;
+
+  useEffect(() => {
+    // A different table can have a different availability pattern. Always show
+    // its earliest times first instead of preserving another table's scroll.
+    if (slotListRef.current) slotListRef.current.scrollTop = 0;
+  }, [tableId, date]);
+
+  function selectTable(nextTableId: number) {
+    if (tableId !== nextTableId) setTimeSlot(null);
+    setTableId(nextTableId);
+
+    // Mobile uses one page scroll instead of a nested time-list scroller. Reset
+    // any position retained after resizing, then reveal the details beneath the
+    // map with enough clearance for the two-row sticky header.
+    if (slotListRef.current) slotListRef.current.scrollTop = 0;
+    if (!window.matchMedia('(max-width: 960px)').matches) return;
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const panel = slotPanelRef.current;
+        if (!panel) return;
+        const header = document.querySelector<HTMLElement>('.topbar');
+        const headerOffset = (header?.getBoundingClientRect().height ?? 0) + 14;
+        const top = panel.getBoundingClientRect().top + window.scrollY - headerOffset;
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? 'auto' : 'smooth' });
+      });
+    });
+  }
 
   // Surface a failed/cancelled return from the payment gateway. (The step is
   // already set to 2 on first render when a draft was restored.)
@@ -291,14 +366,23 @@ export function BookingFlow() {
                 <div className="floor-window floor-window-two" aria-hidden="true" />
                 <div className="floor-counter" aria-hidden="true">
                   <span>{t('bk.counter')}</span>
-                  <i>☕</i>
+                  <i /><i /><i />
                 </div>
                 <div className="floor-shelf" aria-hidden="true">
-                  <i>♟</i>
                   <span>{t('bk.gameWall')}</span>
                 </div>
                 <span className="floor-plant plant-one" aria-hidden="true">✦</span>
                 <span className="floor-plant plant-two" aria-hidden="true">✦</span>
+                <span className="floor-game-prop floor-die-prop" aria-hidden="true">
+                  <i /><i /><i /><i />
+                </span>
+                <span className="floor-game-prop floor-card-prop" aria-hidden="true">
+                  <b>A</b><em>♠</em>
+                </span>
+                <span className="floor-game-prop floor-door-prop" aria-hidden="true" />
+                <span className="floor-game-prop floor-domino-prop" aria-hidden="true">
+                  <i /><i /><i /><i />
+                </span>
                 <span className="floor-entrance" aria-hidden="true">{t('bk.entrance')}</span>
 
                 {loadingAvailability && (
@@ -308,10 +392,22 @@ export function BookingFlow() {
                   </div>
                 )}
 
+                {!loadingAvailability && availability.length === 0 && (
+                  <div className="floor-loading floor-load-error" role="alert">
+                    <span className="floor-loading-die" aria-hidden="true">⚀</span>
+                    <strong>{t('bk.tablesUnavailable')}</strong>
+                    <span>{t('bk.tablesUnavailableSub')}</span>
+                    <button type="button" onClick={() => setAvailabilityRetry((n) => n + 1)}>
+                      {t('bk.retryTables')}
+                    </button>
+                  </div>
+                )}
+
                 {!loadingAvailability && availability.map((tb, index) => {
                   const placement = floorPlacement(tb.label, index);
                   const selected = tableId === tb.tableId;
                   const soldOut = tb.freeSlots.length === 0;
+                  const chairs = chairPositions(placement.shape, tb.capacity);
                   const style = {
                     '--table-x': `${placement.x}%`,
                     '--table-y': `${placement.y}%`,
@@ -329,11 +425,21 @@ export function BookingFlow() {
                         seats: tb.capacity,
                         slots: tb.freeSlots.length,
                       })}
-                      onClick={() => {
-                        if (tableId !== tb.tableId) setTimeSlot(null);
-                        setTableId(tb.tableId);
-                      }}
+                      onClick={() => selectTable(tb.tableId)}
                     >
+                      <span className="table-shape-halo" aria-hidden="true" />
+                      <span className="table-seats" aria-hidden="true">
+                        {chairs.map((chair, chairIndex) => (
+                          <i
+                            key={chairIndex}
+                            style={{
+                              '--chair-x': `${chair.x}%`,
+                              '--chair-y': `${chair.y}%`,
+                              '--chair-angle': `${chair.angle}deg`,
+                            } as CSSProperties}
+                          />
+                        ))}
+                      </span>
                       <span className="floor-table-surface">
                         <strong>{mapTableName(tb.label)}</strong>
                         <small>{t('bk.seatsShort', { n: tb.capacity })}</small>
@@ -357,7 +463,11 @@ export function BookingFlow() {
               </div>
             </div>
 
-            <aside className={`booking-slot-panel ${selectedTable ? 'has-table' : ''}`} aria-live="polite">
+            <aside
+              ref={slotPanelRef}
+              className={`booking-slot-panel ${selectedTable ? 'has-table' : ''}`}
+              aria-live="polite"
+            >
               {selectedTable ? (
                 <>
                   <div className="slot-panel-head">
@@ -383,7 +493,7 @@ export function BookingFlow() {
                       {timeSlot && <span className="chosen-time">{timeSlot}</span>}
                     </div>
 
-                    <div className="booking-slots">
+                    <div ref={slotListRef} className="booking-slots">
                       {slots.map((slot) => {
                         const free = selectedTable.freeSlots.includes(slot);
                         const active = timeSlot === slot;
