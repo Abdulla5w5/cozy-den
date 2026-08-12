@@ -5109,9 +5109,16 @@ button.link {
 .floor-table-communal .floor-table-surface::after {
   display: none;
 }
+/* The hexagon centres its content, so the label has less room than the table's
+   width suggests and "D&D" was ellipsing to "D…". Let it size with the room
+   like every other label, and spill rather than truncate — the same treatment
+   the floor table already uses. */
 .floor-table-communal .floor-table-surface strong {
   direction: ltr;
-  font-size: 0.7rem;
+  max-width: none;
+  overflow: visible;
+  font-size: clamp(0.55rem, 2cqw, 0.8rem);
+  text-overflow: clip;
 }
 .table-seats {
   position: absolute;
@@ -5168,7 +5175,7 @@ button.link {
   max-width: none;
   overflow: visible;
   padding-inline: 0.25rem;
-  font-size: 0.7rem;
+  font-size: clamp(0.55rem, 2cqw, 0.8rem);
   text-overflow: clip;
   white-space: nowrap;
 }
