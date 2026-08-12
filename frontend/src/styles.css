@@ -5792,3 +5792,29 @@ button.link {
     grid-column: 1 / -1;
   }
 }
+
+/* Jump links across the menu's sections. With ~20 headings this is the
+   difference between browsing and scrolling. */
+.menu-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1.5rem;
+}
+.menu-jump a {
+  padding: 0.34rem 0.7rem;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--surface-low);
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.menu-jump a:hover {
+  background: var(--yellow);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.section[id^='menu-'] {
+  scroll-margin-top: 130px;
+}

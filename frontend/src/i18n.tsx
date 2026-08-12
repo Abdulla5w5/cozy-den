@@ -203,6 +203,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   },
   'pr.latePeak': { en: 'Late seating — peak (KD)', ar: 'الجلسة المتأخرة — الذروة (د.ك)' },
   'pr.lateOffPeak': { en: 'Late seating — off-peak (KD)', ar: 'الجلسة المتأخرة — عادي (د.ك)' },
+  'menu.sectionsNav': { en: 'Menu sections', ar: 'أقسام المنيو' },
   'bk.partySize': { en: 'How many people?', ar: 'كم شخص؟' },
   'bk.partyHint': { en: 'Up to {n} at this table', ar: 'حتى {n} على هذي الطاولة' },
   'bk.people': { en: '{n} people', ar: '{n} أشخاص' },

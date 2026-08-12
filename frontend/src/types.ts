@@ -64,6 +64,13 @@ export interface MenuItem {
   price_cents: number;
   description: string;
   available?: boolean;
+  /** Arabic copy; empty when staff have not supplied it, so fall back to `name`. */
+  name_ar?: string;
+  description_ar?: string;
+  /** The menu heading this sits under, e.g. "Coffee". */
+  section?: string;
+  section_ar?: string;
+  display_order?: number;
 }
 
 export interface BookingItemView {

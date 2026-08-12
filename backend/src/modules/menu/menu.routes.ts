@@ -8,13 +8,14 @@ import { removeOrRetire } from '../../utils/catalogue';
 
 export const menuRouter = Router();
 
-const SELECT = `SELECT id, name, category, price_cents, description, available
+const SELECT = `SELECT id, name, name_ar, category, price_cents, description, description_ar,
+                       section, section_ar, display_order, available
                   FROM menu_items`;
 
 // GET /api/menu — what customers can order today.
 menuRouter.get('/', async (_req, res, next) => {
   try {
-    const { rows } = await query(`${SELECT} WHERE available ORDER BY category, name`);
+    const { rows } = await query(`${SELECT} WHERE available ORDER BY display_order, name`);
     res.json({ items: rows });
   } catch (err) {
     next(err);
@@ -25,7 +26,7 @@ menuRouter.get('/', async (_req, res, next) => {
 // dish can be brought back rather than retyped.
 menuRouter.get('/all', requireStaff, async (_req, res, next) => {
   try {
-    const { rows } = await query(`${SELECT} ORDER BY available DESC, category, name`);
+    const { rows } = await query(`${SELECT} ORDER BY available DESC, display_order, name`);
     res.json({ items: rows });
   } catch (err) {
     next(err);
@@ -39,6 +40,11 @@ const menuBody = z.object({
   priceCents: z.number().int().min(0).max(1000000),
   description: z.string().trim().max(2000).default(''),
   available: z.boolean().default(true),
+  nameAr: z.string().trim().max(200).default(''),
+  descriptionAr: z.string().trim().max(2000).default(''),
+  section: z.string().trim().max(120).default(''),
+  sectionAr: z.string().trim().max(120).default(''),
+  displayOrder: z.number().int().min(0).max(100000).default(0),
 });
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
@@ -48,9 +54,11 @@ menuRouter.post('/', requireStaff, validate(menuBody), async (req, res, next) =>
   try {
     const b = req.body;
     const { rows } = await query<{ id: number }>(
-      `INSERT INTO menu_items (name, category, price_cents, description, available)
-       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [b.name, b.category, b.priceCents, b.description, b.available],
+      `INSERT INTO menu_items (name, category, price_cents, description, available,
+                               name_ar, description_ar, section, section_ar, display_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      [b.name, b.category, b.priceCents, b.description, b.available,
+       b.nameAr, b.descriptionAr, b.section, b.sectionAr, b.displayOrder],
     );
     res.status(201).json({ id: rows[0].id });
   } catch (err) {
@@ -71,9 +79,12 @@ menuRouter.put(
     try {
       const b = req.body;
       const { rowCount } = await query(
-        `UPDATE menu_items SET name=$1, category=$2, price_cents=$3, description=$4, available=$5
-          WHERE id=$6`,
-        [b.name, b.category, b.priceCents, b.description, b.available, Number(req.params.id)],
+        `UPDATE menu_items SET name=$1, category=$2, price_cents=$3, description=$4, available=$5,
+                name_ar=$6, description_ar=$7, section=$8, section_ar=$9, display_order=$10
+          WHERE id=$11`,
+        [b.name, b.category, b.priceCents, b.description, b.available,
+         b.nameAr, b.descriptionAr, b.section, b.sectionAr, b.displayOrder,
+         Number(req.params.id)],
       );
       if (!rowCount) throw new ApiError(404, 'Menu item not found.');
       res.json({ ok: true });

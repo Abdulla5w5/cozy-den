@@ -492,3 +492,14 @@
   border-color: rgba(246, 239, 227, 0.5);
   background: #20242d;
 }
+
+[data-theme='dark'] .menu-jump a {
+  border-color: rgba(246, 239, 227, 0.7);
+  background: #1b1e26;
+  color: var(--ink);
+}
+[data-theme='dark'] .menu-jump a:hover {
+  border-color: var(--tertiary);
+  background: #242934;
+  color: var(--tertiary);
+}
