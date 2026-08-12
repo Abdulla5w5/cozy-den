@@ -40,11 +40,15 @@ const menuBody = z.object({
   priceCents: z.number().int().min(0).max(1000000),
   description: z.string().trim().max(2000).default(''),
   available: z.boolean().default(true),
-  nameAr: z.string().trim().max(200).default(''),
-  descriptionAr: z.string().trim().max(2000).default(''),
-  section: z.string().trim().max(120).default(''),
-  sectionAr: z.string().trim().max(120).default(''),
-  displayOrder: z.number().int().min(0).max(100000).default(0),
+  // Optional with NO default on purpose. These are set by the Foodics import
+  // as well as by staff, and a client that simply does not send a field must
+  // not silently blank it — an omitted field is "leave it alone", while an
+  // empty string is an explicit clear. See the COALESCE in the UPDATE below.
+  nameAr: z.string().trim().max(200).optional(),
+  descriptionAr: z.string().trim().max(2000).optional(),
+  section: z.string().trim().max(120).optional(),
+  sectionAr: z.string().trim().max(120).optional(),
+  displayOrder: z.number().int().min(0).max(100000).optional(),
 });
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
@@ -58,7 +62,8 @@ menuRouter.post('/', requireStaff, validate(menuBody), async (req, res, next) =>
                                name_ar, description_ar, section, section_ar, display_order)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
       [b.name, b.category, b.priceCents, b.description, b.available,
-       b.nameAr, b.descriptionAr, b.section, b.sectionAr, b.displayOrder],
+       b.nameAr ?? '', b.descriptionAr ?? '', b.section ?? '', b.sectionAr ?? '',
+       b.displayOrder ?? 0],
     );
     res.status(201).json({ id: rows[0].id });
   } catch (err) {
@@ -80,10 +85,15 @@ menuRouter.put(
       const b = req.body;
       const { rowCount } = await query(
         `UPDATE menu_items SET name=$1, category=$2, price_cents=$3, description=$4, available=$5,
-                name_ar=$6, description_ar=$7, section=$8, section_ar=$9, display_order=$10
+                name_ar=COALESCE($6, name_ar),
+                description_ar=COALESCE($7, description_ar),
+                section=COALESCE($8, section),
+                section_ar=COALESCE($9, section_ar),
+                display_order=COALESCE($10, display_order)
           WHERE id=$11`,
         [b.name, b.category, b.priceCents, b.description, b.available,
-         b.nameAr, b.descriptionAr, b.section, b.sectionAr, b.displayOrder,
+         b.nameAr ?? null, b.descriptionAr ?? null, b.section ?? null,
+         b.sectionAr ?? null, b.displayOrder ?? null,
          Number(req.params.id)],
       );
       if (!rowCount) throw new ApiError(404, 'Menu item not found.');

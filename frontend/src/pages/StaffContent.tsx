@@ -630,6 +630,14 @@ const blankItem = {
   priceCents: 0,
   description: '',
   available: true,
+  // Arabic copy and the menu heading come from the Foodics import. They are
+  // edited here too, so an item saved from this form keeps them rather than
+  // losing what the import set.
+  nameAr: '',
+  descriptionAr: '',
+  section: '',
+  sectionAr: '',
+  displayOrder: 0,
 };
 
 export function MenuTab() {
@@ -660,6 +668,11 @@ export function MenuTab() {
       priceCents: m.price_cents,
       description: m.description,
       available: m.available !== false,
+      nameAr: m.name_ar ?? '',
+      descriptionAr: m.description_ar ?? '',
+      section: m.section ?? '',
+      sectionAr: m.section_ar ?? '',
+      displayOrder: m.display_order ?? 0,
     });
   }
 
@@ -735,12 +748,61 @@ export function MenuTab() {
               <span className="muted">{t('cat.priceHint')}</span>
             </label>
           </div>
+          <div className="row">
+            <label className="field inline">
+              {t('cat.nameAr')}
+              <input
+                dir="rtl"
+                maxLength={200}
+                value={form.nameAr}
+                onChange={(e) => setForm({ ...form, nameAr: e.target.value })}
+              />
+            </label>
+            <label className="field inline">
+              {t('cat.section')}
+              <input
+                maxLength={120}
+                value={form.section}
+                onChange={(e) => setForm({ ...form, section: e.target.value })}
+              />
+              <span className="muted">{t('cat.sectionHint')}</span>
+            </label>
+            <label className="field inline">
+              {t('cat.sectionAr')}
+              <input
+                dir="rtl"
+                maxLength={120}
+                value={form.sectionAr}
+                onChange={(e) => setForm({ ...form, sectionAr: e.target.value })}
+              />
+            </label>
+            <label className="field inline">
+              {t('cat.displayOrder')}
+              <input
+                inputMode="numeric"
+                value={String(form.displayOrder)}
+                onChange={(e) =>
+                  setForm({ ...form, displayOrder: Number(e.target.value.replace(/\D/g, '')) || 0 })
+                }
+              />
+              <span className="muted">{t('cat.displayOrderHint')}</span>
+            </label>
+          </div>
           <label className="field">
             {t('cat.description')}
             <textarea
               maxLength={2000}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            {t('cat.descriptionAr')}
+            <textarea
+              dir="rtl"
+              maxLength={2000}
+              value={form.descriptionAr}
+              onChange={(e) => setForm({ ...form, descriptionAr: e.target.value })}
             />
           </label>
           <label className="field">
