@@ -5687,6 +5687,79 @@ button.link {
   }
 }
 
+/* Large phones (including 430px iPhones) need the room to scale as one scene.
+   Previously only <=420px received compact table transforms, leaving common
+   iOS viewports with near-desktop furniture inside a narrow portrait map. */
+@media (max-width: 520px) {
+  .map-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.55rem;
+  }
+  .map-hint {
+    max-width: none;
+    line-height: 1.35;
+  }
+  .map-live-badge {
+    justify-self: start;
+  }
+  .cafe-floor-plan {
+    min-height: 440px;
+  }
+  .floor-table {
+    transform: translate(-50%, -50%) rotate(var(--table-angle));
+  }
+  .floor-table:focus-visible {
+    transform: translate(-50%, -50%) rotate(var(--table-angle)) scale(1.03);
+  }
+  .floor-table-surface,
+  .table-seats,
+  .table-shape-halo {
+    scale: 0.76;
+  }
+  .floor-counter,
+  .floor-shelf,
+  .floor-game-prop,
+  .floor-plant {
+    scale: 0.78;
+  }
+  .floor-counter {
+    transform-origin: top left;
+  }
+  .floor-shelf {
+    transform-origin: right center;
+  }
+  .floor-game-prop,
+  .floor-plant {
+    transform-origin: center;
+  }
+  .floor-legend {
+    justify-content: center;
+    gap: 0.5rem 0.75rem;
+    font-size: 0.66rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .map-live-badge {
+    display: none;
+  }
+  .cafe-floor-plan {
+    min-height: 420px;
+  }
+  .floor-table {
+    transform: translate(-50%, -50%) rotate(var(--table-angle));
+  }
+  .floor-table:focus-visible {
+    transform: translate(-50%, -50%) rotate(var(--table-angle)) scale(1.03);
+  }
+  .floor-table-surface,
+  .table-seats,
+  .table-shape-halo {
+    scale: 0.72;
+  }
+}
+
 @media (hover: none), (pointer: coarse) {
   .booking-slot:hover:not(:disabled) {
     border-color: var(--outline-variant);
