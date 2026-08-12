@@ -103,9 +103,12 @@ function chairPositions(shape: FloorShape, count: number): ChairPosition[] {
 // form offers; the server re-derives length, price and capacity on checkout, so
 // nothing here can be leaned on to buy a longer sitting than was paid for.
 const SESSION_MIN = 120;
-const STEP_MIN = 30;
+const MAX_SESSION_MIN = 360; // six hours
 const CLOSE_MIN = 27 * 60; // 03:00
 const OPEN_MIN = 14 * 60;
+// Sittings are sold in whole 2-hour blocks: two, four or six hours, and nothing
+// in between. A late seating is the exception and runs to closing instead.
+const BLOCK_DURATIONS = [SESSION_MIN, SESSION_MIN * 2, SESSION_MIN * 3];
 
 function slotToMinutes(hhmm: string) {
   const [h, m] = hhmm.split(':').map(Number);
@@ -120,6 +123,11 @@ function isLateStart(start: string) {
 
 function minDurationFor(start: string) {
   return isLateStart(start) ? CLOSE_MIN - slotToMinutes(start) : SESSION_MIN;
+}
+
+function maxDurationFor(start: string) {
+  const toClose = CLOSE_MIN - slotToMinutes(start);
+  return isLateStart(start) ? toClose : Math.min(toClose, MAX_SESSION_MIN);
 }
 
 /** Clock time a sitting ends, for the "until 18:00" label. */
@@ -292,9 +300,10 @@ export function BookingFlow() {
   // API (or a table with no entry) at the plain 2-hour session.
   const late = timeSlot ? isLateStart(timeSlot) : false;
   const floorMin = timeSlot ? minDurationFor(timeSlot) : SESSION_MIN;
-  const roomMin = timeSlot ? (selectedTable?.maxDuration?.[timeSlot] ?? floorMin) : floorMin;
-  const durationChoices: number[] = [];
-  for (let d = floorMin; d <= roomMin; d += STEP_MIN) durationChoices.push(d);
+  const roomMin = timeSlot
+    ? Math.min(selectedTable?.maxDuration?.[timeSlot] ?? floorMin, maxDurationFor(timeSlot))
+    : floorMin;
+  const durationChoices = late ? [floorMin] : BLOCK_DURATIONS.filter((d) => d <= roomMin);
 
   // Charged per 2-hour block, rounded up; a late seating is one flat rate. The
   // server recomputes this at checkout — this is the customer-facing preview.
@@ -305,9 +314,8 @@ export function BookingFlow() {
     // A new table or start time can allow a different range, so re-seat the
     // length inside it rather than carrying an now-impossible choice forward.
     if (!timeSlot) return;
-    setDurationMin((current) =>
-      current < floorMin || current > roomMin ? floorMin : current,
-    );
+    setDurationMin((current) => (durationChoices.includes(current) ? current : floorMin));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeSlot, tableId, floorMin, roomMin]);
 
   useEffect(() => {

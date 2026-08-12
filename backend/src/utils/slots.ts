@@ -12,8 +12,18 @@
 export const OPEN_MIN = 14 * 60; // 14:00
 export const CLOSE_MIN = 27 * 60; // 03:00 the following morning
 export const LAST_INTAKE_MIN = 26 * 60; // 02:00 — latest a customer may start
-export const SESSION_MIN = 120; // default and minimum session
-export const STEP_MIN = 30; // start-time and duration granularity
+export const SESSION_MIN = 120; // one block: the default and minimum session
+export const MAX_SESSION_MIN = 360; // six hours, the longest a customer may hold a table
+export const STEP_MIN = 30; // start-time granularity
+
+/**
+ * The only lengths a normal booking may be: two, four or six hours.
+ *
+ * Sittings are sold in whole 2-hour blocks, so there is no half-block to offer
+ * and nothing between them to choose. A late seating is the one exception — it
+ * runs to closing, whatever that leaves.
+ */
+export const BLOCK_DURATIONS: readonly number[] = [SESSION_MIN, SESSION_MIN * 2, SESSION_MIN * 3];
 
 function fmt(min: number): string {
   const h = Math.floor(min / 60) % 24;
@@ -48,9 +58,13 @@ export function isLateStart(start: string): boolean {
   return toMinutes(start) > CLOSE_MIN - SESSION_MIN;
 }
 
-/** The longest bookable length from this start, ignoring other bookings. */
+/**
+ * The longest bookable length from this start, ignoring other bookings.
+ * Bounded by closing time and by the six-hour ceiling, whichever bites first.
+ */
 export function maxDurationFor(start: string): number {
-  return CLOSE_MIN - toMinutes(start);
+  const toClose = CLOSE_MIN - toMinutes(start);
+  return isLateStart(start) ? toClose : Math.min(toClose, MAX_SESSION_MIN);
 }
 
 /**
@@ -62,10 +76,22 @@ export function minDurationFor(start: string): number {
   return isLateStart(start) ? maxDurationFor(start) : SESSION_MIN;
 }
 
+/**
+ * The lengths actually offered from this start.
+ *
+ * A late seating has exactly one: the remainder to closing. Everything else
+ * gets whichever whole blocks still fit before the café shuts.
+ */
+export function allowedDurations(start: string): number[] {
+  if (isLateStart(start)) return [maxDurationFor(start)];
+  const ceiling = maxDurationFor(start);
+  return BLOCK_DURATIONS.filter((d) => d <= ceiling);
+}
+
 /** Whether a customer-supplied length is legal for this start. */
 export function isValidDuration(start: string, durationMin: number): boolean {
-  if (!Number.isInteger(durationMin) || durationMin % STEP_MIN !== 0) return false;
-  return durationMin >= minDurationFor(start) && durationMin <= maxDurationFor(start);
+  if (!Number.isInteger(durationMin)) return false;
+  return allowedDurations(start).includes(durationMin);
 }
 
 /** Do two bookings, each a start plus a length, collide? */

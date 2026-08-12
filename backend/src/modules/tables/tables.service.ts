@@ -1,7 +1,7 @@
 import { query } from '../../db/pool';
 import {
   START_TIMES,
-  STEP_MIN,
+  allowedDurations,
   maxDurationFor,
   minDurationFor,
   overlaps,
@@ -83,15 +83,19 @@ export async function getAvailability(
         takenSlots.push(s);
         continue;
       }
-      // Room runs out at whichever comes first: closing, or the next booking.
+      // Room runs out at whichever comes first: closing, the six-hour ceiling,
+      // or the next booking on this table.
       const sMin = toMinutes(s);
       const nextStart = existing
         .map((b) => toMinutes(b.start))
         .filter((m) => m >= sMin)
         .reduce((lo, m) => Math.min(lo, m), Number.POSITIVE_INFINITY);
       const room = Math.min(maxDurationFor(s), nextStart - sMin);
+      // Report the longest length actually on offer, not the raw gap: sittings
+      // are sold in whole blocks, so a 5-hour gap still only sells 4 hours.
+      const fits = allowedDurations(s).filter((d) => d <= room);
       freeSlots.push(s);
-      maxDuration[s] = Math.max(shortest, Math.floor(room / STEP_MIN) * STEP_MIN);
+      maxDuration[s] = fits.length ? fits[fits.length - 1] : shortest;
     }
 
     return {

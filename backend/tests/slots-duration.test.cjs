@@ -13,6 +13,7 @@ const {
   maxDurationFor,
   minDurationFor,
   isValidDuration,
+  allowedDurations,
   overlaps,
   toMinutes,
 } = require('../dist/src/utils/slots.js');
@@ -40,18 +41,29 @@ test('late seatings run to closing and have no other length', () => {
   assert.strictEqual(minDurationFor('02:00'), 60);
 });
 
-test('normal seatings default to two hours and extend to closing', () => {
+test('normal seatings default to two hours and cap at six', () => {
   assert.strictEqual(minDurationFor('14:00'), 120);
-  assert.strictEqual(maxDurationFor('14:00'), 13 * 60, '14:00 to 03:00');
-  assert.strictEqual(maxDurationFor('01:00'), 120);
+  assert.strictEqual(maxDurationFor('14:00'), 360, 'six hours, not all the way to close');
+  assert.strictEqual(maxDurationFor('01:00'), 120, 'closing bites before the ceiling');
 });
 
-test('durations must be whole 30-minute steps within the sitting', () => {
+test('only whole 2/4/6-hour blocks are offered', () => {
+  assert.deepStrictEqual(allowedDurations('14:00'), [120, 240, 360]);
+  assert.deepStrictEqual(allowedDurations('23:00'), [120, 240], 'closing trims the six');
+  assert.deepStrictEqual(allowedDurations('01:00'), [120], 'only one block fits');
+  assert.deepStrictEqual(allowedDurations('01:30'), [90], 'late seating: to closing');
+  assert.deepStrictEqual(allowedDurations('02:00'), [60]);
+});
+
+test('part-hours and over-long sittings are rejected', () => {
   assert.ok(isValidDuration('14:00', 120));
   assert.ok(isValidDuration('14:00', 240));
+  assert.ok(isValidDuration('14:00', 360));
+  assert.ok(!isValidDuration('14:00', 180), 'three hours is not a whole block');
+  assert.ok(!isValidDuration('14:00', 150), 'no part-hours');
+  assert.ok(!isValidDuration('14:00', 420), 'past the six-hour ceiling');
   assert.ok(!isValidDuration('14:00', 90), 'below the 2-hour minimum');
-  assert.ok(!isValidDuration('14:00', 150 + 1), 'not a 30-minute step');
-  assert.ok(!isValidDuration('01:00', 150), 'would run past closing');
+  assert.ok(!isValidDuration('01:00', 240), 'would run past closing');
   assert.ok(isValidDuration('01:30', 90), 'the only late length');
   assert.ok(!isValidDuration('01:30', 120), 'past closing');
 });
@@ -66,5 +78,5 @@ test('a long evening booking collides with a late one', () => {
   assert.ok(overlaps('22:00', 240, '01:00', 120));
   // Back-to-back is still fine.
   assert.ok(!overlaps('14:00', 120, '16:00', 120));
-  assert.ok(overlaps('14:00', 150, '16:00', 120), 'a 2.5h booking eats into 16:00');
+  assert.ok(overlaps('14:00', 240, '16:00', 120), 'a 4h booking eats into 16:00');
 });

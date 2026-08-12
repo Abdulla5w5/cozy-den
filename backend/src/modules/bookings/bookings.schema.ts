@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isValidStart, SESSION_MIN, STEP_MIN } from '../../utils/slots';
+import { isValidStart, MAX_SESSION_MIN, SESSION_MIN, STEP_MIN } from '../../utils/slots';
 import { isoDate } from '../../utils/dates';
 
 // Length is validated against the specific start time in the service layer,
@@ -9,7 +9,7 @@ const durationMin = z
   .number()
   .int()
   .min(SESSION_MIN / 4)
-  .max(13 * 60)
+  .max(MAX_SESSION_MIN)
   .refine((v) => v % STEP_MIN === 0, `duration must be a multiple of ${STEP_MIN} minutes`);
 
 // The real ceiling is the table's capacity, checked in the service where the
