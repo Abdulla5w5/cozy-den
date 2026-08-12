@@ -103,6 +103,20 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// The header is sticky and changes height between one and two rows, so any
+// scrolling we do has to measure it rather than assume a fixed offset.
+function stickyHeaderOffset() {
+  const header = document.querySelector<HTMLElement>('.topbar');
+  return (header?.getBoundingClientRect().height ?? 0) + 14;
+}
+
+// `behavior: 'auto'` is not "jump" — it defers to CSS, and this site sets
+// `scroll-behavior: smooth` globally, so 'auto' would still animate. Only
+// 'instant' actually overrides it.
+function scrollInstantly(top: number) {
+  window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
+}
+
 // Booking is table-only: select table & start time -> guest info + payment.
 // Booking selection persisted across the payment redirect, so a failed/abandoned
 // payment returns the customer to a ready-to-retry checkout instead of a blank
@@ -218,11 +232,17 @@ export function BookingFlow() {
   useEffect(() => {
     // The map can be much taller than checkout. Keep a step change from leaving
     // the customer stranded at the old scroll offset below the shorter panel.
+    // Jump rather than animate: the content under the viewport has already been
+    // replaced, so a 400ms smooth scroll only delays a view the customer has
+    // asked for, and reads as lag on the step they most want to be quick.
     if (!hasRenderedStepRef.current) {
       hasRenderedStepRef.current = true;
       return;
     }
-    bookingCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const card = bookingCardRef.current;
+    if (!card) return;
+    const top = card.getBoundingClientRect().top + window.scrollY - stickyHeaderOffset();
+    scrollInstantly(top);
   }, [step]);
 
   const selectedTable = availability.find((tb) => tb.tableId === tableId) || null;
@@ -236,23 +256,21 @@ export function BookingFlow() {
   function selectTable(nextTableId: number) {
     if (tableId !== nextTableId) setTimeSlot(null);
     setTableId(nextTableId);
-
-    // Mobile uses one page scroll instead of a nested time-list scroller. Reset
-    // any position retained after resizing, then reveal the details beneath the
-    // map with enough clearance for the two-row sticky header.
     if (slotListRef.current) slotListRef.current.scrollTop = 0;
-    if (!window.matchMedia('(max-width: 960px)').matches) return;
 
+    // Mobile stacks the times under the map, so they can land off-screen. Nudge
+    // only when the panel is genuinely out of view, and jump instead of
+    // animating: a smooth scroll fired on every tap is what makes picking a
+    // table feel laggy, and it fights the customer if they are already
+    // scrolling themselves.
+    if (!window.matchMedia('(max-width: 960px)').matches) return;
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const panel = slotPanelRef.current;
-        if (!panel) return;
-        const header = document.querySelector<HTMLElement>('.topbar');
-        const headerOffset = (header?.getBoundingClientRect().height ?? 0) + 14;
-        const top = panel.getBoundingClientRect().top + window.scrollY - headerOffset;
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? 'auto' : 'smooth' });
-      });
+      const panel = slotPanelRef.current;
+      if (!panel) return;
+      const box = panel.getBoundingClientRect();
+      const offset = stickyHeaderOffset();
+      if (box.top >= offset && box.top < window.innerHeight * 0.75) return; // already visible
+      scrollInstantly(box.top + window.scrollY - offset);
     });
   }
 
@@ -361,99 +379,104 @@ export function BookingFlow() {
                 </span>
               </div>
 
-              <div className="cafe-floor-plan" aria-label={t('bk.floorPlan')}>
-                <div className="floor-window floor-window-one" aria-hidden="true" />
-                <div className="floor-window floor-window-two" aria-hidden="true" />
-                <div className="floor-counter" aria-hidden="true">
-                  <span>{t('bk.counter')}</span>
-                  <i /><i /><i />
-                </div>
-                <div className="floor-shelf" aria-hidden="true">
-                  <span>{t('bk.gameWall')}</span>
-                </div>
-                <span className="floor-plant plant-one" aria-hidden="true">✦</span>
-                <span className="floor-plant plant-two" aria-hidden="true">✦</span>
-                <span className="floor-game-prop floor-die-prop" aria-hidden="true">
-                  <i /><i /><i /><i />
-                </span>
-                <span className="floor-game-prop floor-card-prop" aria-hidden="true">
-                  <b>A</b><em>♠</em>
-                </span>
-                <span className="floor-game-prop floor-door-prop" aria-hidden="true" />
-                <span className="floor-game-prop floor-domino-prop" aria-hidden="true">
-                  <i /><i /><i /><i />
-                </span>
-                <span className="floor-entrance" aria-hidden="true">{t('bk.entrance')}</span>
-
-                {loadingAvailability && (
-                  <div className="floor-loading" aria-live="polite">
-                    <span className="floor-loading-die" aria-hidden="true">⚄</span>
-                    {t('bk.loadingTables')}
+              <div className="cafe-floor-viewport">
+                <div className="cafe-floor-plan" aria-label={t('bk.floorPlan')}>
+                  <div className="floor-window floor-window-one" aria-hidden="true" />
+                  <div className="floor-window floor-window-two" aria-hidden="true" />
+                  <div className="floor-counter" aria-hidden="true">
+                    <span>{t('bk.counter')}</span>
+                    <i /><i /><i />
                   </div>
-                )}
-
-                {!loadingAvailability && availability.length === 0 && (
-                  <div className="floor-loading floor-load-error" role="alert">
-                    <span className="floor-loading-die" aria-hidden="true">⚀</span>
-                    <strong>{t('bk.tablesUnavailable')}</strong>
-                    <span>{t('bk.tablesUnavailableSub')}</span>
-                    <button type="button" onClick={() => setAvailabilityRetry((n) => n + 1)}>
-                      {t('bk.retryTables')}
-                    </button>
+                  <div className="floor-shelf" aria-hidden="true">
+                    <span>{t('bk.gameWall')}</span>
                   </div>
-                )}
+                  <span className="floor-plant plant-one" aria-hidden="true">✦</span>
+                  <span className="floor-plant plant-two" aria-hidden="true">✦</span>
+                  <span className="floor-game-prop floor-die-prop" aria-hidden="true">
+                    <i /><i /><i /><i />
+                  </span>
+                  <span className="floor-game-prop floor-card-prop" aria-hidden="true">
+                    <b>A</b><em>♠</em>
+                  </span>
+                  <span className="floor-game-prop floor-door-prop" aria-hidden="true" />
+                  <span className="floor-game-prop floor-domino-prop" aria-hidden="true">
+                    <i /><i /><i /><i />
+                  </span>
+                  <span className="floor-entrance" aria-hidden="true">{t('bk.entrance')}</span>
 
-                {!loadingAvailability && availability.map((tb, index) => {
-                  const placement = floorPlacement(tb.label, index);
-                  const selected = tableId === tb.tableId;
-                  const soldOut = tb.freeSlots.length === 0;
-                  const chairs = chairPositions(placement.shape, tb.capacity);
-                  const style = {
-                    '--table-x': `${placement.x}%`,
-                    '--table-y': `${placement.y}%`,
-                    '--table-angle': `${placement.angle ?? 0}deg`,
-                  } as CSSProperties;
-                  return (
-                    <button
-                      key={tb.tableId}
-                      type="button"
-                      style={style}
-                      className={`floor-table floor-table-${placement.shape} ${selected ? 'selected' : ''} ${soldOut ? 'sold-out' : ''}`}
-                      aria-pressed={selected}
-                      aria-label={t('bk.tableMapLabel', {
-                        table: tb.label,
-                        seats: tb.capacity,
-                        slots: tb.freeSlots.length,
-                      })}
-                      onClick={() => selectTable(tb.tableId)}
-                    >
-                      <span className="table-shape-halo" aria-hidden="true" />
-                      <span className="table-seats" aria-hidden="true">
-                        {chairs.map((chair, chairIndex) => (
-                          <i
-                            key={chairIndex}
-                            style={{
-                              '--chair-x': `${chair.x}%`,
-                              '--chair-y': `${chair.y}%`,
-                              '--chair-angle': `${chair.angle}deg`,
-                            } as CSSProperties}
-                          />
-                        ))}
-                      </span>
-                      <span className="floor-table-surface">
-                        <strong>{mapTableName(tb.label)}</strong>
-                        <small>{t('bk.seatsShort', { n: tb.capacity })}</small>
-                      </span>
-                      <span className="floor-table-tooltip" aria-hidden="true">
-                        <strong>{tb.label}</strong>
-                        <small>
-                          {soldOut ? t('bk.noOpenSlots') : t('bk.openSlots', { n: tb.freeSlots.length })}
-                        </small>
-                        {!soldOut && <em>{tb.freeSlots.slice(0, 3).join(' · ')}</em>}
-                      </span>
-                    </button>
-                  );
-                })}
+                  {loadingAvailability && (
+                    <div className="floor-loading" aria-live="polite">
+                      <span className="floor-loading-die" aria-hidden="true">⚄</span>
+                      {t('bk.loadingTables')}
+                    </div>
+                  )}
+
+                  {!loadingAvailability && availability.length === 0 && (
+                    <div className="floor-loading floor-load-error" role="alert">
+                      <span className="floor-loading-die" aria-hidden="true">⚀</span>
+                      <strong>{t('bk.tablesUnavailable')}</strong>
+                      <span>{t('bk.tablesUnavailableSub')}</span>
+                      <button type="button" onClick={() => setAvailabilityRetry((n) => n + 1)}>
+                        {t('bk.retryTables')}
+                      </button>
+                    </div>
+                  )}
+
+                  {!loadingAvailability && availability.map((tb, index) => {
+                    const placement = floorPlacement(tb.label, index);
+                    const selected = tableId === tb.tableId;
+                    const soldOut = tb.freeSlots.length === 0;
+                    const chairs = chairPositions(placement.shape, tb.capacity);
+                    // Tables low in the room would push their tooltip past the
+                    // floor's clipped edge, so those flip it above instead.
+                    const tipAbove = placement.y > 58;
+                    const style = {
+                      '--table-x': `${placement.x}%`,
+                      '--table-y': `${placement.y}%`,
+                      '--table-angle': `${placement.angle ?? 0}deg`,
+                    } as CSSProperties;
+                    return (
+                      <button
+                        key={tb.tableId}
+                        type="button"
+                        style={style}
+                        className={`floor-table floor-table-${placement.shape} ${selected ? 'selected' : ''} ${soldOut ? 'sold-out' : ''} ${tipAbove ? 'tip-above' : ''}`}
+                        aria-pressed={selected}
+                        aria-label={t('bk.tableMapLabel', {
+                          table: tb.label,
+                          seats: tb.capacity,
+                          slots: tb.freeSlots.length,
+                        })}
+                        onClick={() => selectTable(tb.tableId)}
+                      >
+                        <span className="table-shape-halo" aria-hidden="true" />
+                        <span className="table-seats" aria-hidden="true">
+                          {chairs.map((chair, chairIndex) => (
+                            <i
+                              key={chairIndex}
+                              style={{
+                                '--chair-x': `${chair.x}%`,
+                                '--chair-y': `${chair.y}%`,
+                                '--chair-angle': `${chair.angle}deg`,
+                              } as CSSProperties}
+                            />
+                          ))}
+                        </span>
+                        <span className="floor-table-surface">
+                          <strong>{mapTableName(tb.label)}</strong>
+                          <small>{t('bk.seatsShort', { n: tb.capacity })}</small>
+                        </span>
+                        <span className="floor-table-tooltip" aria-hidden="true">
+                          <strong>{tb.label}</strong>
+                          <small>
+                            {soldOut ? t('bk.noOpenSlots') : t('bk.openSlots', { n: tb.freeSlots.length })}
+                          </small>
+                          {!soldOut && <em>{tb.freeSlots.slice(0, 3).join(' · ')}</em>}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="floor-legend" aria-label={t('bk.legend')}>
@@ -504,6 +527,9 @@ export function BookingFlow() {
                             disabled={!free}
                             className={`booking-slot ${active ? 'active' : ''}`}
                             aria-pressed={active}
+                            // Without this the button reads as "14:00Open",
+                            // the two child elements run together.
+                            aria-label={`${slot} — ${free ? t('bk.open') : t('bk.taken')}`}
                             onClick={() => setTimeSlot(slot)}
                           >
                             <span>{slot}</span>

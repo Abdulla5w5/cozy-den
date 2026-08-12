@@ -446,18 +446,20 @@
   background: #20242d;
   color: var(--ink);
 }
-[data-theme='dark'] .booking-slot:hover:not(:disabled) {
+[data-theme='dark'] .booking-slot:hover:not(:disabled):not(.active) {
   border-color: rgba(246, 239, 227, 0.75);
   background: #292e38;
   box-shadow: 2px 2px 0 #050608;
 }
-[data-theme='dark'] .booking-slot.active {
+[data-theme='dark'] .booking-slot.active,
+[data-theme='dark'] .booking-slot.active:hover:not(:disabled) {
   border-color: #07080b;
   background: var(--primary);
   color: #17120d;
   box-shadow: 2px 2px 0 #050608;
 }
-[data-theme='dark'] .booking-slot.active small {
+[data-theme='dark'] .booking-slot.active small,
+[data-theme='dark'] .booking-slot.active:hover:not(:disabled) small {
   color: #17120d;
 }
 [data-theme='dark'] .floor-table,

@@ -4439,8 +4439,11 @@ button.link {
    Booking floor plan — spatial table selection with an availability drawer
    ======================================================================== */
 .booking-card {
+  /* Height of the sticky header, which the map's side panel has to clear.
+     One row on desktop, two once the nav wraps. */
+  --header-height: 82px;
   width: 100%;
-  scroll-margin-top: 100px;
+  scroll-margin-top: calc(var(--header-height) + 1.1rem);
   padding: clamp(1rem, 2.7vw, 2rem);
   overflow: visible;
   background:
@@ -4561,7 +4564,9 @@ button.link {
 .floor-booking-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.62fr) minmax(310px, 0.78fr);
-  align-items: start;
+  /* Both columns share the row height, so the times panel always squares off
+     against the map instead of being propped up by a guessed min-height. */
+  align-items: stretch;
   gap: 1.25rem;
 }
 .cafe-map-shell,
@@ -4613,22 +4618,61 @@ button.link {
   background: #2d8b57;
   box-shadow: 0 0 0 3px rgba(45, 139, 87, 0.14);
 }
+/* The room is one drawing, not a responsive layout.
+   Everything inside is sized in `cqw` (1cqw = 1% of the plan's own width) and
+   positioned in %, so the floor, the furniture, the tables and the chairs all
+   scale by exactly the same factor at every width. Previously the box height
+   was viewport-bound (`clamp(520px, 70vw, 580px)`) while its width came from
+   the grid column and the tables were fixed pixels: the room's aspect swung
+   between 0.58 and 1.30 while tables kept their size, so the drawing sheared
+   and tables drifted into each other. A fixed aspect plus container units
+   removes the whole class of bug rather than patching it per breakpoint. */
+.cafe-floor-viewport {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  border-radius: 18px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-color: var(--outline) transparent;
+  scrollbar-width: thin;
+}
+/* Only phones ever pan, and only then does the hint appear. */
+.cafe-floor-viewport::after {
+  content: '';
+  position: sticky;
+  z-index: 9;
+  top: 0;
+  right: 0;
+  float: right;
+  display: none;
+  width: 2.25rem;
+  height: 100%;
+  background: linear-gradient(to left, rgba(36, 36, 36, 0.16), transparent);
+  pointer-events: none;
+}
 .cafe-floor-plan {
   --floor-cutout: var(--surface-low);
   --floor-surface: #fff5df;
+  /* Below this the room is legible but the tables stop being reliable touch
+     targets, so the viewport pans instead of shrinking them further. */
+  --floor-min-width: 400px;
+  container-type: inline-size;
   position: relative;
   isolation: isolate;
   width: 100%;
-  min-height: clamp(520px, 70vw, 580px);
+  min-width: var(--floor-min-width);
+  aspect-ratio: 13 / 10;
   overflow: hidden;
   border: 2px solid var(--ink);
   border-radius: 18px;
   background:
     linear-gradient(90deg, transparent 49.6%, rgba(130, 91, 49, 0.1) 50%, transparent 50.4%),
     linear-gradient(0deg, transparent 49.6%, rgba(130, 91, 49, 0.1) 50%, transparent 50.4%),
-    radial-gradient(circle at 13px 13px, rgba(93, 58, 31, 0.08) 1px, transparent 1.2px),
+    radial-gradient(circle at 2cqw 2cqw, rgba(93, 58, 31, 0.08) 0.16cqw, transparent 0.2cqw),
     #fff5df;
-  background-size: 72px 72px, 72px 72px, 26px 26px, auto;
+  background-size: 10.9cqw 10.9cqw, 10.9cqw 10.9cqw, 3.9cqw 3.9cqw, auto;
   box-shadow: inset 0 0 45px rgba(119, 69, 25, 0.08);
 }
 .cafe-floor-plan::before {
@@ -4662,7 +4706,7 @@ button.link {
   position: absolute;
   z-index: -1;
   top: 4.6%;
-  height: 8px;
+  height: 1.2cqw;
   border: 2px solid rgba(36, 36, 36, 0.58);
   border-radius: 99px;
   background: rgba(70, 156, 255, 0.18);
@@ -4685,7 +4729,7 @@ button.link {
   border: 0;
   background: transparent;
   color: #fffaf1;
-  font-size: 0.63rem;
+  font-size: clamp(0.46rem, 1.55cqw, 0.66rem);
   font-weight: 800;
   text-transform: uppercase;
   writing-mode: initial;
@@ -4728,13 +4772,13 @@ button.link {
 .floor-counter i {
   position: absolute;
   z-index: 2;
-  bottom: -15px;
-  width: 16px;
-  height: 16px;
+  bottom: -2.3cqw;
+  width: 2.4cqw;
+  height: 2.4cqw;
   border: 2px solid #242424;
   border-radius: 50%;
   background: #d98a4a;
-  box-shadow: 0 4px 0 rgba(36, 36, 36, 0.85);
+  box-shadow: 0 0.6cqw 0 rgba(36, 36, 36, 0.85);
 }
 .floor-counter i:nth-of-type(1) { left: 43%; }
 .floor-counter i:nth-of-type(2) { left: 63%; }
@@ -4754,7 +4798,7 @@ button.link {
   border-radius: 8px;
   background: #c16d31;
   color: #fffaf1;
-  font-size: 0.63rem;
+  font-size: clamp(0.46rem, 1.55cqw, 0.66rem);
   font-weight: 800;
   text-transform: uppercase;
   writing-mode: vertical-rl;
@@ -4767,8 +4811,8 @@ button.link {
   position: absolute;
   z-index: 0;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 5.1cqw;
+  height: 5.1cqw;
   place-items: center;
   border: 2px solid rgba(36, 36, 36, 0.5);
   border-radius: 50% 42% 50% 38%;
@@ -4785,20 +4829,20 @@ button.link {
   left: 62%;
   top: 43%;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 5.1cqw;
+  height: 5.1cqw;
   grid-template-columns: 1fr 1fr;
   place-items: center;
-  padding: 6px;
+  padding: 0.9cqw;
   border: 2px solid #242424;
   border-radius: 9px;
   background: var(--yellow);
-  box-shadow: 3px 4px 0 #242424;
+  box-shadow: 0.45cqw 0.6cqw 0 #242424;
   transform: rotate(-11deg);
 }
 .floor-die-prop i {
-  width: 5px;
-  height: 5px;
+  width: 0.75cqw;
+  height: 0.75cqw;
   border-radius: 50%;
   background: #242424;
 }
@@ -4806,33 +4850,33 @@ button.link {
   left: 70%;
   top: 34%;
   display: grid;
-  width: 29px;
-  height: 41px;
+  width: 4.4cqw;
+  aspect-ratio: 29 / 41;
   place-content: center;
   border: 2px solid #242424;
   border-radius: 6px;
   background: #fffaf1;
   color: var(--red);
-  box-shadow: 3px 3px 0 #242424;
+  box-shadow: 0.45cqw 0.45cqw 0 #242424;
   font-family: 'Space Mono', monospace;
   line-height: 0.8;
   text-align: center;
   transform: rotate(9deg);
 }
 .floor-card-prop b {
-  font-size: 0.75rem;
+  font-size: clamp(0.5rem, 1.85cqw, 0.8rem);
 }
 .floor-card-prop em {
-  font-size: 0.68rem;
+  font-size: clamp(0.46rem, 1.7cqw, 0.72rem);
   font-style: normal;
 }
 .floor-door-prop {
   left: 3%;
   bottom: 27%;
-  width: 48px;
-  height: 54px;
+  width: 7.25cqw;
+  aspect-ratio: 48 / 54;
   border: 0;
-  background: radial-gradient(circle at 0 100%, transparent 0 39px, rgba(36, 36, 36, 0.42) 40px 41.5px, transparent 42.5px);
+  background: radial-gradient(circle at 0 100%, transparent 0 5.9cqw, rgba(36, 36, 36, 0.42) 6cqw 6.27cqw, transparent 6.42cqw);
   box-shadow: none;
 }
 .floor-door-prop::before {
@@ -4840,8 +4884,8 @@ button.link {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -6px;
-  width: 12px;
+  left: -0.9cqw;
+  width: 1.8cqw;
   border-top: 3px solid #242424;
   border-bottom: 3px solid #242424;
   background: var(--floor-surface);
@@ -4851,8 +4895,8 @@ button.link {
   position: absolute;
   bottom: -1px;
   left: 0;
-  width: 43px;
-  height: 7px;
+  width: 6.5cqw;
+  height: 1.05cqw;
   border: 2px solid #242424;
   border-radius: 2px 6px 6px 2px;
   background:
@@ -4864,15 +4908,15 @@ button.link {
   right: 14%;
   top: 65%;
   display: grid;
-  width: 24px;
-  height: 46px;
+  width: 3.6cqw;
+  aspect-ratio: 24 / 46;
   grid-template-columns: 1fr 1fr;
   place-items: center;
-  padding: 5px 4px;
+  padding: 0.75cqw 0.6cqw;
   border: 2px solid #242424;
   border-radius: 7px;
   background: #fffaf1;
-  box-shadow: 3px 3px 0 #242424;
+  box-shadow: 0.45cqw 0.45cqw 0 #242424;
   transform: rotate(8deg);
 }
 .floor-domino-prop::after {
@@ -4884,8 +4928,8 @@ button.link {
   border-top: 2px solid #242424;
 }
 .floor-domino-prop i {
-  width: 4px;
-  height: 4px;
+  width: 0.6cqw;
+  height: 0.6cqw;
   border-radius: 50%;
   background: #242424;
 }
@@ -4906,7 +4950,7 @@ button.link {
   border-radius: 999px;
   background: #fff5df;
   color: rgba(36, 36, 36, 0.65);
-  font-size: 0.59rem;
+  font-size: clamp(0.44rem, 1.45cqw, 0.62rem);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -4917,11 +4961,12 @@ button.link {
   display: grid;
   place-content: center;
   gap: 0.45rem;
-  background: rgba(255, 245, 223, 0.78);
+  /* Opaque rather than blurred: a backdrop-filter here forced the whole room
+     to re-composite behind it on every availability fetch. */
+  background: rgba(255, 245, 223, 0.94);
   color: var(--muted);
   font-weight: 800;
   text-align: center;
-  backdrop-filter: blur(5px);
 }
 .floor-loading-die {
   color: var(--blue);
@@ -4955,8 +5000,8 @@ button.link {
   left: var(--table-x);
   top: var(--table-y);
   display: grid;
-  width: 82px;
-  height: 60px;
+  width: 12.4cqw;
+  aspect-ratio: 82 / 60;
   place-items: center;
   padding: 0;
   overflow: visible;
@@ -4964,7 +5009,10 @@ button.link {
   background: transparent;
   color: #fff;
   transform: translate(-50%, -50%) rotate(var(--table-angle));
-  transition: filter 180ms ease, transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Transform only. Transitioning `filter` (as this did) repaints the table and
+     its chairs every frame of every hover, which is what made the map feel
+     heavy on modest hardware. */
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
   touch-action: manipulation;
 }
 .floor-table:focus-visible {
@@ -4972,7 +5020,6 @@ button.link {
   border: 0;
   outline: none;
   background: transparent;
-  filter: drop-shadow(0 11px 10px rgba(36, 36, 36, 0.2));
   transform: translate(-50%, -50%) rotate(var(--table-angle)) scale(1.07);
 }
 .floor-table:active:not(:disabled) {
@@ -4992,8 +5039,8 @@ button.link {
     linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 48%),
     #2d7055;
   box-shadow:
-    0 5px 0 #242424,
-    0 11px 18px rgba(36, 36, 36, 0.18),
+    0 0.75cqw 0 #242424,
+    0 1.6cqw 2.7cqw rgba(36, 36, 36, 0.18),
     inset 0 0 0 2px rgba(255, 255, 255, 0.08);
   line-height: 1;
   text-align: center;
@@ -5007,7 +5054,7 @@ button.link {
   max-width: 90%;
   margin-inline: auto;
   overflow: hidden;
-  font-size: 0.8rem;
+  font-size: clamp(0.55rem, 2.1cqw, 0.88rem);
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5015,20 +5062,20 @@ button.link {
 .floor-table-surface small {
   margin-top: 0.2rem;
   color: rgba(255, 255, 255, 0.82);
-  font-size: 0.57rem;
+  font-size: clamp(0.44rem, 1.5cqw, 0.62rem);
   font-weight: 800;
 }
 .floor-table-small {
   --table-accent: #f47700;
   --table-glow: rgba(244, 119, 0, 0.32);
-  width: 70px;
-  height: 54px;
+  width: 10.6cqw;
+  aspect-ratio: 70 / 54;
 }
 .floor-table-round {
   --table-accent: #1177ee;
   --table-glow: rgba(17, 119, 238, 0.34);
-  width: 86px;
-  height: 86px;
+  width: 13cqw;
+  aspect-ratio: 1;
 }
 .floor-table-round .floor-table-surface {
   border-radius: 50%;
@@ -5037,17 +5084,17 @@ button.link {
 .floor-table-wide {
   --table-accent: #2d8b57;
   --table-glow: rgba(45, 139, 87, 0.34);
-  width: 120px;
-  height: 62px;
+  width: 18.1cqw;
+  aspect-ratio: 120 / 62;
 }
 .floor-table-communal {
   --table-accent: #f13619;
   --table-glow: rgba(241, 54, 25, 0.34);
-  width: 112px;
-  height: 90px;
-  filter:
-    drop-shadow(0 6px 0 #242424)
-    drop-shadow(0 12px 12px rgba(36, 36, 36, 0.22));
+  width: 16.9cqw;
+  aspect-ratio: 112 / 90;
+  /* The hexagon is a clip-path, so its lift has to come from drop-shadow.
+     Static only — never transitioned. */
+  filter: drop-shadow(0 0.9cqw 0 #242424);
 }
 .floor-table-communal .floor-table-surface {
   z-index: 2;
@@ -5072,42 +5119,43 @@ button.link {
   inset: 0;
   pointer-events: none;
 }
+/* Chairs are sized against the room, not their table, so every seat in the
+   cafe is the same size no matter which table it belongs to. */
 .table-seats i {
   position: absolute;
   display: block;
   left: var(--chair-x);
   top: var(--chair-y);
-  width: 20px;
-  height: 9px;
+  width: 3cqw;
+  height: 1.36cqw;
   border: 2px solid #242424;
   border-radius: 999px;
   background: #d8843f;
-  box-shadow: 0 3px 0 rgba(36, 36, 36, 0.92);
+  box-shadow: 0 0.45cqw 0 rgba(36, 36, 36, 0.92);
   transform: translate(-50%, -50%) rotate(var(--chair-angle));
 }
 .floor-table-communal .table-seats::after {
   content: '';
   position: absolute;
   z-index: 0;
-  inset: -4px;
+  inset: -0.6cqw;
   clip-path: polygon(25% 2%, 75% 2%, 98% 50%, 75% 98%, 25% 98%, 2% 50%);
   background: #242424;
-  filter: drop-shadow(0 4px 0 rgba(36, 36, 36, 0.38));
 }
 .floor-table-communal .table-seats i {
   z-index: 1;
 }
 .floor-table-floor .table-seats i {
-  width: 18px;
-  height: 12px;
+  width: 2.7cqw;
+  height: 1.8cqw;
   border-radius: 45% 55% 48% 52%;
   background: #d49a62;
 }
 .floor-table-floor {
   --table-accent: #bc742e;
   --table-glow: rgba(188, 116, 46, 0.38);
-  width: 112px;
-  height: 72px;
+  width: 16.9cqw;
+  aspect-ratio: 112 / 72;
 }
 .floor-table-floor .floor-table-surface {
   border-radius: 45% 55% 48% 52%;
@@ -5129,28 +5177,16 @@ button.link {
     linear-gradient(145deg, rgba(255, 255, 255, 0.25), transparent 48%),
     var(--table-accent);
   box-shadow:
-    0 5px 0 #242424,
-    0 0 0 3px #fffaf1,
-    0 0 0 6px var(--table-accent),
-    0 15px 26px var(--table-glow),
+    0 0.75cqw 0 #242424,
+    0 0 0 0.45cqw #fffaf1,
+    0 0 0 0.9cqw var(--table-accent),
+    0 2.2cqw 3.9cqw var(--table-glow),
     inset 0 0 0 2px rgba(255, 255, 255, 0.16);
-}
-.floor-table:focus-visible {
-  filter: none;
-}
-.floor-table.selected {
-  filter: none;
-}
-.floor-table-communal:focus-visible,
-.floor-table-communal.selected {
-  filter:
-    drop-shadow(0 6px 0 #242424)
-    drop-shadow(0 12px 12px rgba(36, 36, 36, 0.2));
 }
 .table-shape-halo {
   position: absolute;
   z-index: 0;
-  inset: -8px;
+  inset: -1.2cqw;
   border-radius: 22px;
   background: var(--table-accent);
   opacity: 0;
@@ -5184,6 +5220,7 @@ button.link {
 .floor-table-tooltip {
   position: absolute;
   top: calc(100% + 13px);
+  bottom: auto;
   left: 50%;
   z-index: 20;
   display: grid;
@@ -5202,7 +5239,15 @@ button.link {
   transform: translate(-50%, -5px) rotate(calc(var(--table-angle) * -1));
   transition: opacity 150ms ease, transform 150ms ease;
 }
-.floor-table:focus-visible .floor-table-tooltip {
+/* Tables in the lower half would have their tooltip clipped by the floor's
+   `overflow: hidden`, so those open upwards instead. */
+.floor-table.tip-above .floor-table-tooltip {
+  top: auto;
+  bottom: calc(100% + 13px);
+  transform: translate(-50%, 5px) rotate(calc(var(--table-angle) * -1));
+}
+.floor-table:focus-visible .floor-table-tooltip,
+.floor-table.tip-above:focus-visible .floor-table-tooltip {
   opacity: 1;
   transform: translate(-50%, 0) rotate(calc(var(--table-angle) * -1));
 }
@@ -5212,19 +5257,14 @@ button.link {
     border: 0;
     outline: none;
     background: transparent;
-    filter: none;
     transform: translate(-50%, -50%) rotate(var(--table-angle)) scale(1.07);
-  }
-  .floor-table-communal:hover:not(:disabled) {
-    filter:
-      drop-shadow(0 6px 0 #242424)
-      drop-shadow(0 12px 12px rgba(36, 36, 36, 0.2));
   }
   .floor-table:hover .table-shape-halo {
     opacity: 0.3;
     transform: scale(1.04);
   }
-  .floor-table:hover .floor-table-tooltip {
+  .floor-table:hover .floor-table-tooltip,
+  .floor-table.tip-above:hover .floor-table-tooltip {
     opacity: 1;
     transform: translate(-50%, 0) rotate(calc(var(--table-angle) * -1));
   }
@@ -5272,15 +5312,15 @@ button.link {
 .floor-legend .selected { background: var(--orange); box-shadow: 0 0 0 2px var(--yellow); }
 .floor-legend .unavailable { background: #827b70; }
 .booking-slot-panel {
-  position: sticky;
-  top: 102px;
-  min-height: 590px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
   background: #fff;
 }
 .slot-panel-empty {
   display: grid;
-  min-height: 586px;
+  flex: 1;
   place-content: center;
   justify-items: center;
   padding: 2rem;
@@ -5365,6 +5405,10 @@ button.link {
   color: #6c655d;
 }
 .slot-panel-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
   padding: 1rem 1.1rem;
 }
 .slot-panel-title {
@@ -5398,8 +5442,12 @@ button.link {
 .booking-slots {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
   gap: 0.45rem;
-  max-height: 292px;
+  /* Fills whatever the panel has left rather than a fixed 292px window, so the
+     times list ends flush with the map instead of leaving dead space. */
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0.1rem 0.25rem 0.35rem 0.1rem;
   scrollbar-color: var(--orange) transparent;
@@ -5432,19 +5480,27 @@ button.link {
   font-weight: 800;
   text-transform: uppercase;
 }
-.booking-slot:hover:not(:disabled) {
+/* `:not(.active)` matters: `:hover:not(:disabled)` outranks `.active`, so
+   without it the chosen time turned white-on-white for as long as the pointer
+   stayed over it — the selection looked like it had been wiped. */
+.booking-slot:hover:not(:disabled):not(.active) {
   border-color: var(--ink);
   background: #fff;
   box-shadow: 2px 2px 0 var(--ink);
   transform: translateY(-1px);
 }
-.booking-slot.active {
+/* The `:hover` variant is not redundant: the global `button:hover:not(:disabled)`
+   rule outranks a plain `.booking-slot.active`, so without it the chosen time
+   picked up the generic yellow hover and its white label became unreadable. */
+.booking-slot.active,
+.booking-slot.active:hover:not(:disabled) {
   border-color: var(--ink);
   background: var(--orange);
   color: #fff;
   box-shadow: 2px 2px 0 var(--ink);
 }
-.booking-slot.active small {
+.booking-slot.active small,
+.booking-slot.active:hover:not(:disabled) small {
   color: #fff;
 }
 .booking-slot:disabled {
@@ -5538,9 +5594,9 @@ button.link {
 
 @media (max-width: 680px) {
   .booking-card {
+    --header-height: 117px;
     padding: 0.85rem;
     border-radius: 22px;
-    scroll-margin-top: 132px;
   }
   .booking-card > .stepper {
     margin-bottom: 1.3rem;
@@ -5571,56 +5627,12 @@ button.link {
   .map-live-badge {
     padding-inline: 0.45rem;
   }
-  .cafe-floor-plan {
-    min-height: 520px;
-  }
   .cafe-floor-plan::after {
     width: 19%;
     height: 41%;
   }
-  .floor-table {
-    width: 66px;
-    height: 50px;
-  }
-  .floor-table-small {
-    width: 58px;
-    height: 47px;
-  }
-  .floor-table-round {
-    width: 70px;
-    height: 70px;
-  }
-  .floor-table-wide {
-    width: 94px;
-    height: 52px;
-  }
-  .floor-table-communal {
-    width: 86px;
-    height: 72px;
-  }
   .table-seats i {
-    width: 15px;
-    height: 7px;
     border-width: 1.5px;
-    box-shadow: 0 2px 0 rgba(36, 36, 36, 0.92);
-  }
-  .floor-table-floor .table-seats i {
-    width: 14px;
-    height: 9px;
-  }
-  .floor-table-floor {
-    width: 88px;
-    height: 58px;
-  }
-  .floor-table-surface::before,
-  .floor-table-surface::after {
-    display: none;
-  }
-  .floor-table-surface strong {
-    font-size: 0.69rem;
-  }
-  .floor-table-surface small {
-    font-size: 0.5rem;
   }
   .floor-table-tooltip {
     display: none;
@@ -5658,24 +5670,8 @@ button.link {
   .cafe-map-shell {
     padding: 0.55rem;
   }
-  .map-hint {
-    max-width: 185px;
-  }
   .map-live-badge {
     display: none;
-  }
-  .cafe-floor-plan {
-    min-height: 500px;
-  }
-  .floor-plant {
-    width: 27px;
-    height: 27px;
-  }
-  .floor-table {
-    transform: translate(-50%, -50%) rotate(var(--table-angle)) scale(0.9);
-  }
-  .floor-table:focus-visible {
-    transform: translate(-50%, -50%) rotate(var(--table-angle)) scale(0.96);
   }
   .floor-legend {
     gap: 0.55rem 0.7rem;
@@ -5687,9 +5683,10 @@ button.link {
   }
 }
 
-/* Large phones (including 430px iPhones) need the room to scale as one scene.
-   Previously only <=420px received compact table transforms, leaving common
-   iOS viewports with near-desktop furniture inside a narrow portrait map. */
+/* The room now scales as one drawing via container units, so phones need only
+   layout changes around it — no per-breakpoint `scale:` on the scene. Scaling
+   the surface without the button also left the hit area larger than the visible
+   table, so neighbouring tables could steal each other's taps. */
 @media (max-width: 520px) {
   .map-heading {
     display: grid;
@@ -5704,34 +5701,10 @@ button.link {
     justify-self: start;
   }
   .cafe-floor-plan {
-    min-height: 440px;
+    --floor-min-width: 420px;
   }
-  .floor-table {
-    transform: translate(-50%, -50%) rotate(var(--table-angle));
-  }
-  .floor-table:focus-visible {
-    transform: translate(-50%, -50%) rotate(var(--table-angle)) scale(1.03);
-  }
-  .floor-table-surface,
-  .table-seats,
-  .table-shape-halo {
-    scale: 0.76;
-  }
-  .floor-counter,
-  .floor-shelf,
-  .floor-game-prop,
-  .floor-plant {
-    scale: 0.78;
-  }
-  .floor-counter {
-    transform-origin: top left;
-  }
-  .floor-shelf {
-    transform-origin: right center;
-  }
-  .floor-game-prop,
-  .floor-plant {
-    transform-origin: center;
+  .cafe-floor-viewport::after {
+    display: block;
   }
   .floor-legend {
     justify-content: center;
@@ -5740,43 +5713,15 @@ button.link {
   }
 }
 
-@media (max-width: 420px) {
-  .map-live-badge {
-    display: none;
-  }
-  .cafe-floor-plan {
-    min-height: 420px;
-  }
-  .floor-table {
-    transform: translate(-50%, -50%) rotate(var(--table-angle));
-  }
-  .floor-table:focus-visible {
-    transform: translate(-50%, -50%) rotate(var(--table-angle)) scale(1.03);
-  }
-  .floor-table-surface,
-  .table-seats,
-  .table-shape-halo {
-    scale: 0.72;
-  }
-}
-
+/* Touch devices keep a stale :hover on the last thing tapped, so neutralise it
+   there. The selected state no longer needs restating — `:not(.active)` on the
+   hover rule itself keeps the selection intact on every input type. */
 @media (hover: none), (pointer: coarse) {
-  .booking-slot:hover:not(:disabled) {
+  .booking-slot:hover:not(:disabled):not(.active) {
     border-color: var(--outline-variant);
     background: var(--surface-low);
     box-shadow: none;
     transform: none;
-  }
-  .booking-slot.active,
-  .booking-slot.active:hover:not(:disabled) {
-    border-color: var(--ink);
-    background: var(--orange);
-    color: #fff;
-    box-shadow: 2px 2px 0 var(--ink);
-  }
-  .booking-slot.active small,
-  .booking-slot.active:hover:not(:disabled) small {
-    color: #fff;
   }
 }
 
