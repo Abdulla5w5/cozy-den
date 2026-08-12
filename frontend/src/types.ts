@@ -10,6 +10,8 @@ export interface TableAvailability {
   capacity: number;
   freeSlots: string[];
   takenSlots: string[];
+  /** Start time -> longest bookable length in minutes, given this table's day. */
+  maxDuration: Record<string, number>;
 }
 
 export interface Game {
@@ -84,6 +86,8 @@ export interface Booking {
   status: string;
   source: string;
   tableFeeCents: number;
+  durationMin: number;
+  partySize: number;
   totalCents: number;
   items: BookingItemView[];
   createdAt: string;

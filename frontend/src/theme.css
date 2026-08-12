@@ -479,3 +479,16 @@
   color: #fff;
   box-shadow: 3px 3px 0 #050608;
 }
+
+[data-theme='dark'] .sitting-options {
+  border-top-color: rgba(246, 239, 227, 0.35);
+}
+[data-theme='dark'] .sitting-field select {
+  border-color: rgba(246, 239, 227, 0.6);
+  background: #20242d;
+  color: var(--ink);
+}
+[data-theme='dark'] .sitting-fixed {
+  border-color: rgba(246, 239, 227, 0.5);
+  background: #20242d;
+}

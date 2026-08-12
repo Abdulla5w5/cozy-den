@@ -1,5 +1,12 @@
 import { query } from '../../db/pool';
-import { START_TIMES, overlaps } from '../../utils/slots';
+import {
+  START_TIMES,
+  STEP_MIN,
+  maxDurationFor,
+  minDurationFor,
+  overlaps,
+  toMinutes,
+} from '../../utils/slots';
 import { getTableFee, TableFee } from '../../utils/pricing';
 
 export interface TableRow {
@@ -21,12 +28,22 @@ export interface TableAvailability {
   capacity: number;
   freeSlots: string[];
   takenSlots: string[];
+  /**
+   * Start time -> the longest booking that still fits there, in minutes. The
+   * form uses this to bound its end-time picker, so a customer is never offered
+   * a length that would collide with the next booking on that table.
+   */
+  maxDuration: Record<string, number>;
 }
 
 /**
  * For a given date, compute which 30-minute start times each table still has
- * open. A start is free iff its 2-hour window overlaps no live booking's
- * 2-hour window on that table (back-to-back sessions are fine).
+ * open, and how long a booking may run from each.
+ *
+ * A start is free iff the *shortest* booking allowed there — two hours, or the
+ * remainder to closing for a late seating — clears every live booking on that
+ * table. Anything longer is offered only up to the next booking's start, so
+ * back-to-back sessions still work while overlaps cannot be selected.
  */
 export async function getAvailability(
   date: string,
@@ -36,29 +53,54 @@ export async function getAvailability(
   // the date being viewed, rather than a figure baked into the build.
   const fee = await getTableFee(date);
 
-  const { rows: booked } = await query<{ table_id: number; time_slot: string }>(
-    `SELECT table_id, time_slot
+  const { rows: booked } = await query<{
+    table_id: number;
+    time_slot: string;
+    duration_min: number;
+  }>(
+    `SELECT table_id, time_slot, duration_min
        FROM bookings
       WHERE booking_date = $1
         AND status <> 'cancelled'`,
     [date]
   );
 
-  const startsByTable = new Map<number, string[]>();
+  const byTable = new Map<number, { start: string; duration: number }[]>();
   for (const b of booked) {
-    if (!startsByTable.has(b.table_id)) startsByTable.set(b.table_id, []);
-    startsByTable.get(b.table_id)!.push(b.time_slot);
+    if (!byTable.has(b.table_id)) byTable.set(b.table_id, []);
+    byTable.get(b.table_id)!.push({ start: b.time_slot, duration: b.duration_min });
   }
 
   const mapped = tables.map((t) => {
-    const existing = startsByTable.get(t.id) ?? [];
-    const blocked = (s: string) => existing.some((b) => overlaps(s, b));
+    const existing = byTable.get(t.id) ?? [];
+    const freeSlots: string[] = [];
+    const takenSlots: string[] = [];
+    const maxDuration: Record<string, number> = {};
+
+    for (const s of START_TIMES) {
+      const shortest = minDurationFor(s);
+      if (existing.some((b) => overlaps(s, shortest, b.start, b.duration))) {
+        takenSlots.push(s);
+        continue;
+      }
+      // Room runs out at whichever comes first: closing, or the next booking.
+      const sMin = toMinutes(s);
+      const nextStart = existing
+        .map((b) => toMinutes(b.start))
+        .filter((m) => m >= sMin)
+        .reduce((lo, m) => Math.min(lo, m), Number.POSITIVE_INFINITY);
+      const room = Math.min(maxDurationFor(s), nextStart - sMin);
+      freeSlots.push(s);
+      maxDuration[s] = Math.max(shortest, Math.floor(room / STEP_MIN) * STEP_MIN);
+    }
+
     return {
       tableId: t.id,
       label: t.label,
       capacity: t.capacity,
-      freeSlots: START_TIMES.filter((s) => !blocked(s)),
-      takenSlots: START_TIMES.filter(blocked),
+      freeSlots,
+      takenSlots,
+      maxDuration,
     };
   });
   return { tables: mapped, fee };

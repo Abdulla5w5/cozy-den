@@ -102,10 +102,10 @@ export function Home() {
           <div className="game-tile tile-yellow" aria-hidden="true">
             <span>A</span><b>♟</b>
           </div>
-          <div className="hero-sticker" aria-hidden="true">100+<small>{t('home.sticker.games')}</small></div>
+          <div className="hero-sticker" aria-hidden="true">400+<small>{t('home.sticker.games')}</small></div>
         </div>
         <div className="stats">
-          <div className="stat"><strong>100+</strong><span>{t('home.stat.games')}</span></div>
+          <div className="stat"><strong>400+</strong><span>{t('home.stat.games')}</span></div>
           <div className="stat"><strong>8</strong><span>{t('home.stat.tables')}</span></div>
           <div className="stat"><strong>{t('home.stat.hours')}</strong><span>{t('home.stat.hoursSub')}</span></div>
         </div>

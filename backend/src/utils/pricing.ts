@@ -1,4 +1,5 @@
 import { query } from '../db/pool';
+import { isLateStart, SESSION_MIN } from './slots';
 
 /**
  * What a table costs for a two-hour session on a given evening.
@@ -23,22 +24,47 @@ import { query } from '../db/pool';
 const PEAK_DAYS = new Set([4, 5, 6]); // Thursday, Friday, Saturday
 
 export interface TableFee {
+  /** What one 2-hour block costs on this date. */
   cents: number;
   peak: boolean;
   /** Why this price: a staff label, 'weekend', or null for the normal rate. */
   reason: string | null;
+  /** Flat price for a late seating — a start after 01:00, which runs to close. */
+  lateCents: number;
+}
+
+/** What a specific booking costs, once its start and length are known. */
+export interface BookingQuote extends TableFee {
+  /** The amount actually charged. */
+  totalCents: number;
+  /** 2-hour blocks charged; 0 for a late seating, which is a flat rate. */
+  blocks: number;
+  late: boolean;
 }
 
 export interface Rates {
   peakCents: number;
   offPeakCents: number;
+  latePeakCents: number;
+  lateOffPeakCents: number;
 }
 
 export async function getRates(): Promise<Rates> {
-  const { rows } = await query<{ peak_cents: number; offpeak_cents: number }>(
-    'SELECT peak_cents, offpeak_cents FROM pricing_rates WHERE id',
+  const { rows } = await query<{
+    peak_cents: number;
+    offpeak_cents: number;
+    late_peak_cents: number;
+    late_offpeak_cents: number;
+  }>(
+    `SELECT peak_cents, offpeak_cents, late_peak_cents, late_offpeak_cents
+       FROM pricing_rates WHERE id`,
   );
-  return { peakCents: rows[0].peak_cents, offPeakCents: rows[0].offpeak_cents };
+  return {
+    peakCents: rows[0].peak_cents,
+    offPeakCents: rows[0].offpeak_cents,
+    latePeakCents: rows[0].late_peak_cents,
+    lateOffPeakCents: rows[0].late_offpeak_cents,
+  };
 }
 
 export async function getTableFee(date: string): Promise<TableFee> {
@@ -48,26 +74,65 @@ export async function getTableFee(date: string): Promise<TableFee> {
     fee_cents: number | null;
     peak_cents: number;
     offpeak_cents: number;
+    late_peak_cents: number;
+    late_offpeak_cents: number;
   }>(
     `SELECT EXTRACT(DOW FROM $1::date)::int AS dow,
-            o.label, o.fee_cents, r.peak_cents, r.offpeak_cents
+            o.label, o.fee_cents, r.peak_cents, r.offpeak_cents,
+            r.late_peak_cents, r.late_offpeak_cents
        FROM pricing_rates r
        LEFT JOIN price_overrides o ON o.override_date = $1::date
       WHERE r.id`,
     [date],
   );
   const row = rows[0];
+  const peakDay = PEAK_DAYS.has(row.dow);
+  // A staff override sets the block rate for the evening. Late seatings keep
+  // their own flat rate: it is already a reduced price for a shortened sitting,
+  // and scaling it by an unrelated override would make a holiday cheaper or
+  // dearer than intended in a way nobody asked for.
+  const lateCents = peakDay ? row.late_peak_cents : row.late_offpeak_cents;
 
   if (row.fee_cents !== null) {
     // An override can be cheaper OR dearer than the normal rate, so "peak" here
     // means "costs more than this day otherwise would", not "is a weekend".
-    const baseline = PEAK_DAYS.has(row.dow) ? row.peak_cents : row.offpeak_cents;
-    return { cents: row.fee_cents, peak: row.fee_cents > baseline, reason: row.label };
+    const baseline = peakDay ? row.peak_cents : row.offpeak_cents;
+    return {
+      cents: row.fee_cents,
+      peak: row.fee_cents > baseline,
+      reason: row.label,
+      lateCents,
+    };
   }
-  if (PEAK_DAYS.has(row.dow)) {
-    return { cents: row.peak_cents, peak: true, reason: 'weekend' };
+  if (peakDay) {
+    return { cents: row.peak_cents, peak: true, reason: 'weekend', lateCents };
   }
-  return { cents: row.offpeak_cents, peak: false, reason: null };
+  return { cents: row.offpeak_cents, peak: false, reason: null, lateCents };
+}
+
+/**
+ * Price a specific booking.
+ *
+ * Normal seatings are charged per 2-hour block, rounded up: a 4-hour booking is
+ * two blocks, and an odd 2.5 hours still pays for two. Late seatings — starts
+ * after 01:00, which run to the 03:00 close and so cannot fill a block — pay
+ * the flat late rate once.
+ *
+ * Derived entirely from the date, start and length the customer chose. Nothing
+ * about the price comes from the request, so a tampered client cannot buy six
+ * hours for the price of two.
+ */
+export async function quoteBooking(
+  date: string,
+  timeSlot: string,
+  durationMin: number,
+): Promise<BookingQuote> {
+  const fee = await getTableFee(date);
+  if (isLateStart(timeSlot)) {
+    return { ...fee, totalCents: fee.lateCents, blocks: 0, late: true };
+  }
+  const blocks = Math.max(1, Math.ceil(durationMin / SESSION_MIN));
+  return { ...fee, totalCents: fee.cents * blocks, blocks, late: false };
 }
 
 // ---------- Staff editor ----------
@@ -109,7 +174,10 @@ export async function deleteOverride(date: string): Promise<boolean> {
 
 export async function setRates(r: Rates): Promise<void> {
   await query(
-    'UPDATE pricing_rates SET peak_cents = $1, offpeak_cents = $2, updated_at = now() WHERE id',
-    [r.peakCents, r.offPeakCents],
+    `UPDATE pricing_rates
+        SET peak_cents = $1, offpeak_cents = $2,
+            late_peak_cents = $3, late_offpeak_cents = $4, updated_at = now()
+      WHERE id`,
+    [r.peakCents, r.offPeakCents, r.latePeakCents, r.lateOffPeakCents],
   );
 }

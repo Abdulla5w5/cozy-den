@@ -325,6 +325,8 @@ staffRouter.get('/pricing', requireAdmin, async (_req, res, next) => {
 const ratesSchema = z.object({
   peakCents: z.number().int().min(0).max(100000),
   offPeakCents: z.number().int().min(0).max(100000),
+  latePeakCents: z.number().int().min(0).max(100000),
+  lateOffPeakCents: z.number().int().min(0).max(100000),
 });
 
 // PUT /api/staff/pricing/rates — the Thu/Fri/Sat and everyday rates.

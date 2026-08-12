@@ -2,7 +2,8 @@ import { query } from '../../db/pool';
 import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
-import { getTableFee } from '../../utils/pricing';
+import { quoteBooking } from '../../utils/pricing';
+import { isValidDuration, minDurationFor } from '../../utils/slots';
 import { paymentProvider } from '../../payment';
 import { TAP_CHARGE_EXPIRY_MINUTES } from '../../payment/constants';
 import {
@@ -37,6 +38,8 @@ export interface BookingView {
   status: string;
   source: string;
   tableFeeCents: number;
+  durationMin: number;
+  partySize: number;
   totalCents: number;
   items: BookingItemView[];
   createdAt: string;
@@ -46,9 +49,40 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function assertTableExists(tableId: number): Promise<void> {
-  const { rows } = await query<{ id: number }>('SELECT id FROM tables WHERE id = $1', [tableId]);
+async function assertTableExists(tableId: number): Promise<{ capacity: number }> {
+  const { rows } = await query<{ id: number; capacity: number }>(
+    'SELECT id, capacity FROM tables WHERE id = $1',
+    [tableId],
+  );
   if (!rows[0]) throw new ApiError(404, 'Table not found.');
+  return { capacity: rows[0].capacity };
+}
+
+/**
+ * Settle the customer's chosen length and headcount against what this table on
+ * this evening can actually take.
+ *
+ * Both arrive optional and both have defaults, so an older client that sends
+ * neither still books exactly the 2-hour, single-guest session it always did.
+ * Neither value is trusted: the length is checked against closing time, and the
+ * headcount against the table's real capacity, so a tampered request cannot
+ * hold a table past close or seat twelve people at a four-top.
+ */
+function resolveSitting(
+  timeSlot: string,
+  capacity: number,
+  durationMin?: number,
+  partySize?: number,
+): { durationMin: number; partySize: number } {
+  const duration = durationMin ?? minDurationFor(timeSlot);
+  if (!isValidDuration(timeSlot, duration)) {
+    throw new ApiError(400, 'That length is not available for the start time you picked.');
+  }
+  const party = partySize ?? 1;
+  if (party > capacity) {
+    throw new ApiError(400, `That table seats ${capacity}.`);
+  }
+  return { durationMin: duration, partySize: party };
 }
 
 interface InsertParams {
@@ -61,9 +95,11 @@ interface InsertParams {
   source: 'online' | 'staff_manual';
   feeCents: number;
   totalCents: number;
+  durationMin: number;
+  partySize: number;
 }
 
-const ALREADY_BOOKED = 'That table is already booked for an overlapping 2-hour session.';
+const ALREADY_BOOKED = 'That table is already booked for an overlapping session.';
 
 /**
  * Insert a booking row. The bookings_no_overlap exclusion constraint makes the
@@ -94,10 +130,11 @@ async function insertBooking(p: InsertParams): Promise<number> {
       const { rows } = await query<{ id: number }>(
         `INSERT INTO bookings
            (table_id, booking_date, time_slot, guest_name, guest_email,
-            verification_code, status, source, table_fee_cents, items_total_cents, total_cents)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10)
+            verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
+            duration_min, party_size)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12)
          RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, code, p.status, p.source, p.feeCents, p.totalCents]
+        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize]
       );
       return rows[0].id;
     } catch (err) {
@@ -132,15 +169,18 @@ async function insertBooking(p: InsertParams): Promise<number> {
  */
 export async function createBooking(input: CreateBookingInput): Promise<BookingView> {
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
-  await assertTableExists(input.tableId);
+  const { capacity } = await assertTableExists(input.tableId);
 
-  const feeCents = (await getTableFee(input.date)).cents;
+  const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
+  const feeCents = (await quoteBooking(input.date, input.timeSlot, sitting.durationMin)).totalCents;
   const bookingId = await insertBooking({
     tableId: input.tableId,
     date: input.date,
     timeSlot: input.timeSlot,
     guestName: input.guestName,
     guestEmail: input.guestEmail,
+    durationMin: sitting.durationMin,
+    partySize: sitting.partySize,
     status: 'pending_payment',
     source: 'online',
     feeCents,
@@ -213,15 +253,18 @@ export async function startBookingCheckout(
     throw new ApiError(500, 'Configured payment provider does not support redirect checkout.');
   }
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
-  await assertTableExists(input.tableId);
+  const { capacity } = await assertTableExists(input.tableId);
 
-  const feeCents = (await getTableFee(input.date)).cents;
+  const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
+  const feeCents = (await quoteBooking(input.date, input.timeSlot, sitting.durationMin)).totalCents;
   const bookingId = await insertBooking({
     tableId: input.tableId,
     date: input.date,
     timeSlot: input.timeSlot,
     guestName: input.guestName,
     guestEmail: input.guestEmail,
+    durationMin: sitting.durationMin,
+    partySize: sitting.partySize,
     status: 'pending_payment',
     source: 'online',
     feeCents,
@@ -418,7 +461,8 @@ export async function expireHold(bookingId: number): Promise<boolean> {
  */
 export async function createStaffBooking(input: StaffCreateBookingInput): Promise<BookingView> {
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
-  await assertTableExists(input.tableId);
+  const { capacity } = await assertTableExists(input.tableId);
+  const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
 
   const bookingId = await insertBooking({
     tableId: input.tableId,
@@ -430,6 +474,8 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     source: 'staff_manual',
     feeCents: 0,
     totalCents: 0,
+    durationMin: sitting.durationMin,
+    partySize: sitting.partySize,
   });
 
   const view = await getBookingById(bookingId);
@@ -441,7 +487,8 @@ const BOOKING_SELECT = `
   SELECT b.id, b.table_id, t.label AS table_label,
          to_char(b.booking_date, 'YYYY-MM-DD') AS booking_date,
          b.time_slot, b.guest_name, b.guest_email, b.verification_code, b.status,
-         b.source, b.table_fee_cents, b.total_cents, b.created_at
+         b.source, b.table_fee_cents, b.total_cents, b.created_at,
+         b.duration_min, b.party_size
     FROM bookings b
     JOIN tables t ON t.id = b.table_id`;
 
@@ -459,6 +506,8 @@ interface BookingRow {
   table_fee_cents: number;
   total_cents: number;
   created_at: Date;
+  duration_min: number;
+  party_size: number;
 }
 
 /**
@@ -516,6 +565,8 @@ function hydrate(row: BookingRow, items: BookingItemView[]): BookingView {
     status: row.status,
     source: row.source,
     tableFeeCents: row.table_fee_cents,
+    durationMin: row.duration_min,
+    partySize: row.party_size,
     totalCents: row.total_cents,
     items,
     createdAt: row.created_at.toISOString(),

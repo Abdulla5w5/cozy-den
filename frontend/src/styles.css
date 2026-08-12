@@ -5741,3 +5741,54 @@ button.link {
     transition: none;
   }
 }
+
+/* Duration + party size, between the time grid and the confirm bar. */
+.sitting-options {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.85rem 1.1rem;
+  border-top: 2px solid var(--outline-variant);
+}
+.sitting-field {
+  display: grid;
+  gap: 0.3rem;
+}
+.sitting-field > span {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.sitting-field select {
+  min-height: 44px;
+  margin: 0;
+  border: 2px solid var(--ink);
+  border-radius: 11px;
+  background: var(--surface-low);
+  color: var(--ink);
+  font-weight: 700;
+}
+.sitting-fixed {
+  padding: 0.55rem 0.7rem;
+  border: 2px dashed var(--outline);
+  border-radius: 11px;
+  color: var(--ink);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 700;
+}
+.sitting-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+@media (min-width: 480px) {
+  .sitting-options {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sitting-note {
+    grid-column: 1 / -1;
+  }
+}

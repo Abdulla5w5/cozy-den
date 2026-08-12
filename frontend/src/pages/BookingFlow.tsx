@@ -99,6 +99,40 @@ function chairPositions(shape: FloorShape, count: number): ChairPosition[] {
   return positions;
 }
 
+// Café hours, mirrored from the server's utils/slots. These only shape what the
+// form offers; the server re-derives length, price and capacity on checkout, so
+// nothing here can be leaned on to buy a longer sitting than was paid for.
+const SESSION_MIN = 120;
+const STEP_MIN = 30;
+const CLOSE_MIN = 27 * 60; // 03:00
+const OPEN_MIN = 14 * 60;
+
+function slotToMinutes(hhmm: string) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const mins = h * 60 + m;
+  return mins < OPEN_MIN ? mins + 24 * 60 : mins;
+}
+
+/** A start too late to fit a full session — it runs to closing instead. */
+function isLateStart(start: string) {
+  return slotToMinutes(start) > CLOSE_MIN - SESSION_MIN;
+}
+
+function minDurationFor(start: string) {
+  return isLateStart(start) ? CLOSE_MIN - slotToMinutes(start) : SESSION_MIN;
+}
+
+/** Clock time a sitting ends, for the "until 18:00" label. */
+function endLabel(start: string, durationMin: number) {
+  const end = (slotToMinutes(start) + durationMin) % (24 * 60);
+  return `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+}
+
+function formatHours(mins: number) {
+  const h = mins / 60;
+  return Number.isInteger(h) ? String(h) : h.toFixed(1);
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -129,6 +163,8 @@ interface BookingDraft {
   timeSlot: string;
   guestName: string;
   guestEmail: string;
+  durationMin: number;
+  partySize: number;
 }
 function saveDraft(d: BookingDraft) {
   try {
@@ -173,6 +209,8 @@ export function BookingFlow() {
   const [slots, setSlots] = useState<string[]>([]);
   const [tableId, setTableId] = useState<number | null>(null);
   const [timeSlot, setTimeSlot] = useState<string | null>(null);
+  const [durationMin, setDurationMin] = useState<number>(draft?.durationMin ?? SESSION_MIN);
+  const [partySize, setPartySize] = useState<number>(draft?.partySize ?? 1);
 
   const [guestName, setGuestName] = useState(draft?.guestName ?? '');
   const [guestEmail, setGuestEmail] = useState(draft?.guestEmail ?? '');
@@ -180,11 +218,12 @@ export function BookingFlow() {
 
   // Priced by date on the server (Thu/Fri/Sat and Kuwait national holidays cost
   // more). Display only — checkout re-derives it, so this can never set a price.
-  const [fee, setFee] = useState<{ cents: number; peak: boolean; reason: string | null }>({
-    cents: 275,
-    peak: false,
-    reason: null,
-  });
+  const [fee, setFee] = useState<{
+    cents: number;
+    peak: boolean;
+    reason: string | null;
+    lateCents: number;
+  }>({ cents: 275, peak: false, reason: null, lateCents: 200 });
 
   useEffect(() => {
     setError(null);
@@ -199,7 +238,7 @@ export function BookingFlow() {
       .get<{
         slots: string[];
         availability: TableAvailability[];
-        fee: { cents: number; peak: boolean; reason: string | null };
+        fee: { cents: number; peak: boolean; reason: string | null; lateCents: number };
       }>(`/tables/availability?date=${date}`)
       .then((r) => {
         setSlots(r.slots);
@@ -246,6 +285,35 @@ export function BookingFlow() {
   }, [step]);
 
   const selectedTable = availability.find((tb) => tb.tableId === tableId) || null;
+
+  // What this table can still give us from the chosen start, and therefore what
+  // lengths the form may offer. `maxDuration` comes from the server, which knows
+  // the next booking on this table; falling back to the minimum keeps an older
+  // API (or a table with no entry) at the plain 2-hour session.
+  const late = timeSlot ? isLateStart(timeSlot) : false;
+  const floorMin = timeSlot ? minDurationFor(timeSlot) : SESSION_MIN;
+  const roomMin = timeSlot ? (selectedTable?.maxDuration?.[timeSlot] ?? floorMin) : floorMin;
+  const durationChoices: number[] = [];
+  for (let d = floorMin; d <= roomMin; d += STEP_MIN) durationChoices.push(d);
+
+  // Charged per 2-hour block, rounded up; a late seating is one flat rate. The
+  // server recomputes this at checkout — this is the customer-facing preview.
+  const blocks = Math.max(1, Math.ceil(durationMin / SESSION_MIN));
+  const totalCents = late ? fee.lateCents : fee.cents * blocks;
+
+  useEffect(() => {
+    // A new table or start time can allow a different range, so re-seat the
+    // length inside it rather than carrying an now-impossible choice forward.
+    if (!timeSlot) return;
+    setDurationMin((current) =>
+      current < floorMin || current > roomMin ? floorMin : current,
+    );
+  }, [timeSlot, tableId, floorMin, roomMin]);
+
+  useEffect(() => {
+    // Likewise the headcount cannot exceed the table actually chosen.
+    if (selectedTable && partySize > selectedTable.capacity) setPartySize(selectedTable.capacity);
+  }, [selectedTable, partySize]);
 
   useEffect(() => {
     // A different table can have a different availability pattern. Always show
@@ -299,13 +367,15 @@ export function BookingFlow() {
         timeSlot,
         guestName,
         guestEmail,
+        durationMin,
+        partySize,
       });
       if (res.redirectUrl) {
         // Redirect gateway (Tap): hand the browser to the hosted payment page.
         // A full navigation, not a route change, so we leave our SPA entirely.
         // Save the selection first so a failed/abandoned payment returns to a
         // ready-to-retry checkout rather than a blank form.
-        saveDraft({ tableId, date, timeSlot, guestName, guestEmail });
+        saveDraft({ tableId, date, timeSlot, guestName, guestEmail, durationMin, partySize });
         window.location.assign(res.redirectUrl);
         return; // keep the spinner up while the browser navigates away
       }
@@ -540,11 +610,56 @@ export function BookingFlow() {
                     </div>
                   </div>
 
+                  {timeSlot && (
+                    <div className="sitting-options">
+                      <label className="sitting-field">
+                        <span>{t('bk.stayLength')}</span>
+                        {late ? (
+                          <em className="sitting-fixed">
+                            {t('bk.lateSeating')} · {timeSlot}–{endLabel(timeSlot, durationMin)}
+                          </em>
+                        ) : (
+                          <select
+                            value={durationMin}
+                            onChange={(e) => setDurationMin(Number(e.target.value))}
+                          >
+                            {durationChoices.map((d) => (
+                              <option key={d} value={d}>
+                                {t('bk.hoursShort', { n: formatHours(d) })} · {t('bk.stayUntil')}{' '}
+                                {endLabel(timeSlot, d)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </label>
+
+                      <label className="sitting-field">
+                        <span>{t('bk.partySize')}</span>
+                        <select
+                          value={partySize}
+                          onChange={(e) => setPartySize(Number(e.target.value))}
+                        >
+                          {Array.from({ length: selectedTable.capacity }, (_, i) => i + 1).map(
+                            (n) => (
+                              <option key={n} value={n}>
+                                {n === 1 ? t('bk.onePerson') : t('bk.people', { n })}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+
+                      {late && <p className="sitting-note">{t('bk.lateSeatingHint')}</p>}
+                    </div>
+                  )}
+
                   <div className="slot-panel-action">
                     <div>
                       <span>{t('bk.selection')}</span>
                       <strong>
-                        {timeSlot ? `${selectedTable.label} · ${timeSlot}` : t('bk.chooseTime')}
+                        {timeSlot
+                          ? `${selectedTable.label} · ${timeSlot}–${endLabel(timeSlot, durationMin)} · ${money(totalCents)}`
+                          : t('bk.chooseTime')}
                       </strong>
                     </div>
                     <button
@@ -579,12 +694,19 @@ export function BookingFlow() {
           <div className="summary">
             <h3>{t('bk.summary')}</h3>
             <p>
-              {selectedTable?.label} · {date} · {timeSlot} {t('bk.seating')}
+              {selectedTable?.label} · {date} ·{' '}
+              {timeSlot && `${timeSlot}–${endLabel(timeSlot, durationMin)}`} ·{' '}
+              {partySize === 1 ? t('bk.onePerson') : t('bk.people', { n: partySize })}
             </p>
             <ul>
               <li>
-                {t('bk.tableFee')} — {money(fee.cents)}
-                {fee.peak && (
+                {late
+                  ? t('bk.lateSeating')
+                  : blocks === 1
+                    ? t('bk.blocks', { n: blocks })
+                    : t('bk.blocksPlural', { n: blocks })}{' '}
+                — {money(totalCents)}
+                {!late && fee.peak && (
                   <span className="pill">
                     {fee.reason === 'weekend' ? t('bk.peakWeekend') : fee.reason}
                   </span>
@@ -592,7 +714,7 @@ export function BookingFlow() {
               </li>
             </ul>
             <p className="total">
-              {t('bk.total')} {money(fee.cents)}
+              {t('bk.total')} {money(totalCents)}
             </p>
           </div>
 
@@ -623,7 +745,7 @@ export function BookingFlow() {
               disabled={submitting || !guestName || !guestEmail || !tableId || !timeSlot}
               onClick={submit}
             >
-              {submitting ? t('bk.processing') : t('bk.pay', { amount: money(fee.cents) })}
+              {submitting ? t('bk.processing') : t('bk.pay', { amount: money(totalCents) })}
             </button>
           </div>
         </section>

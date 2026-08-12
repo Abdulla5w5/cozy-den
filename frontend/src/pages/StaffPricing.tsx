@@ -17,6 +17,8 @@ import { useI18n } from '../i18n';
 interface Rates {
   peakCents: number;
   offPeakCents: number;
+  latePeakCents: number;
+  lateOffPeakCents: number;
 }
 interface Override {
   date: string;
@@ -33,6 +35,8 @@ export function StaffPricing() {
   const [overrides, setOverrides] = useState<Override[]>([]);
   const [peak, setPeak] = useState('');
   const [offPeak, setOffPeak] = useState('');
+  const [latePeak, setLatePeak] = useState('');
+  const [lateOffPeak, setLateOffPeak] = useState('');
   const [note, setNote] = useState<string | null>(null);
 
   const [date, setDate] = useState('');
@@ -47,6 +51,8 @@ export function StaffPricing() {
         setOverrides(r.overrides);
         setPeak(toKd(r.rates.peakCents));
         setOffPeak(toKd(r.rates.offPeakCents));
+        setLatePeak(toKd(r.rates.latePeakCents));
+        setLateOffPeak(toKd(r.rates.lateOffPeakCents));
       })
       .catch(() => setRates(null));
   }
@@ -60,6 +66,8 @@ export function StaffPricing() {
       await api.put('/staff/pricing/rates', {
         peakCents: toCents(peak),
         offPeakCents: toCents(offPeak),
+        latePeakCents: toCents(latePeak),
+        lateOffPeakCents: toCents(lateOffPeak),
       });
       setNote(t('pr.saved'));
       load();
@@ -112,6 +120,22 @@ export function StaffPricing() {
             <input
               value={offPeak}
               onChange={(e) => setOffPeak(e.target.value)}
+              inputMode="decimal"
+            />
+          </label>
+          <label className="field inline">
+            {t('pr.latePeak')}
+            <input
+              value={latePeak}
+              onChange={(e) => setLatePeak(e.target.value)}
+              inputMode="decimal"
+            />
+          </label>
+          <label className="field inline">
+            {t('pr.lateOffPeak')}
+            <input
+              value={lateOffPeak}
+              onChange={(e) => setLateOffPeak(e.target.value)}
               inputMode="decimal"
             />
           </label>
