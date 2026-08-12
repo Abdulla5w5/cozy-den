@@ -1280,11 +1280,19 @@ table.data code {
   gap: 0.5rem;
 }
 .mcard-top h3 {
+  /* min-width lets the name be the thing that wraps. Without it a flex item
+     refuses to shrink below its content, so the price was squeezed instead. */
+  min-width: 0;
   margin: 0;
   font-size: 1.15rem;
 }
 .mcard .price {
+  /* The real menu has names like "English Breakfast - Black Tea", which broke
+     "KD 1.75" across two lines on most of the catalogue. A price is one token. */
+  flex: none;
+  margin-right: 0;
   font-size: 1rem;
+  white-space: nowrap;
 }
 /* "Add to Den" = the design's primary-container button asset */
 .add-den {
