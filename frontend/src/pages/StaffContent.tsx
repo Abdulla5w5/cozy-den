@@ -1,7 +1,7 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { Fragment, FormEvent, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
-import { EventItem, Game, MenuItem, Promo } from '../types';
+import { EventItem, EventReservation, Game, MenuItem, Promo } from '../types';
 
 
 /**
@@ -62,12 +62,30 @@ const blank = {
   type: 'internal' as 'internal' | 'external',
   imageUrl: '',
   isFeatured: false,
+  // An event may hold a table for a window. Blank table = holds nothing.
+  tableId: '' as string,
+  startTime: '',
+  durationMin: '' as string,
+  capacity: '' as string,
+  seatPriceKd: '0.000',
 };
 
 /** Staff: full CRUD over events (create / edit / delete / feature). */
 export function EventsTab() {
   const { t } = useI18n();
   const [events, setEvents] = useState<EventItem[] | null>(null);
+  // For the table dropdown. Availability is the only endpoint that lists
+  // tables publicly; the date is irrelevant here, only the labels are used.
+  const [tables, setTables] = useState<{ tableId: number; label: string }[]>([]);
+  const [showing, setShowing] = useState<number | null>(null);
+  useEffect(() => {
+    api
+      .get<{ availability: { tableId: number; label: string }[] }>(
+        `/tables/availability?date=${new Date().toISOString().slice(0, 10)}`,
+      )
+      .then((r) => setTables(r.availability.map((a) => ({ tableId: a.tableId, label: a.label }))))
+      .catch(() => setTables([]));
+  }, []);
   const [form, setForm] = useState<typeof blank | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +110,11 @@ export function EventsTab() {
       type: e.type,
       imageUrl: e.image_url ?? '',
       isFeatured: e.is_featured,
+      tableId: e.table_id ? String(e.table_id) : '',
+      startTime: e.start_time ?? '',
+      durationMin: e.duration_min ? String(e.duration_min) : '',
+      capacity: e.capacity ? String(e.capacity) : '',
+      seatPriceKd: ((e.seat_price_cents ?? 0) / 100).toFixed(3),
     });
   }
 
@@ -101,7 +124,17 @@ export function EventsTab() {
     setBusy(true);
     setError(null);
     try {
-      const body = { ...form, time: form.time || null, imageUrl: form.imageUrl || null };
+      // Blank means "not set", which the API expects as null rather than ''.
+      const body = {
+        ...form,
+        time: form.time || null,
+        imageUrl: form.imageUrl || null,
+        tableId: form.tableId ? Number(form.tableId) : null,
+        startTime: form.startTime || null,
+        durationMin: form.durationMin ? Number(form.durationMin) : null,
+        capacity: form.capacity ? Number(form.capacity) : null,
+        seatPriceCents: Math.round(parseFloat(form.seatPriceKd || '0') * 100),
+      };
       if (editingId) await api.put(`/events/${editingId}`, body);
       else await api.post('/events', body);
       setForm(null);
@@ -195,6 +228,62 @@ export function EventsTab() {
               <ImagePreview url={form.imageUrl} />
             </label>
           </div>
+          {/* Assigning a table blocks it from regular bookings for this window.
+              The API rejects a table without a start time and length. */}
+          <div className="row">
+            <label className="field inline">
+              {t('cat.evTable')}
+              <select
+                value={form.tableId}
+                onChange={(e) => setForm({ ...form, tableId: e.target.value })}
+              >
+                <option value="">{t('cat.evNoTable')}</option>
+                {tables.map((tb) => (
+                  <option key={tb.tableId} value={tb.tableId}>
+                    {tb.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field inline">
+              {t('cat.evStart')}
+              <input
+                placeholder="18:00"
+                value={form.startTime}
+                onChange={(e) => setForm({ ...form, startTime: e.target.value })}
+              />
+            </label>
+            <label className="field inline">
+              {t('cat.evLength')}
+              <select
+                value={form.durationMin}
+                onChange={(e) => setForm({ ...form, durationMin: e.target.value })}
+              >
+                <option value="">—</option>
+                {[60, 120, 180, 240, 300, 360].map((m) => (
+                  <option key={m} value={m}>
+                    {m / 60}h
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field inline">
+              {t('cat.evCapacity')}
+              <input
+                inputMode="numeric"
+                value={form.capacity}
+                onChange={(e) => setForm({ ...form, capacity: e.target.value.replace(/\D/g, '') })}
+              />
+            </label>
+            <label className="field inline">
+              {t('cat.evSeatPrice')}
+              <input
+                inputMode="decimal"
+                value={form.seatPriceKd}
+                onChange={(e) => setForm({ ...form, seatPriceKd: e.target.value })}
+              />
+            </label>
+          </div>
           <label className="field">
             {t('staff.evDesc')}
             <input
@@ -244,7 +333,8 @@ export function EventsTab() {
             </tr>
           )}
           {events?.map((e) => (
-            <tr key={e.id}>
+            <Fragment key={e.id}>
+            <tr>
               <td>
                 {e.event_date}
                 {e.event_time ? ` ${e.event_time}` : ''}
@@ -264,8 +354,22 @@ export function EventsTab() {
                 <button className="link" onClick={() => remove(e.id)}>
                   {t('staff.delete')}
                 </button>
+                <button
+                  className="link"
+                  onClick={() => setShowing(showing === e.id ? null : e.id)}
+                >
+                  {t('cat.evWho')} ({e.seats_taken ?? 0})
+                </button>
               </td>
             </tr>
+            {showing === e.id && (
+              <tr key={`${e.id}-who`}>
+                <td colSpan={6}>
+                  <EventReservations eventId={e.id} />
+                </td>
+              </tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -891,5 +995,53 @@ export function MenuTab() {
         </div>
       )}
     </section>
+  );
+}
+
+
+/**
+ * Who has booked into an event. Loaded on demand rather than with the list:
+ * staff open one event at a time, and the list would otherwise fetch a
+ * reservation set per row on every page view.
+ */
+function EventReservations({ eventId }: { eventId: number }) {
+  const { t, money } = useI18n();
+  const [rows, setRows] = useState<EventReservation[] | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ reservations: EventReservation[] }>(`/events/${eventId}/reservations`)
+      .then((r) => setRows(r.reservations))
+      .catch(() => setRows([]));
+  }, [eventId]);
+
+  if (rows === null) return <p className="muted">{t('loading')}</p>;
+  if (rows.length === 0) return <p className="muted">{t('cat.evNobody')}</p>;
+
+  return (
+    <table className="admin-table">
+      <thead>
+        <tr>
+          <th>{t('bk.name')}</th>
+          <th>{t('ev.phone')}</th>
+          <th>{t('bk.email')}</th>
+          <th>{t('ev.seats')}</th>
+          <th>{t('pr.price')}</th>
+          <th>{t('staff.status')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.id}>
+            <td>{r.guestName}</td>
+            <td>{r.guestPhone || '—'}</td>
+            <td>{r.guestEmail}</td>
+            <td>{r.seats}</td>
+            <td>{r.amountCents > 0 ? money(r.amountCents) : '—'}</td>
+            <td>{r.status}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

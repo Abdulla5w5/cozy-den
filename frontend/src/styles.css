@@ -5826,3 +5826,32 @@ button.link {
 .section[id^='menu-'] {
   scroll-margin-top: 130px;
 }
+
+/* Event seats + reserve form */
+.ev-seats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+.ev-seats .ev-open { color: #2d7055; font-weight: 800; font-size: 0.78rem; }
+.ev-seats .ev-full { color: var(--muted); font-weight: 800; font-size: 0.78rem; }
+.ev-price {
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.ev-reserve {
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  border: 2px dashed var(--outline);
+  border-radius: 14px;
+}
+.ev-reserve-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.6rem;
+}

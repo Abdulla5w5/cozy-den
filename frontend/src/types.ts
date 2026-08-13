@@ -36,6 +36,26 @@ export interface EventItem {
   type: 'internal' | 'external';
   image_url: string | null;
   is_featured: boolean;
+  /** Set when the event occupies a specific table for a window. */
+  table_id: number | null;
+  table_label: string | null;
+  start_time: string | null;
+  duration_min: number | null;
+  /** null = no seat limit. */
+  capacity: number | null;
+  seat_price_cents: number;
+  seats_taken: number;
+}
+
+export interface EventReservation {
+  id: number;
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string | null;
+  seats: number;
+  status: string;
+  amountCents: number;
+  code: string;
 }
 
 export interface HistoryEntry {
