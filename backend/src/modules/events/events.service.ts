@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { query } from '../../db/pool';
+import { query, withTransaction } from '../../db/pool';
 import { ApiError } from '../../middleware/error';
 import { isValidStart, maxDurationFor, STEP_MIN } from '../../utils/slots';
 
@@ -114,4 +114,124 @@ export async function seatCounts(
   const capacity = rows[0].capacity;
   const taken = Number(rows[0].taken);
   return { capacity, taken, remaining: capacity === null ? null : Math.max(0, capacity - taken) };
+}
+
+/**
+ * Reserving seats.
+ *
+ * Mirrors the table-booking checkout: hold the seats as 'pending_payment',
+ * open a gateway charge, and let finalizeSeatCharge() confirm once the customer
+ * has actually paid. A seat is never confirmed on the customer's say-so.
+ *
+ * Capacity is enforced inside the same transaction that writes the row, with
+ * the event row locked, so two customers racing for the last seat cannot both
+ * win. Checking first and inserting after would leave exactly that gap.
+ */
+export interface SeatHold {
+  reservationId: number;
+  code: string;
+  amountCents: number;
+}
+
+export async function holdSeats(
+  eventId: number,
+  seats: number,
+  guest: { name: string; email: string; phone?: string | null; memberId?: number | null },
+): Promise<SeatHold> {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query<{
+      capacity: number | null;
+      seat_price_cents: number;
+      event_date: string;
+      title: string;
+      taken: string;
+    }>(
+      `SELECT e.capacity, e.seat_price_cents, e.title,
+              to_char(e.event_date, 'YYYY-MM-DD') AS event_date,
+              COALESCE((SELECT sum(r.seats) FROM event_reservations r
+                         WHERE r.event_id = e.id AND r.status <> 'cancelled'), 0) AS taken
+         FROM events e WHERE e.id = $1
+         FOR UPDATE OF e`,
+      [eventId],
+    );
+    const ev = rows[0];
+    if (!ev) throw new ApiError(404, 'Event not found.');
+    if (ev.event_date < new Date().toISOString().slice(0, 10)) {
+      throw new ApiError(400, 'That event has already happened.');
+    }
+    if (ev.capacity !== null && Number(ev.taken) + seats > ev.capacity) {
+      const left = Math.max(0, ev.capacity - Number(ev.taken));
+      throw new ApiError(409, left === 0 ? 'That event is full.' : `Only ${left} seat(s) left.`);
+    }
+
+    const amountCents = ev.seat_price_cents * seats;
+    const code = `EVR${eventId}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const ins = await client.query<{ id: number }>(
+      `INSERT INTO event_reservations
+         (event_id, member_id, guest_name, guest_email, guest_phone, seats,
+          verification_code, status, amount_cents)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'pending_payment',$8)
+       RETURNING id`,
+      [eventId, guest.memberId ?? null, guest.name, guest.email, guest.phone ?? null,
+       seats, code, amountCents],
+    );
+    return { reservationId: ins.rows[0].id, code, amountCents };
+  });
+}
+
+/** Free the seats a customer never paid for. */
+export async function releaseSeats(reservationId: number): Promise<void> {
+  await query(
+    `UPDATE event_reservations SET status = 'cancelled'
+      WHERE id = $1 AND status = 'pending_payment'`,
+    [reservationId],
+  );
+}
+
+/** Confirm seats once the gateway says the money arrived. */
+export async function confirmSeats(reservationId: number, paymentRef: string): Promise<void> {
+  await query(
+    `UPDATE event_reservations SET status = 'pending', payment_ref = $2
+      WHERE id = $1 AND status = 'pending_payment'`,
+    [reservationId, paymentRef],
+  );
+}
+
+export interface ReservationView {
+  id: number;
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string | null;
+  seats: number;
+  status: string;
+  amountCents: number;
+  code: string;
+  createdAt: Date;
+}
+
+/** Who has reserved for this event — staff view. */
+export async function listReservations(eventId: number): Promise<ReservationView[]> {
+  const { rows } = await query<{
+    id: number; guest_name: string; guest_email: string; guest_phone: string | null;
+    seats: number; status: string; amount_cents: number; verification_code: string;
+    created_at: Date;
+  }>(
+    `SELECT id, guest_name, guest_email, guest_phone, seats, status, amount_cents,
+            verification_code, created_at
+       FROM event_reservations
+      WHERE event_id = $1 AND status <> 'cancelled'
+      ORDER BY created_at`,
+    [eventId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    guestName: r.guest_name,
+    guestEmail: r.guest_email,
+    guestPhone: r.guest_phone,
+    seats: r.seats,
+    status: r.status,
+    amountCents: r.amount_cents,
+    code: r.verification_code,
+    createdAt: r.created_at,
+  }));
 }

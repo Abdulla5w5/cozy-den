@@ -5,8 +5,22 @@ import { validate } from '../../middleware/validate';
 import { requireStaff } from '../../middleware/auth';
 import { ApiError } from '../../middleware/error';
 import { isoDate } from '../../utils/dates';
+import { env } from '../../config/env';
 import { linkish } from '../../utils/catalogue';
-import { syncTableHold } from './events.service';
+import {
+  confirmSeats,
+  holdSeats,
+  listReservations,
+  releaseSeats,
+  syncTableHold,
+} from './events.service';
+import { paymentProvider } from '../../payment';
+import { TAP_CHARGE_EXPIRY_MINUTES } from '../../payment/constants';
+
+// Absolute base for gateway redirect/webhook URLs, matching the booking flow.
+function publicBase(req: { protocol: string; get(h: string): string | undefined }): string {
+  return env.publicUrl || `${req.protocol}://${req.get('host')}`;
+}
 
 export const eventsRouter = Router();
 
@@ -136,3 +150,124 @@ eventsRouter.delete('/:id', requireStaff, validate(idParam, 'params'), async (re
     next(err);
   }
 });
+
+// ---------- Seat reservations ----------
+
+const reserveBody = z.object({
+  guestName: z.string().trim().min(1).max(120),
+  guestEmail: z.string().trim().email().max(200),
+  guestPhone: z.string().trim().max(20).optional(),
+  seats: z.number().int().min(1).max(20).default(1),
+});
+
+// POST /api/events/:id/reserve — customer reserves seats.
+//
+// Paid seats go through the same redirect checkout a table booking uses; free
+// events (seat_price_cents = 0) confirm straight away, since there is nothing
+// to charge and sending someone to a gateway for KD 0.000 would be absurd.
+eventsRouter.post(
+  '/:id/reserve',
+  validate(idParam, 'params'),
+  validate(reserveBody),
+  async (req, res, next) => {
+    try {
+      const eventId = Number(req.params.id);
+      const b = req.body;
+      const hold = await holdSeats(eventId, b.seats, {
+        name: b.guestName,
+        email: b.guestEmail,
+        phone: b.guestPhone ?? null,
+        memberId: req.user?.sub ?? null,
+      });
+
+      if (hold.amountCents === 0) {
+        await confirmSeats(hold.reservationId, 'free');
+        return res.status(201).json({ code: hold.code, free: true });
+      }
+
+      if (!paymentProvider.createCharge) {
+        await releaseSeats(hold.reservationId);
+        throw new ApiError(500, 'Payment is not configured for paid events.');
+      }
+
+      const base = publicBase(req);
+      try {
+        const charge = await paymentProvider.createCharge({
+          amountCents: hold.amountCents,
+          currency: 'KWD',
+          description: `Cozy Den event seat(s), reservation #${hold.reservationId}`,
+          redirectUrl: `${base}/api/events/seats/return`,
+          webhookUrl: `${base}/api/events/seats/webhook`,
+          customer: { name: b.guestName, email: b.guestEmail },
+          metadata: { reservationId: String(hold.reservationId), code: hold.code },
+          expiryMinutes: TAP_CHARGE_EXPIRY_MINUTES,
+        });
+        return res.status(201).json({ redirectUrl: charge.transactionUrl, code: hold.code });
+      } catch (err) {
+        // Never strand the seats behind a charge that failed to open.
+        await releaseSeats(hold.reservationId);
+        throw err;
+      }
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * Confirm a seat charge with the gateway. Shared by the browser return and the
+ * server-to-server webhook, because either may arrive first and neither is
+ * trusted: the charge is always re-retrieved rather than believed.
+ */
+async function finalizeSeatCharge(chargeId: string): Promise<'paid' | 'failed'> {
+  if (!paymentProvider.retrieveCharge) return 'failed';
+  const charge = await paymentProvider.retrieveCharge(chargeId);
+  const reservationId = Number(charge.metadata?.reservationId ?? 0);
+  if (!reservationId) return 'failed';
+  if (charge.paid) {
+    await confirmSeats(reservationId, chargeId);
+    return 'paid';
+  }
+  await releaseSeats(reservationId);
+  return 'failed';
+}
+
+// GET /api/events/seats/return — where Tap sends the customer's browser.
+eventsRouter.get('/seats/return', async (req, res) => {
+  const site = publicBase(req);
+  const chargeId = String(req.query.tap_id || '');
+  if (!chargeId) return res.redirect(`${site}/events?seat=error`);
+  try {
+    const outcome = await finalizeSeatCharge(chargeId);
+    return res.redirect(`${site}/events?seat=${outcome === 'paid' ? 'ok' : 'failed'}`);
+  } catch (err) {
+    console.error('[tap] event seat return failed', err);
+    return res.redirect(`${site}/events?seat=error`);
+  }
+});
+
+// POST /api/events/seats/webhook — the reliable confirmation path; fires even
+// if the customer closes the tab before being redirected back.
+eventsRouter.post('/seats/webhook', async (req, res) => {
+  try {
+    const chargeId = String(req.body?.id || '');
+    if (chargeId) await finalizeSeatCharge(chargeId);
+  } catch (err) {
+    console.error('[tap] event seat webhook failed', err);
+  }
+  res.status(200).json({ received: true });
+});
+
+// GET /api/events/:id/reservations — staff: who has booked in.
+eventsRouter.get(
+  '/:id/reservations',
+  requireStaff,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      res.json({ reservations: await listReservations(Number(req.params.id)) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
