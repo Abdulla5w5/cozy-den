@@ -18,8 +18,12 @@ export const linkish = (max: number) =>
     .trim()
     .max(max)
     .refine(
-      (v) => v === '' || v.startsWith('/') || /^https?:\/\//i.test(v),
-      'must be a URL or a /path',
+      // A single leading slash then a non-slash is a same-site path. Reject
+      // '//host' and '/\host': both start with a slash but are protocol-
+      // relative links to another origin, which pass in an href and send a
+      // visitor off-site. Only http(s) absolute URLs may leave the origin.
+      (v) => v === '' || /^\/([^/\\].*)?$/.test(v) || /^https?:\/\//i.test(v),
+      'must be an http(s) URL or a /path',
     )
     .nullable()
     .optional();
