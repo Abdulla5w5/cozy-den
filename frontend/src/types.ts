@@ -130,6 +130,8 @@ export interface StaffBooking {
   status: string;
   source: string;
   totalCents: number;
+  durationMin?: number;
+  partySize?: number;
   items: { name: string; quantity: number }[];
 }
 

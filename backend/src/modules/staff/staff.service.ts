@@ -11,6 +11,8 @@ export interface TodayBooking {
   status: string;
   source: string;
   totalCents: number;
+  durationMin: number;
+  partySize: number;
   items: { name: string; quantity: number }[];
 }
 
@@ -25,13 +27,20 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     status: string;
     source: string;
     total_cents: number;
+    duration_min: number;
+    party_size: number;
   }>(
     `SELECT b.id, b.verification_code, b.time_slot, b.guest_name, b.guest_email,
-            t.label AS table_label, b.status, b.source, b.total_cents
+            t.label AS table_label, b.status, b.source, b.total_cents,
+            b.duration_min, b.party_size
        FROM bookings b
        JOIN tables t ON t.id = b.table_id
       WHERE b.booking_date = $1
         AND b.status <> 'cancelled'
+        -- Event table holds live in this table so the exclusion constraint can
+        -- police them, but they are not customers: nobody arrives, pays or
+        -- needs a receipt. Listing them gave staff rows to "confirm" and print.
+        AND b.source <> 'event'
       ORDER BY CASE WHEN b.time_slot::time < TIME '03:00' THEN 1 ELSE 0 END,
                b.time_slot,
                t.label`,
@@ -70,16 +79,21 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     status: r.status,
     source: r.source,
     totalCents: r.total_cents,
+    durationMin: r.duration_min,
+    partySize: r.party_size,
     items: itemsByBooking.get(r.id) ?? [],
   }));
 }
 
 /**
- * Status workflow: pending -> (staff confirms on arrival) -> print_receipt
- * (auto-advanced, system-driven) -> (staff clicks after printing) ->
- * order_complete. The 'confirmed' state is transient by design: confirming
- * lands directly on 'print_receipt' so the dashboard can surface outstanding
- * receipts at a glance.
+ * Status workflow: pending -> (staff confirms the guest arrived) -> arrived ->
+ * (staff marks the session finished) -> order_complete.
+ *
+ * Printing a receipt is deliberately absent from this. It used to be a stage —
+ * the order could not complete until someone printed, and the browser's
+ * `afterprint` event advanced it — which meant cancelling the print dialog
+ * finished the order and nothing could ever be reprinted. Printing is now a
+ * capability available on any confirmed, paid booking and changes no state.
  */
 async function transition(
   where: { id?: number; code?: string },
@@ -101,12 +115,12 @@ async function transition(
   return booking.id;
 }
 
-/** Staff confirms arrival — auto-advances straight to 'print_receipt'. */
+/** Staff confirms the guest turned up. */
 export async function confirmBooking(where: { id?: number; code?: string }): Promise<number> {
-  return transition(where, 'pending', 'print_receipt', 'pending');
+  return transition(where, 'pending', 'arrived', 'pending');
 }
 
-/** Staff clicks after physically printing the receipt. */
-export async function markPrinted(id: number): Promise<number> {
-  return transition({ id }, 'print_receipt', 'order_complete', 'print_receipt');
+/** Staff marks the session finished. */
+export async function completeBooking(id: number): Promise<number> {
+  return transition({ id }, 'arrived', 'order_complete', 'arrived');
 }

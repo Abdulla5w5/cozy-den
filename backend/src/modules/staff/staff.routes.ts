@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validate';
 import { ApiError } from '../../middleware/error';
 import { requireAdmin, requireStaff } from '../../middleware/auth';
-import { getBookingsForDate, confirmBooking, markPrinted } from './staff.service';
+import { getBookingsForDate, confirmBooking, completeBooking } from './staff.service';
 import { getMonthlyAnalytics, getRecurrentCustomers } from './analytics.service';
 import { listTeam, grantStaff, revokeStaff, grantAdmin, revokeAdmin } from './team.service';
 import {
@@ -62,8 +62,7 @@ staffRouter.post(
 const codeSchema = z.object({ code: z.string().trim().min(4).max(32) });
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 
-// POST /api/staff/confirm  { code } — customer arrived; auto-advances to
-// 'print_receipt' the moment it's confirmed (system-driven).
+// POST /api/staff/confirm  { code } — the guest turned up.
 staffRouter.post('/confirm', requireStaff, validate(codeSchema, 'body'), async (req, res, next) => {
   try {
     const id = await confirmBooking({ code: req.body.code });
@@ -88,14 +87,17 @@ staffRouter.post(
   }
 );
 
-// POST /api/staff/bookings/:id/printed — receipt physically printed.
+// POST /api/staff/bookings/:id/complete — the session is finished.
+//
+// Printing has no endpoint by design: a receipt changes nothing, so it is
+// rendered and printed entirely in the browser.
 staffRouter.post(
-  '/bookings/:id/printed',
+  '/bookings/:id/complete',
   requireStaff,
   validate(idParam, 'params'),
   async (req, res, next) => {
     try {
-      const id = await markPrinted(Number(req.params.id));
+      const id = await completeBooking(Number(req.params.id));
       res.json({ booking: await getBookingById(id) });
     } catch (err) {
       next(err);

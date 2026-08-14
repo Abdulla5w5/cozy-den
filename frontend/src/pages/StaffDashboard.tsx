@@ -139,8 +139,8 @@ export function StaffDashboard() {
   );
 }
 
-type StatusFilter = 'all' | 'pending' | 'print_receipt' | 'order_complete';
-const STATUS_FILTERS: StatusFilter[] = ['all', 'pending', 'print_receipt', 'order_complete'];
+type StatusFilter = 'all' | 'pending' | 'arrived' | 'order_complete';
+const STATUS_FILTERS: StatusFilter[] = ['all', 'pending', 'arrived', 'order_complete'];
 
 function TodayTab() {
   const { t, money } = useI18n();
@@ -174,26 +174,38 @@ function TodayTab() {
     }
   }
 
-  // Print flow: render the receipt off-screen, hand it to the browser's print
-  // dialog (which also offers "Save as PDF"), then mark the booking printed.
+  /**
+   * Print flow: render the receipt off-screen and hand it to the browser's
+   * print dialog (which also offers "Save as PDF").
+   *
+   * That is the whole of it. Printing changes no state, so cancelling the
+   * dialog costs nothing and a receipt can be printed again as often as
+   * needed — neither of which was true when `afterprint` advanced the order,
+   * since that event fires whether or not paper came out.
+   *
+   * The wait is two animation frames rather than a 50ms guess: the receipt is
+   * portalled into <body>, and printing before the browser has laid it out
+   * yields a blank page.
+   */
   useEffect(() => {
     if (!printing) return;
-    const booking = printing;
-    const done = () => {
-      setPrinting(null);
-      act(`/staff/bookings/${booking.id}/printed`);
-    };
-    window.addEventListener('afterprint', done, { once: true });
-    const id = window.setTimeout(() => window.print(), 50);
+    let cancelled = false;
+    const clear = () => setPrinting(null);
+    window.addEventListener('afterprint', clear, { once: true });
+    const raf = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (!cancelled) window.print();
+      }),
+    );
     return () => {
-      window.clearTimeout(id);
-      window.removeEventListener('afterprint', done);
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      window.removeEventListener('afterprint', clear);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printing]);
 
   const shown = filter === 'all' ? bookings : bookings.filter((b) => b.status === filter);
-  const outstanding = bookings.filter((b) => b.status === 'print_receipt').length;
+  const outstanding = bookings.filter((b) => b.status === 'arrived').length;
 
   return (
     <section>
@@ -239,7 +251,7 @@ function TodayTab() {
             onClick={() => setFilter(f)}
           >
             {t(`status.${f}`)}
-            {f === 'print_receipt' && outstanding > 0 ? ` (${outstanding})` : ''}
+            {f === 'arrived' && outstanding > 0 ? ` (${outstanding})` : ''}
           </button>
         ))}
       </div>
@@ -286,16 +298,22 @@ function TodayTab() {
                 <span className={`status ${b.status}`}>{t(`status.${b.status}`)}</span>
               </td>
               <td>
-                {b.status === 'pending' ? (
+                {b.status === 'pending' && (
                   <button className="link" onClick={() => act(`/staff/bookings/${b.id}/confirm`)}>
                     {t('staff.confirmBtn')}
                   </button>
-                ) : b.status === 'print_receipt' ? (
-                  <button className="link" onClick={() => setPrinting(b)}>
-                    {t('staff.printedBtn')}
+                )}
+                {b.status === 'arrived' && (
+                  <button className="link" onClick={() => act(`/staff/bookings/${b.id}/complete`)}>
+                    {t('staff.completeBtn')}
                   </button>
-                ) : (
-                  <span className="muted">✓</span>
+                )}
+                {b.status === 'order_complete' && <span className="muted">✓</span>}
+                {/* Available on anything confirmed and paid, as often as needed. */}
+                {(b.status === 'arrived' || b.status === 'order_complete') && (
+                  <button className="link" onClick={() => setPrinting(b)}>
+                    {t('staff.printBtn')}
+                  </button>
                 )}
               </td>
             </tr>
@@ -328,6 +346,8 @@ function Receipt({ booking, date }: { booking: StaffBooking; date: string }) {
       {row(t('receipt.table'), booking.tableLabel)}
       {row(t('receipt.date'), date)}
       {row(t('receipt.time'), booking.timeSlot)}
+      {booking.durationMin ? row(t('receipt.length'), `${booking.durationMin / 60}h`) : null}
+      {booking.partySize ? row(t('receipt.party'), String(booking.partySize)) : null}
       <hr />
       {row(t('receipt.fee'), money(booking.totalCents))}
       <div className="receipt-row total">

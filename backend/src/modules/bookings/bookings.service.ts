@@ -325,7 +325,7 @@ export async function finalizeCharge(
   // Already resolved by the other path — report the settled state, no re-work.
   if (
     payment.bookingStatus === 'pending' ||
-    payment.bookingStatus === 'print_receipt' ||
+    payment.bookingStatus === 'arrived' ||
     payment.bookingStatus === 'order_complete'
   ) {
     return { outcome: 'paid', code: payment.verificationCode };

@@ -568,7 +568,7 @@ table.data code {
   background: rgba(148, 211, 193, 0.15);
   color: var(--primary);
 }
-.status.print_receipt {
+.status.arrived {
   background: rgba(254, 170, 0, 0.2);
   color: var(--accent);
   box-shadow: 0 0 10px rgba(254, 170, 0, 0.25);
