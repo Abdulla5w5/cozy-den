@@ -1,5 +1,6 @@
 import { pool, query } from '../../db/pool';
 import { getTableFee } from '../../utils/pricing';
+import { paymentProvider } from '../../payment';
 import { ApiError } from '../../middleware/error';
 
 /**
@@ -395,4 +396,60 @@ export async function confirmListing(postId: number, paymentRef: string): Promis
       WHERE id = $1 AND payment_state = 'pending_payment'`,
     [postId, paymentRef],
   );
+}
+
+/**
+ * Record the gateway charge against the held listing, at the moment the charge
+ * is opened. Without it the sweep would have nothing to ask Tap about and could
+ * only release by age, taking a listing away from someone who had paid.
+ */
+export async function attachListingCharge(postId: number, chargeId: string): Promise<void> {
+  await query(
+    `UPDATE wanted_posts SET payment_ref = $2
+      WHERE id = $1 AND payment_state = 'pending_payment'`,
+    [postId, chargeId],
+  );
+}
+
+/**
+ * Settle a listing charge from the gateway's own answer. Shared by the return,
+ * the webhook and the sweep; the charge is always re-retrieved, never believed.
+ */
+export async function finalizeListingCharge(
+  chargeId: string,
+): Promise<'paid' | 'failed' | 'pending'> {
+  if (!paymentProvider.retrieveCharge) return 'failed';
+  const charge = await paymentProvider.retrieveCharge(chargeId);
+  const postId = Number(charge.metadata?.postId ?? 0);
+  if (!postId) return 'failed';
+  if (charge.paid) {
+    await confirmListing(postId, chargeId);
+    return 'paid';
+  }
+  // Only a declined charge frees the listing. An unfinished one leaves it held
+  // until the age check decides it was abandoned.
+  if (charge.failed) {
+    await releaseListing(postId);
+    return 'failed';
+  }
+  return 'pending';
+}
+
+/** Listing holds old enough to be worth re-checking, oldest first. */
+export async function listStaleListingHolds(
+  staleAfterMin: number,
+  expiryMin: number,
+  limit: number,
+): Promise<{ id: number; paymentRef: string | null; expirable: boolean }[]> {
+  const { rows } = await query<{ id: number; payment_ref: string | null; expirable: boolean }>(
+    `SELECT id, payment_ref,
+            reserved_at < now() - ($2 || ' minutes')::interval AS expirable
+       FROM wanted_posts
+      WHERE payment_state = 'pending_payment'
+        AND reserved_at < now() - ($1 || ' minutes')::interval
+      ORDER BY reserved_at
+      LIMIT ${limit}`,
+    [String(staleAfterMin), String(expiryMin)],
+  );
+  return rows.map((r) => ({ id: r.id, paymentRef: r.payment_ref, expirable: r.expirable }));
 }

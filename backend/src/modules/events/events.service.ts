@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { query, withTransaction } from '../../db/pool';
 import { ApiError } from '../../middleware/error';
+import { paymentProvider } from '../../payment';
 import { isValidStart, maxDurationFor, STEP_MIN } from '../../utils/slots';
 
 /**
@@ -234,4 +235,66 @@ export async function listReservations(eventId: number): Promise<ReservationView
     code: r.verification_code,
     createdAt: r.created_at,
   }));
+}
+
+/**
+ * Record the gateway charge against the held seats.
+ *
+ * Written the moment the charge is opened, not when it settles. Without it a
+ * hold that is never returned from is just an anonymous row: the sweep would
+ * have no charge to ask Tap about and could only expire it by age, throwing
+ * away seats somebody had actually paid for.
+ */
+export async function attachSeatCharge(reservationId: number, chargeId: string): Promise<void> {
+  await query(
+    `UPDATE event_reservations SET payment_ref = $2
+      WHERE id = $1 AND status = 'pending_payment'`,
+    [reservationId, chargeId],
+  );
+}
+
+/**
+ * Settle a seat charge from the gateway's own answer.
+ *
+ * Shared by the browser return, the webhook and the reconciliation sweep,
+ * because any of the three may get there first and none of them is trusted:
+ * the charge is always re-retrieved rather than believed.
+ */
+export async function finalizeSeatCharge(
+  chargeId: string,
+): Promise<'paid' | 'failed' | 'pending'> {
+  if (!paymentProvider.retrieveCharge) return 'failed';
+  const charge = await paymentProvider.retrieveCharge(chargeId);
+  const reservationId = Number(charge.metadata?.reservationId ?? 0);
+  if (!reservationId) return 'failed';
+  if (charge.paid) {
+    await confirmSeats(reservationId, chargeId);
+    return 'paid';
+  }
+  // A declined charge is final; an unfinished one is not, and must not free
+  // seats out from under a customer who is still on the gateway's page.
+  if (charge.failed) {
+    await releaseSeats(reservationId);
+    return 'failed';
+  }
+  return 'pending';
+}
+
+/** Seat holds old enough to be worth re-checking, oldest first. */
+export async function listStaleSeatHolds(
+  staleAfterMin: number,
+  expiryMin: number,
+  limit: number,
+): Promise<{ id: number; paymentRef: string | null; expirable: boolean }[]> {
+  const { rows } = await query<{ id: number; payment_ref: string | null; expirable: boolean }>(
+    `SELECT id, payment_ref,
+            created_at < now() - ($2 || ' minutes')::interval AS expirable
+       FROM event_reservations
+      WHERE status = 'pending_payment'
+        AND created_at < now() - ($1 || ' minutes')::interval
+      ORDER BY created_at
+      LIMIT ${limit}`,
+    [String(staleAfterMin), String(expiryMin)],
+  );
+  return rows.map((r) => ({ id: r.id, paymentRef: r.payment_ref, expirable: r.expirable }));
 }

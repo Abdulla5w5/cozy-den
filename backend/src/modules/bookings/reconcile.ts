@@ -5,6 +5,16 @@ import {
   PAYMENT_HOLD_EXPIRY_MINUTES,
   PAYMENT_RECONCILE_AFTER_MINUTES,
 } from '../../payment/constants';
+import {
+  finalizeSeatCharge,
+  listStaleSeatHolds,
+  releaseSeats,
+} from '../events/events.service';
+import {
+  finalizeListingCharge,
+  listStaleListingHolds,
+  releaseListing,
+} from '../wanted/wanted.service';
 
 /**
  * Reconciliation sweep for redirect payments (Tap). Does two jobs.
@@ -126,6 +136,63 @@ export async function reconcilePendingPayments(): Promise<{
   return { checked: rows.length, confirmed, cancelled, expired };
 }
 
+/**
+ * The same two jobs, for the other two things a customer can hold by starting a
+ * checkout: seats at an event, and a Wanted Board listing.
+ *
+ * Both count toward availability from the moment the hold is written — that is
+ * what stops two people buying the last seat during the redirect — so both need
+ * the same release valve. Without it an abandoned checkout holds its seats or
+ * its listing forever, and an event can sit permanently "full" having taken no
+ * money at all.
+ *
+ * Settle first, expire second, exactly as bookings do: a charge that turns out
+ * to be paid is confirmed rather than thrown away, and only a hold that is both
+ * unresolved and past the expiry is released.
+ */
+async function reconcileHolds<T extends { id: number; paymentRef: string | null; expirable: boolean }>(
+  label: string,
+  list: (staleAfterMin: number, expiryMin: number, limit: number) => Promise<T[]>,
+  finalize: (chargeId: string) => Promise<'paid' | 'failed' | 'pending'>,
+  release: (id: number) => Promise<void>,
+): Promise<void> {
+  const rows = await list(STALE_AFTER_MIN, HOLD_EXPIRY_MIN, BATCH);
+  let confirmed = 0;
+  let cancelled = 0;
+  let expired = 0;
+
+  for (const row of rows) {
+    try {
+      // No charge id means checkout died before the gateway was ever called.
+      // There is nothing to ask about — the hold is waiting on a payment that
+      // cannot exist.
+      if (!row.paymentRef?.startsWith('chg_')) {
+        if (row.expirable) {
+          await release(row.id);
+          expired++;
+        }
+        continue;
+      }
+      const outcome = await finalize(row.paymentRef);
+      if (outcome === 'paid') confirmed++;
+      else if (outcome === 'failed') cancelled++;
+      else if (row.expirable) {
+        await release(row.id);
+        expired++;
+      }
+    } catch (err) {
+      console.error(`[reconcile] ${label} finalize failed for`, row.id, err);
+    }
+  }
+
+  if (rows.length > 0) {
+    console.log(
+      `[reconcile] ${label}: checked ${rows.length}, confirmed ${confirmed}, ` +
+        `cancelled ${cancelled}, expired ${expired}`,
+    );
+  }
+}
+
 let timer: NodeJS.Timeout | undefined;
 let running = false;
 
@@ -140,6 +207,13 @@ export function startReconciler(intervalMs = 5 * 60 * 1000): void {
     try {
       await reconcileLegacyCancelledPayments();
       await reconcilePendingPayments();
+      await reconcileHolds('event seats', listStaleSeatHolds, finalizeSeatCharge, releaseSeats);
+      await reconcileHolds(
+        'wanted listings',
+        listStaleListingHolds,
+        finalizeListingCharge,
+        releaseListing,
+      );
     } catch (err) {
       console.error('[reconcile] sweep error', err);
     } finally {

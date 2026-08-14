@@ -3,8 +3,10 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validate';
 import { requireAuth } from '../../middleware/auth';
 import {
+  attachListingCharge,
   confirmListing,
   createPost,
+  finalizeListingCharge,
   holdListing,
   listMyPosts,
   listPublicPosts,
@@ -134,6 +136,9 @@ wantedRouter.post(
           metadata: { postId: String(postId) },
           expiryMinutes: TAP_CHARGE_EXPIRY_MINUTES,
         });
+        // Recorded before redirecting, so a customer who pays but never comes
+        // back can still be settled by the sweep.
+        await attachListingCharge(postId, charge.chargeId);
         return res.status(201).json({ redirectUrl: charge.transactionUrl });
       } catch (err) {
         // Never leave a listing held behind a charge that failed to open.
@@ -146,20 +151,6 @@ wantedRouter.post(
   },
 );
 
-/** Verify with the gateway rather than trusting the caller. */
-async function finalizeListingCharge(chargeId: string): Promise<'paid' | 'failed'> {
-  if (!paymentProvider.retrieveCharge) return 'failed';
-  const charge = await paymentProvider.retrieveCharge(chargeId);
-  const postId = Number(charge.metadata?.postId ?? 0);
-  if (!postId) return 'failed';
-  if (charge.paid) {
-    await confirmListing(postId, chargeId);
-    return 'paid';
-  }
-  await releaseListing(postId);
-  return 'failed';
-}
-
 // GET /api/wanted/reserve/return — where Tap sends the customer's browser.
 wantedRouter.get('/reserve/return', async (req, res) => {
   const site = env.publicUrl || `${req.protocol}://${req.get('host')}`;
@@ -167,7 +158,7 @@ wantedRouter.get('/reserve/return', async (req, res) => {
   if (!chargeId) return res.redirect(`${site}/wanted?reserve=error`);
   try {
     const outcome = await finalizeListingCharge(chargeId);
-    return res.redirect(`${site}/wanted?reserve=${outcome === 'paid' ? 'ok' : 'failed'}`);
+    return res.redirect(`${site}/wanted?reserve=${outcome}`);
   } catch (err) {
     console.error('[tap] wanted reserve return failed', err);
     return res.redirect(`${site}/wanted?reserve=error`);

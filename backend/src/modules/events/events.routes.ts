@@ -8,7 +8,9 @@ import { isoDate } from '../../utils/dates';
 import { env } from '../../config/env';
 import { linkish } from '../../utils/catalogue';
 import {
+  attachSeatCharge,
   confirmSeats,
+  finalizeSeatCharge,
   holdSeats,
   listReservations,
   releaseSeats,
@@ -202,6 +204,9 @@ eventsRouter.post(
           metadata: { reservationId: String(hold.reservationId), code: hold.code },
           expiryMinutes: TAP_CHARGE_EXPIRY_MINUTES,
         });
+        // Recorded before redirecting, so a customer who pays but never comes
+        // back can still be settled by the sweep.
+        await attachSeatCharge(hold.reservationId, charge.chargeId);
         return res.status(201).json({ redirectUrl: charge.transactionUrl, code: hold.code });
       } catch (err) {
         // Never strand the seats behind a charge that failed to open.
@@ -214,24 +219,6 @@ eventsRouter.post(
   },
 );
 
-/**
- * Confirm a seat charge with the gateway. Shared by the browser return and the
- * server-to-server webhook, because either may arrive first and neither is
- * trusted: the charge is always re-retrieved rather than believed.
- */
-async function finalizeSeatCharge(chargeId: string): Promise<'paid' | 'failed'> {
-  if (!paymentProvider.retrieveCharge) return 'failed';
-  const charge = await paymentProvider.retrieveCharge(chargeId);
-  const reservationId = Number(charge.metadata?.reservationId ?? 0);
-  if (!reservationId) return 'failed';
-  if (charge.paid) {
-    await confirmSeats(reservationId, chargeId);
-    return 'paid';
-  }
-  await releaseSeats(reservationId);
-  return 'failed';
-}
-
 // GET /api/events/seats/return — where Tap sends the customer's browser.
 eventsRouter.get('/seats/return', async (req, res) => {
   const site = publicBase(req);
@@ -239,7 +226,7 @@ eventsRouter.get('/seats/return', async (req, res) => {
   if (!chargeId) return res.redirect(`${site}/events?seat=error`);
   try {
     const outcome = await finalizeSeatCharge(chargeId);
-    return res.redirect(`${site}/events?seat=${outcome === 'paid' ? 'ok' : 'failed'}`);
+    return res.redirect(`${site}/events?seat=${outcome}`);
   } catch (err) {
     console.error('[tap] event seat return failed', err);
     return res.redirect(`${site}/events?seat=error`);
