@@ -1,4 +1,5 @@
 import { pool, query } from '../../db/pool';
+import { getTableFee } from '../../utils/pricing';
 import { ApiError } from '../../middleware/error';
 
 /**
@@ -25,6 +26,11 @@ export type SessionType = 'males_only' | 'females_only' | 'open';
 export type PostStatus = 'pending' | 'open' | 'completed' | 'rejected';
 
 export interface PublicPost {
+  /** Session length in minutes, and what reserving it costs. */
+  durationMin?: number;
+  amountCents?: number;
+  paymentState?: 'none' | 'pending_payment' | 'paid';
+  reservedBy?: number | null;
   id: number;
   gameId: number | null;
   gameTitle: string;
@@ -38,6 +44,8 @@ export interface PublicPost {
 }
 
 export interface CreatePostInput {
+  /** 2, 4 or 6 hours, matching the table-booking blocks. */
+  durationMin?: number;
   gameId?: number | null;
   gameName?: string | null;
   minPlayers: number;
@@ -50,6 +58,7 @@ export interface CreatePostInput {
 // Public projection. Deliberately selects no member identity of any kind.
 const PUBLIC_SELECT = `
   SELECT p.id, p.game_id, COALESCE(g.title, p.game_name) AS game_title,
+         p.duration_min, p.amount_cents, p.payment_state, p.reserved_by,
          p.min_players, p.max_players, p.session_type,
          p.preferred_days, p.status, p.created_at,
          (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id) AS interest_count
@@ -58,6 +67,10 @@ const PUBLIC_SELECT = `
 
 interface PublicRow {
   id: number;
+  duration_min: number;
+  amount_cents: number;
+  payment_state: 'none' | 'pending_payment' | 'paid';
+  reserved_by: number | null;
   game_id: number | null;
   game_title: string;
   min_players: number;
@@ -72,6 +85,10 @@ interface PublicRow {
 function toPublic(r: PublicRow): PublicPost {
   return {
     id: r.id,
+    durationMin: r.duration_min,
+    amountCents: r.amount_cents,
+    paymentState: r.payment_state,
+    reservedBy: r.reserved_by,
     gameId: r.game_id,
     gameTitle: r.game_title,
     minPlayers: r.min_players,
@@ -107,8 +124,8 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
   const { rows } = await query<{ id: number }>(
     `INSERT INTO wanted_posts
        (member_id, game_id, game_name, min_players, max_players,
-        session_type, preferred_days, acknowledgment_confirmed)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)
+        session_type, preferred_days, acknowledgment_confirmed, duration_min)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,$8)
      RETURNING id`,
     [
       memberId,
@@ -118,6 +135,7 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
       input.maxPlayers,
       input.sessionType,
       input.preferredDays,
+      input.durationMin ?? 120,
     ],
   );
   const post = await getPublicPost(rows[0].id);
@@ -233,6 +251,8 @@ export interface StaffPost extends PublicPost {
 export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[]> {
   const { rows } = await query<PublicRow & { poster_name: string; poster_email: string }>(
     `SELECT p.id, p.game_id, COALESCE(g.title, p.game_name) AS game_title,
+            p.duration_min, p.amount_cents, p.payment_state, p.reserved_by,
+            ru.name AS reserved_by_name, ru.phone AS reserved_by_phone,
             p.min_players, p.max_players, p.session_type,
             p.preferred_days, p.status, p.created_at,
             (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id)
@@ -241,6 +261,7 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
        FROM wanted_posts p
        LEFT JOIN games g ON g.id = p.game_id
        JOIN users u ON u.id = p.member_id
+       LEFT JOIN users ru ON ru.id = p.reserved_by
       WHERE ($1::text IS NULL OR p.status = $1)
       ORDER BY CASE p.status WHEN 'pending' THEN 0 WHEN 'open' THEN 1 ELSE 2 END,
                p.created_at DESC`,
@@ -301,4 +322,77 @@ export async function moderatePost(id: number, decision: 'approve' | 'reject'): 
 export async function deletePost(id: number): Promise<void> {
   const { rowCount } = await query('DELETE FROM wanted_posts WHERE id = $1', [id]);
   if (!rowCount) throw new ApiError(404, 'Post not found.');
+}
+
+// ---------- Reserving a listing ----------
+
+/**
+ * A listing states how long its session runs, and the price follows from that
+ * length at the ordinary table rate — four hours costs what a four-hour table
+ * booking costs. Whoever reserves the listing pays for the whole thing.
+ *
+ * The rate is resolved server-side from the duration stored on the post, never
+ * from anything the client sends, so a tampered request cannot buy a six-hour
+ * session at the two-hour price.
+ */
+export async function quoteListing(postId: number): Promise<{ durationMin: number; cents: number }> {
+  const { rows } = await query<{ duration_min: number }>(
+    'SELECT duration_min FROM wanted_posts WHERE id = $1',
+    [postId],
+  );
+  if (!rows[0]) throw new ApiError(404, 'Post not found.');
+  const durationMin = rows[0].duration_min;
+  // Priced for today: a listing names days of the week, not a date, so there is
+  // no specific evening to price against.
+  const fee = await getTableFee(new Date().toISOString().slice(0, 10));
+  const blocks = Math.max(1, Math.ceil(durationMin / 120));
+  return { durationMin, cents: fee.cents * blocks };
+}
+
+export interface ListingHold {
+  amountCents: number;
+  durationMin: number;
+}
+
+/**
+ * Claim the listing for this member.
+ *
+ * The claim is a conditional update rather than a read-then-write: whichever
+ * transaction updates a row wins and the other affects none, so two people
+ * reserving at once cannot both succeed.
+ */
+export async function holdListing(postId: number, memberId: number): Promise<ListingHold> {
+  const quote = await quoteListing(postId);
+  const { rowCount } = await query(
+    `UPDATE wanted_posts
+        SET reserved_by = $2, reserved_at = now(),
+            amount_cents = $3, payment_state = 'pending_payment'
+      WHERE id = $1 AND payment_state = 'none' AND status = 'open'`,
+    [postId, memberId, quote.cents],
+  );
+  if (!rowCount) {
+    throw new ApiError(409, 'That listing is no longer available to reserve.');
+  }
+  return { amountCents: quote.cents, durationMin: quote.durationMin };
+}
+
+/** Payment failed or was abandoned — put the listing back on the board. */
+export async function releaseListing(postId: number): Promise<void> {
+  await query(
+    `UPDATE wanted_posts
+        SET reserved_by = NULL, reserved_at = NULL, amount_cents = 0,
+            payment_state = 'none', payment_ref = NULL
+      WHERE id = $1 AND payment_state = 'pending_payment'`,
+    [postId],
+  );
+}
+
+/** The money arrived; the listing is taken. */
+export async function confirmListing(postId: number, paymentRef: string): Promise<void> {
+  await query(
+    `UPDATE wanted_posts
+        SET payment_state = 'paid', payment_ref = $2, status = 'completed'
+      WHERE id = $1 AND payment_state = 'pending_payment'`,
+    [postId, paymentRef],
+  );
 }

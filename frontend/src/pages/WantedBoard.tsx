@@ -30,6 +30,10 @@ interface Post {
   status: 'pending' | 'open' | 'completed' | 'rejected';
   interestCount: number;
   createdAt: string;
+  /** Session length, and what reserving the listing costs. */
+  durationMin?: number;
+  amountCents?: number;
+  paymentState?: 'none' | 'pending_payment' | 'paid';
 }
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -39,6 +43,7 @@ export function WantedBoard() {
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [mine, setMine] = useState<Post[]>([]);
   const [interestedIn, setInterestedIn] = useState<number[]>([]);
+  const [reservingId, setReservingId] = useState<number | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -65,6 +70,27 @@ export function WantedBoard() {
     loadBoard();
     loadMine();
   }, []);
+
+  /**
+   * Take the listing and pay for it. Paid listings hand the browser to the
+   * gateway exactly as table checkout does; the server confirms only after
+   * re-retrieving the charge.
+   */
+  async function reserve(id: number) {
+    setReservingId(id);
+    try {
+      const res = await api.post<{ redirectUrl?: string; free?: boolean }>(`/wanted/${id}/reserve`);
+      if (res.redirectUrl) {
+        window.location.assign(res.redirectUrl);
+        return; // keep the spinner up while the browser navigates away
+      }
+      loadBoard();
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : t('wb.reserveFailed'));
+    } finally {
+      setReservingId(null);
+    }
+  }
 
   async function registerInterest(id: number) {
     setNote(null);
@@ -142,6 +168,9 @@ export function WantedBoard() {
                 canJoin={loggedIn && p.status === 'open' && !interestedIn.includes(p.id)}
                 joined={interestedIn.includes(p.id)}
                 onJoin={() => registerInterest(p.id)}
+                canReserve={loggedIn && p.status === 'open' && p.paymentState === 'none'}
+                onReserve={() => reserve(p.id)}
+                reserving={reservingId === p.id}
               />
             ))}
           </div>
@@ -157,14 +186,20 @@ function PostCard({
   joined,
   onJoin,
   mine,
+  canReserve,
+  onReserve,
+  reserving,
 }: {
   post: Post;
   canJoin?: boolean;
   joined?: boolean;
   onJoin?: () => void;
   mine?: boolean;
+  canReserve?: boolean;
+  onReserve?: () => void;
+  reserving?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, money } = useI18n();
   const days = post.preferredDays.map((d) => t(`day.${DAY_KEYS[d]}`)).join(' · ');
 
   return (
@@ -178,19 +213,37 @@ function PostCard({
         {t('wb.players', { min: post.minPlayers, max: post.maxPlayers })}
       </p>
       <p className="muted">{days}</p>
+      {post.durationMin ? (
+        <p className="muted">{t('wb.length', { n: post.durationMin / 60 })}</p>
+      ) : null}
       {/* Count only — never who. */}
       <p className="price">
         {t('wb.interested', { n: post.interestCount, max: post.maxPlayers })}
       </p>
-      {mine ? null : joined ? (
-        <span className="pill">{t('wb.youAreIn')}</span>
-      ) : canJoin ? (
-        <button className="primary" onClick={onJoin}>
-          {t('wb.join')}
-        </button>
-      ) : post.status === 'completed' ? (
-        <span className="pill">{t('wb.full')}</span>
-      ) : null}
+      {post.paymentState === 'paid' ? (
+        <span className="pill">{t('wb.reservedAlready')}</span>
+      ) : (
+        <>
+          {mine ? null : joined ? (
+            <span className="pill">{t('wb.youAreIn')}</span>
+          ) : canJoin ? (
+            <button className="primary" onClick={onJoin}>
+              {t('wb.join')}
+            </button>
+          ) : post.status === 'completed' ? (
+            <span className="pill">{t('wb.full')}</span>
+          ) : null}
+          {/* Reserving is a commitment with money attached — distinct from
+              expressing interest, which schedules and costs nothing. */}
+          {!mine && canReserve && post.amountCents ? (
+            <button className="cta" onClick={onReserve} disabled={reserving}>
+              {reserving
+                ? t('bk.processing')
+                : t('wb.reserveFor', { amount: money(post.amountCents) })}
+            </button>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
@@ -203,6 +256,9 @@ function PostForm({ onDone }: { onDone: () => void }) {
   const [minPlayers, setMinPlayers] = useState(2);
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [sessionType, setSessionType] = useState<SessionType>('open');
+  // Whole blocks, same as a table booking. The price follows from this and is
+  // worked out server-side, so the form never sends an amount.
+  const [durationMin, setDurationMin] = useState(120);
   const [days, setDays] = useState<number[]>([]);
   // Mandatory. The server refuses without it and the database has a CHECK
   // constraint, so this is a courtesy to the poster, not the actual guard.
@@ -237,6 +293,7 @@ function PostForm({ onDone }: { onDone: () => void }) {
         minPlayers,
         maxPlayers,
         sessionType,
+        durationMin,
         preferredDays: days,
         acknowledgmentConfirmed: ack,
       });
@@ -300,6 +357,16 @@ function PostForm({ onDone }: { onDone: () => void }) {
             <option value="open">{t('wb.type.open')}</option>
             <option value="males_only">{t('wb.type.males_only')}</option>
             <option value="females_only">{t('wb.type.females_only')}</option>
+          </select>
+        </label>
+        <label className="field inline">
+          {t('wb.sessionLength')}
+          <select value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))}>
+            {[120, 240, 360].map((m) => (
+              <option key={m} value={m}>
+                {t('wb.length', { n: m / 60 })}
+              </option>
+            ))}
           </select>
         </label>
       </div>
