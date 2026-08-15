@@ -8,6 +8,8 @@ import { isoDate } from '../../utils/dates';
 import { env } from '../../config/env';
 import { linkish } from '../../utils/catalogue';
 import {
+  assertEventTableExists,
+  assertWindowValid,
   attachSeatCharge,
   confirmSeats,
   finalizeSeatCharge,
@@ -84,6 +86,12 @@ const idParam = z.object({ id: z.coerce.number().int().positive() });
 eventsRouter.post('/', requireStaff, validate(eventBody), async (req, res, next) => {
   try {
     const b = req.body;
+    // Validate the window and the table up front, so a table picked without a
+    // start time/length (or a table that no longer exists) returns a clean 400
+    // or 404 instead of the events INSERT tripping a DB constraint as a 500.
+    const win = { tableId: b.tableId, date: b.date, startTime: b.startTime, durationMin: b.durationMin };
+    assertWindowValid(win);
+    if (b.tableId != null) await assertEventTableExists(b.tableId);
     // The event and its table hold are one change: if the table turns out to be
     // taken, the whole create rolls back rather than leaving an event that
     // claims a table it never got.
@@ -118,6 +126,9 @@ eventsRouter.put(
     try {
       const b = req.body;
       const id = Number(req.params.id);
+      const win = { tableId: b.tableId, date: b.date, startTime: b.startTime, durationMin: b.durationMin };
+      assertWindowValid(win);
+      if (b.tableId != null) await assertEventTableExists(b.tableId);
       await withTransaction(async (client) => {
         const { rowCount } = await client.query(
           `UPDATE events SET title=$1, description=$2, event_date=$3, event_time=$4,
