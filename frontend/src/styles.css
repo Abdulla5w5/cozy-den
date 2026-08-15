@@ -4700,23 +4700,8 @@ button.link {
 /* A soft round mat in the top-left that the Cozy Den mark rests on — an
    organic rug shape with a faint ring, so it settles into the floor rather
    than reading as a pasted-on box. */
-.cafe-floor-plan::after {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  /* A round rug in the top-left. Sized in cqw with a 1:1 box so it stays a
-     true circle at every width, and pulled back far enough to clear B1. */
-  top: 4.5%;
-  left: 3.5%;
-  width: 17.5cqw;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background:
-    repeating-linear-gradient(45deg, rgba(181, 114, 46, 0.05) 0 7px, transparent 7px 15px),
-    #f1e2bd;
-  box-shadow: inset 0 0 0 2px rgba(120, 80, 40, 0.14);
-  pointer-events: none;
-}
+/* No backing behind the mark: the Cozy Den logo floats directly on the floor
+   in the top-left corner. */
 /* The Cozy Den mark, resting on the play rug in the top-left and gently
    bobbing — a branded decoration for the corner rather than a blank cut-out. */
 .floor-brand-mark {
@@ -5812,11 +5797,20 @@ button.link {
   .map-live-badge {
     justify-self: start;
   }
+  /* Phones scale the whole room to fit rather than holding a 420px map that
+     pans — panning only ever revealed half the floor and read as broken
+     scaling. 300px is the floor: below it the fixed 2px chair outlines start to
+     dominate and neighbouring tables touch, so common phones (390px+) fit the
+     whole map with no pan, and the narrowest ones pan a little rather than
+     overlap. Trimming the shell padding buys back width toward that fit. */
+  .cafe-map-shell {
+    padding: 0.4rem;
+  }
   .cafe-floor-plan {
-    --floor-min-width: 420px;
+    --floor-min-width: 300px;
   }
   .cafe-floor-viewport::after {
-    display: block;
+    display: none;
   }
   .floor-legend {
     justify-content: center;
