@@ -29,6 +29,10 @@ export type PostStatus = 'pending' | 'open' | 'completed' | 'rejected';
 export interface PublicPost {
   /** Session length in minutes, and what reserving it costs. */
   durationMin?: number;
+  /** Price to reserve this listing now, quoted from its length at today's
+   *  block rate. Present on every listing so the board can show it before
+   *  anyone has reserved; amountCents only fills in once a reservation exists. */
+  reserveCents?: number;
   amountCents?: number;
   paymentState?: 'none' | 'pending_payment' | 'paid';
   reservedBy?: number | null;
@@ -83,10 +87,18 @@ interface PublicRow {
   interest_count: string;
 }
 
-function toPublic(r: PublicRow): PublicPost {
+/** Today's price for one 2-hour block, the basis for every listing quote. */
+async function todayBlockCents(): Promise<number> {
+  return (await getTableFee(new Date().toISOString().slice(0, 10))).cents;
+}
+
+function toPublic(r: PublicRow, blockCents: number): PublicPost {
+  // Whole 2/4/6-hour blocks, same as a table booking; whoever reserves pays all.
+  const blocks = Math.max(1, Math.ceil((r.duration_min || 120) / 120));
   return {
     id: r.id,
     durationMin: r.duration_min,
+    reserveCents: r.payment_state === 'none' ? blockCents * blocks : r.amount_cents,
     amountCents: r.amount_cents,
     paymentState: r.payment_state,
     reservedBy: r.reserved_by,
@@ -146,7 +158,7 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
 
 export async function getPublicPost(id: number): Promise<PublicPost | null> {
   const { rows } = await query<PublicRow>(`${PUBLIC_SELECT} WHERE p.id = $1`, [id]);
-  return rows[0] ? toPublic(rows[0]) : null;
+  return rows[0] ? toPublic(rows[0], await todayBlockCents()) : null;
 }
 
 /** The public board: approved posts only, identity-free. */
@@ -156,7 +168,8 @@ export async function listPublicPosts(): Promise<PublicPost[]> {
       WHERE p.status IN ('open', 'completed')
       ORDER BY CASE p.status WHEN 'open' THEN 0 ELSE 1 END, p.created_at DESC`,
   );
-  return rows.map(toPublic);
+  const blockCents = await todayBlockCents();
+  return rows.map((r) => toPublic(r, blockCents));
 }
 
 /** A member's own posts, including ones still awaiting approval. */
@@ -165,7 +178,8 @@ export async function listMyPosts(memberId: number): Promise<PublicPost[]> {
     `${PUBLIC_SELECT} WHERE p.member_id = $1 ORDER BY p.created_at DESC`,
     [memberId],
   );
-  return rows.map(toPublic);
+  const blockCents = await todayBlockCents();
+  return rows.map((r) => toPublic(r, blockCents));
 }
 
 /** Post ids this member has already registered interest in (to drive the UI). */
@@ -294,8 +308,9 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
     byPost.set(i.post_id, list);
   }
 
+  const blockCents = await todayBlockCents();
   return rows.map((r) => ({
-    ...toPublic(r),
+    ...toPublic(r, blockCents),
     posterName: r.poster_name,
     posterEmail: r.poster_email,
     interested: byPost.get(r.id) ?? [],

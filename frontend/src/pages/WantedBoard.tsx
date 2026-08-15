@@ -32,6 +32,8 @@ interface Post {
   createdAt: string;
   /** Session length, and what reserving the listing costs. */
   durationMin?: number;
+  /** Quoted price to reserve now — present on every open listing. */
+  reserveCents?: number;
   amountCents?: number;
   paymentState?: 'none' | 'pending_payment' | 'paid';
 }
@@ -234,12 +236,16 @@ function PostCard({
             <span className="pill">{t('wb.full')}</span>
           ) : null}
           {/* Reserving is a commitment with money attached — distinct from
-              expressing interest, which schedules and costs nothing. */}
-          {!mine && canReserve && post.amountCents ? (
+              expressing interest, which schedules and costs nothing. Available
+              to any signed-in member, the poster included, since whoever
+              reserves pays for the table. The price is quoted from the
+              listing's length (reserveCents), so it shows before anyone has
+              reserved. */}
+          {canReserve && post.reserveCents ? (
             <button className="cta" onClick={onReserve} disabled={reserving}>
               {reserving
                 ? t('bk.processing')
-                : t('wb.reserveFor', { amount: money(post.amountCents) })}
+                : t('wb.reserveFor', { amount: money(post.reserveCents) })}
             </button>
           ) : null}
         </>
