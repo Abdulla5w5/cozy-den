@@ -4704,11 +4704,14 @@ button.link {
   content: '';
   position: absolute;
   z-index: 0;
-  top: 2.5%;
-  left: 1.5%;
-  width: 21%;
-  height: 25%;
-  border-radius: 47% 53% 51% 49% / 51% 48% 52% 49%;
+  /* Sits flush into the interior corner: the top-left is squared to the room's
+     own corner curve, the rest stays an organic rug shape, so it fills the
+     corner rather than floating away from it. */
+  top: 3.4%;
+  left: 2.9%;
+  width: 23%;
+  height: 27%;
+  border-radius: 14px 56% 52% 60% / 14px 54% 50% 52%;
   background:
     repeating-linear-gradient(45deg, rgba(181, 114, 46, 0.05) 0 7px, transparent 7px 15px),
     #f1e2bd;
@@ -4720,9 +4723,9 @@ button.link {
 .floor-brand-mark {
   position: absolute;
   z-index: 1;
-  left: 4%;
-  top: 7%;
-  width: 15%;
+  left: 5.5%;
+  top: 8.5%;
+  width: 15.5%;
   height: auto;
   opacity: 0.92;
   transform-origin: center;
