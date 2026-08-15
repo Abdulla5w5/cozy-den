@@ -189,6 +189,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'bk.liveAvailability': { en: 'Live availability', ar: 'المتاح الحين' },
   'bk.counter': { en: 'Counter', ar: 'الكاونتر' },
   'bk.gameWall': { en: 'Game wall', ar: 'رف الألعاب' },
+  'bk.dndRoom': { en: 'D&D Room', ar: 'غرفة دنجنز' },
   'bk.entrance': { en: 'Entrance', ar: 'المدخل' },
   'bk.loadingTables': { en: 'Setting up the tables…', ar: 'جاري تجهيز الطاولات…' },
   'bk.tablesUnavailable': { en: 'The floor plan could not load', ar: 'ما قدرنا نحمّل خريطة الطاولات' },

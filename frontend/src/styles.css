@@ -4671,7 +4671,9 @@ button.link {
   isolation: isolate;
   width: 100%;
   min-width: var(--floor-min-width);
-  aspect-ratio: 13 / 10;
+  /* Wider, more blueprint-like hall; the L is formed by the gated D&D room
+     attached at the bottom-left plus the stepped top-left corner. */
+  aspect-ratio: 7 / 5;
   overflow: hidden;
   border: 2px solid var(--ink);
   border-radius: 18px;
@@ -4695,20 +4697,100 @@ button.link {
   border-top-width: 8px;
   border-radius: 13px 13px 20px 20px;
 }
+/* A soft round mat in the top-left that the Cozy Den mark rests on — an
+   organic rug shape with a faint ring, so it settles into the floor rather
+   than reading as a pasted-on box. */
 .cafe-floor-plan::after {
   content: '';
   position: absolute;
-  z-index: 2;
-  top: -2px;
-  left: -2px;
+  z-index: 0;
+  top: 2.5%;
+  left: 1.5%;
   width: 21%;
-  height: 43%;
-  border-right: 3px solid var(--ink);
-  border-bottom: 3px solid var(--ink);
-  border-radius: 0 0 15px 0;
-  background: var(--floor-cutout);
-  box-shadow: 5px 5px 0 rgba(36, 36, 36, 0.08);
+  height: 25%;
+  border-radius: 47% 53% 51% 49% / 51% 48% 52% 49%;
+  background:
+    repeating-linear-gradient(45deg, rgba(181, 114, 46, 0.05) 0 7px, transparent 7px 15px),
+    #f1e2bd;
+  box-shadow: inset 0 0 0 2px rgba(120, 80, 40, 0.14);
   pointer-events: none;
+}
+/* The Cozy Den mark, resting on the play rug in the top-left and gently
+   bobbing — a branded decoration for the corner rather than a blank cut-out. */
+.floor-brand-mark {
+  position: absolute;
+  z-index: 1;
+  left: 4%;
+  top: 7%;
+  width: 15%;
+  height: auto;
+  opacity: 0.92;
+  transform-origin: center;
+  animation: floor-brand-float 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes floor-brand-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-0.9cqw) rotate(3deg);
+  }
+}
+/* The gated D&D room: a walled enclosure attached at the bottom-left with a
+   doorway onto the hall. Sits below the tables (z 1) so its chairs read over
+   the room floor. Its walls plus the top-left step give the plan its L shape. */
+.floor-room-dnd {
+  position: absolute;
+  z-index: 1;
+  left: 3%;
+  top: 64%;
+  right: 63%;
+  bottom: 3%;
+  /* Solid walls, a touch heavier than a table outline so it reads as a room. */
+  border: 3.5px solid var(--ink);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 2cqw 2cqw, rgba(93, 58, 31, 0.08) 0.16cqw, transparent 0.2cqw),
+    #f7e6c4;
+  background-size: 3.9cqw 3.9cqw, auto;
+  box-shadow: inset 0 0 26px rgba(119, 69, 25, 0.1);
+}
+/* Room name plate, sitting on the top wall like a door sign. */
+.floor-room-dnd > span {
+  position: absolute;
+  top: -1cqw;
+  left: 10%;
+  padding: 0 0.5cqw;
+  background: var(--floor-surface);
+  color: rgba(36, 36, 36, 0.62);
+  font-size: clamp(0.42rem, 1.3cqw, 0.56rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* Doorway: a clean opening in the top wall, toward the hall. */
+.floor-room-dnd::after {
+  content: '';
+  position: absolute;
+  top: -3.5px;
+  right: 16%;
+  width: 26%;
+  height: 3.5px;
+  background: var(--floor-surface);
+}
+/* Crisp jambs framing the opening, instead of a scribbled door swing. */
+.floor-room-dnd::before {
+  content: '';
+  position: absolute;
+  top: -3.5px;
+  right: 16%;
+  width: 26%;
+  height: 1.6cqw;
+  border-left: 3.5px solid var(--ink);
+  border-right: 3.5px solid var(--ink);
 }
 .floor-window {
   position: absolute;
@@ -4731,9 +4813,9 @@ button.link {
   position: absolute;
   z-index: 2;
   left: 4.5%;
-  top: 27%;
-  width: 31%;
-  height: 34%;
+  top: 30%;
+  width: 29%;
+  height: 16%;
   border: 0;
   background: transparent;
   color: #fffaf1;
@@ -4879,8 +4961,8 @@ button.link {
   font-style: normal;
 }
 .floor-door-prop {
-  left: 3%;
-  bottom: 27%;
+  left: 1.5%;
+  bottom: 40%;
   width: 7.25cqw;
   aspect-ratio: 48 / 54;
   border: 0;
@@ -4952,8 +5034,8 @@ button.link {
 .floor-entrance {
   position: absolute;
   z-index: 0;
-  bottom: 30%;
-  left: 11%;
+  bottom: 45%;
+  left: 13%;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
   background: #fff5df;
@@ -5094,6 +5176,19 @@ button.link {
   --table-glow: rgba(45, 139, 87, 0.34);
   width: 18.1cqw;
   aspect-ratio: 120 / 62;
+}
+/* The gated-room table: a long wooden table, taller than a plain wide one, so
+   it fills its room the way the big D&D table does in the real cafe. */
+.floor-table-hall {
+  --table-accent: #b5722e;
+  --table-glow: rgba(181, 114, 46, 0.34);
+  width: 17cqw;
+  aspect-ratio: 120 / 88;
+}
+.floor-table-hall .floor-table-surface {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), transparent 48%),
+    #a86a34;
 }
 .floor-table-communal {
   --table-accent: #f13619;
@@ -5743,6 +5838,10 @@ button.link {
 @media (prefers-reduced-motion: reduce) {
   .floor-loading-die {
     animation: none;
+  }
+  .floor-brand-mark {
+    animation: none;
+    transform: rotate(-3deg);
   }
   .floor-table,
   .floor-table-tooltip {

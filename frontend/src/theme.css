@@ -422,6 +422,29 @@
 [data-theme='dark'] .cafe-floor-plan::after {
   border-color: rgba(255, 235, 205, 0.25);
 }
+/* The play rug and the gated D&D room take real dark surfaces at night rather
+   than staying cream over the dark floor. */
+[data-theme='dark'] .cafe-floor-plan::after {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 224, 180, 0.05) 0 5px, transparent 5px 11px),
+    #241f1a;
+}
+[data-theme='dark'] .floor-room-dnd {
+  border-color: rgba(246, 239, 227, 0.6);
+  background:
+    radial-gradient(circle at 2cqw 2cqw, rgba(255, 255, 255, 0.03) 0.16cqw, transparent 0.2cqw),
+    #211d18;
+  background-size: 3.9cqw 3.9cqw, auto;
+  box-shadow: inset 0 0 26px rgba(0, 0, 0, 0.4);
+}
+[data-theme='dark'] .floor-room-dnd > span {
+  color: rgba(246, 239, 227, 0.62);
+}
+/* The mark is dark ink; invert it to cream so it reads on the night floor. */
+[data-theme='dark'] .floor-brand-mark {
+  filter: invert(1) brightness(1.9);
+  opacity: 0.85;
+}
 [data-theme='dark'] .floor-entrance {
   background: #27231e;
   color: rgba(246, 239, 227, 0.65);

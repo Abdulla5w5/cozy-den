@@ -10,7 +10,7 @@ type CheckoutResponse = { booking?: Booking; redirectUrl?: string };
 
 type Step = 1 | 2;
 
-type FloorShape = 'small' | 'round' | 'wide' | 'communal' | 'floor';
+type FloorShape = 'small' | 'round' | 'wide' | 'communal' | 'floor' | 'hall';
 
 interface FloorPlacement {
   x: number;
@@ -23,13 +23,13 @@ interface FloorPlacement {
 // API remains the source of truth for which tables exist and which slots are
 // free; an unknown future table still receives a sensible fallback position.
 const FLOOR_PLACEMENTS: Record<string, FloorPlacement> = {
-  'Small Table 1': { x: 52, y: 39, shape: 'small', angle: 0 },
+  'Small Table 1': { x: 52, y: 39, shape: 'communal', angle: 0 },
   'Small Table 2': { x: 80, y: 50, shape: 'small', angle: 1 },
   'Small Table 3': { x: 65, y: 18, shape: 'small', angle: -1 },
   'Big Table 1': { x: 38, y: 18, shape: 'wide', angle: 0 },
   'Big Table 2': { x: 53, y: 65, shape: 'round', angle: 0 },
   'Big Table 3': { x: 72, y: 82, shape: 'wide', angle: 0 },
-  'Big Table 4 (D&D)': { x: 14, y: 84, shape: 'communal', angle: 0 },
+  'Big Table 4 (D&D)': { x: 20, y: 80, shape: 'hall', angle: 0 },
   'Floor Table': { x: 85, y: 19, shape: 'floor', angle: 2 },
 };
 
@@ -468,6 +468,17 @@ export function BookingFlow() {
                   <div className="floor-shelf" aria-hidden="true">
                     <span>{t('bk.gameWall')}</span>
                   </div>
+                  {/* The D&D table sits in its own walled room, gated off from
+                      the main hall with a doorway — as in the real cafe. */}
+                  <div className="floor-room-dnd" aria-hidden="true">
+                    <span>{t('bk.dndRoom')}</span>
+                  </div>
+                  <img
+                    className="floor-brand-mark"
+                    src="/brand/cd-mark.png"
+                    alt=""
+                    aria-hidden="true"
+                  />
                   <span className="floor-plant plant-one" aria-hidden="true">✦</span>
                   <span className="floor-plant plant-two" aria-hidden="true">✦</span>
                   <span className="floor-game-prop floor-die-prop" aria-hidden="true">
