@@ -1,5 +1,5 @@
 import { pool, query } from '../../db/pool';
-import { getTableFee } from '../../utils/pricing';
+import { getRates, blockCentsForDays, type Rates } from '../../utils/pricing';
 import { paymentProvider } from '../../payment';
 import { ApiError } from '../../middleware/error';
 
@@ -87,14 +87,11 @@ interface PublicRow {
   interest_count: string;
 }
 
-/** Today's price for one 2-hour block, the basis for every listing quote. */
-async function todayBlockCents(): Promise<number> {
-  return (await getTableFee(new Date().toISOString().slice(0, 10))).cents;
-}
-
-function toPublic(r: PublicRow, blockCents: number): PublicPost {
+function toPublic(r: PublicRow, rates: Rates): PublicPost {
   // Whole 2/4/6-hour blocks, same as a table booking; whoever reserves pays all.
+  // Priced by the listing's preferred days, not the day it is viewed on.
   const blocks = Math.max(1, Math.ceil((r.duration_min || 120) / 120));
+  const blockCents = blockCentsForDays(r.preferred_days, rates);
   return {
     id: r.id,
     durationMin: r.duration_min,
@@ -158,7 +155,7 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
 
 export async function getPublicPost(id: number): Promise<PublicPost | null> {
   const { rows } = await query<PublicRow>(`${PUBLIC_SELECT} WHERE p.id = $1`, [id]);
-  return rows[0] ? toPublic(rows[0], await todayBlockCents()) : null;
+  return rows[0] ? toPublic(rows[0], await getRates()) : null;
 }
 
 /** The public board: approved posts only, identity-free. */
@@ -168,8 +165,8 @@ export async function listPublicPosts(): Promise<PublicPost[]> {
       WHERE p.status IN ('open', 'completed')
       ORDER BY CASE p.status WHEN 'open' THEN 0 ELSE 1 END, p.created_at DESC`,
   );
-  const blockCents = await todayBlockCents();
-  return rows.map((r) => toPublic(r, blockCents));
+  const rates = await getRates();
+  return rows.map((r) => toPublic(r, rates));
 }
 
 /** A member's own posts, including ones still awaiting approval. */
@@ -178,8 +175,8 @@ export async function listMyPosts(memberId: number): Promise<PublicPost[]> {
     `${PUBLIC_SELECT} WHERE p.member_id = $1 ORDER BY p.created_at DESC`,
     [memberId],
   );
-  const blockCents = await todayBlockCents();
-  return rows.map((r) => toPublic(r, blockCents));
+  const rates = await getRates();
+  return rows.map((r) => toPublic(r, rates));
 }
 
 /** Post ids this member has already registered interest in (to drive the UI). */
@@ -308,9 +305,9 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
     byPost.set(i.post_id, list);
   }
 
-  const blockCents = await todayBlockCents();
+  const rates = await getRates();
   return rows.map((r) => ({
-    ...toPublic(r, blockCents),
+    ...toPublic(r, rates),
     posterName: r.poster_name,
     posterEmail: r.poster_email,
     interested: byPost.get(r.id) ?? [],
@@ -352,17 +349,18 @@ export async function deletePost(id: number): Promise<void> {
  * session at the two-hour price.
  */
 export async function quoteListing(postId: number): Promise<{ durationMin: number; cents: number }> {
-  const { rows } = await query<{ duration_min: number }>(
-    'SELECT duration_min FROM wanted_posts WHERE id = $1',
+  const { rows } = await query<{ duration_min: number; preferred_days: number[] }>(
+    'SELECT duration_min, preferred_days FROM wanted_posts WHERE id = $1',
     [postId],
   );
   if (!rows[0]) throw new ApiError(404, 'Post not found.');
   const durationMin = rows[0].duration_min;
-  // Priced for today: a listing names days of the week, not a date, so there is
-  // no specific evening to price against.
-  const fee = await getTableFee(new Date().toISOString().slice(0, 10));
+  // A listing names days of the week, not a date, so it is priced by those days
+  // rather than whenever it happens to be reserved — the same basis the board
+  // shows, so the quoted price and the charged price always agree.
+  const blockCents = blockCentsForDays(rows[0].preferred_days, await getRates());
   const blocks = Math.max(1, Math.ceil(durationMin / 120));
-  return { durationMin, cents: fee.cents * blocks };
+  return { durationMin, cents: blockCents * blocks };
 }
 
 export interface ListingHold {

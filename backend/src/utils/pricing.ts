@@ -67,6 +67,20 @@ export async function getRates(): Promise<Rates> {
   };
 }
 
+/**
+ * Block rate for a Wanted Board listing, chosen from its preferred days rather
+ * than the day it happens to be viewed or reserved on. Peak only if EVERY
+ * preferred day is a peak day; otherwise off-peak — the cheaper day the
+ * customer could pick. A listing carries no date, so date overrides (holidays)
+ * do not apply.
+ *
+ * This is why a Monday listing stays off-peak even when reserved on a Saturday.
+ */
+export function blockCentsForDays(preferredDays: number[], rates: Rates): number {
+  const allPeak = preferredDays.length > 0 && preferredDays.every((d) => PEAK_DAYS.has(d));
+  return allPeak ? rates.peakCents : rates.offPeakCents;
+}
+
 export async function getTableFee(date: string): Promise<TableFee> {
   const { rows } = await query<{
     dow: number;
