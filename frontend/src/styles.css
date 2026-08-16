@@ -4697,28 +4697,10 @@ button.link {
   border-top-width: 8px;
   border-radius: 13px 13px 20px 20px;
 }
-/* A soft round mat in the top-left that the Cozy Den mark rests on — an
-   organic rug shape with a faint ring, so it settles into the floor rather
-   than reading as a pasted-on box. */
-.cafe-floor-plan::after {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  /* Sits flush into the interior corner: the top-left is squared to the room's
-     own corner curve, the rest stays an organic rug shape, so it fills the
-     corner rather than floating away from it. */
-  top: 3.4%;
-  left: 2.9%;
-  width: 23%;
-  height: 27%;
-  border-radius: 14px 56% 52% 60% / 14px 54% 50% 52%;
-  background:
-    repeating-linear-gradient(45deg, rgba(181, 114, 46, 0.05) 0 7px, transparent 7px 15px),
-    #f1e2bd;
-  box-shadow: inset 0 0 0 2px rgba(120, 80, 40, 0.14);
-  pointer-events: none;
-}
-/* The Cozy Den mark, resting on the play rug in the top-left and gently
+/* No backing behind the mark: the Cozy Den logo sits directly on the floor in
+   the top-left corner. The rug shape read as a pasted-on patch against the
+   hand-drawn room, so it is gone rather than restyled. */
+/* The Cozy Den mark, resting in the top-left corner and gently
    bobbing — a branded decoration for the corner rather than a blank cut-out. */
 .floor-brand-mark {
   position: absolute;
