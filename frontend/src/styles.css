@@ -4700,16 +4700,32 @@ button.link {
 /* A soft round mat in the top-left that the Cozy Den mark rests on — an
    organic rug shape with a faint ring, so it settles into the floor rather
    than reading as a pasted-on box. */
-/* No backing behind the mark: the Cozy Den logo floats directly on the floor
-   in the top-left corner. */
+.cafe-floor-plan::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  /* Sits flush into the interior corner: the top-left is squared to the room's
+     own corner curve, the rest stays an organic rug shape, so it fills the
+     corner rather than floating away from it. */
+  top: 3.4%;
+  left: 2.9%;
+  width: 23%;
+  height: 27%;
+  border-radius: 14px 56% 52% 60% / 14px 54% 50% 52%;
+  background:
+    repeating-linear-gradient(45deg, rgba(181, 114, 46, 0.05) 0 7px, transparent 7px 15px),
+    #f1e2bd;
+  box-shadow: inset 0 0 0 2px rgba(120, 80, 40, 0.14);
+  pointer-events: none;
+}
 /* The Cozy Den mark, resting on the play rug in the top-left and gently
    bobbing — a branded decoration for the corner rather than a blank cut-out. */
 .floor-brand-mark {
   position: absolute;
   z-index: 1;
   left: 5.5%;
-  top: 11%;
-  width: 13%;
+  top: 8.5%;
+  width: 15.5%;
   height: auto;
   opacity: 0.92;
   transform-origin: center;
@@ -5797,20 +5813,11 @@ button.link {
   .map-live-badge {
     justify-self: start;
   }
-  /* Phones scale the whole room to fit rather than holding a 420px map that
-     pans — panning only ever revealed half the floor and read as broken
-     scaling. 300px is the floor: below it the fixed 2px chair outlines start to
-     dominate and neighbouring tables touch, so common phones (390px+) fit the
-     whole map with no pan, and the narrowest ones pan a little rather than
-     overlap. Trimming the shell padding buys back width toward that fit. */
-  .cafe-map-shell {
-    padding: 0.4rem;
-  }
   .cafe-floor-plan {
-    --floor-min-width: 300px;
+    --floor-min-width: 420px;
   }
   .cafe-floor-viewport::after {
-    display: none;
+    display: block;
   }
   .floor-legend {
     justify-content: center;

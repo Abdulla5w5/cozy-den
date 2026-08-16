@@ -27,6 +27,17 @@ export interface EventWindow {
   durationMin: number | null;
 }
 
+/**
+ * Confirm the table exists before an event tries to claim it.
+ *
+ * The events row has a foreign key to tables, so an unknown id would surface as
+ * a raw 500 from the INSERT. Checking first turns that into a clean 404.
+ */
+export async function assertEventTableExists(tableId: number): Promise<void> {
+  const { rows } = await query<{ id: number }>('SELECT id FROM tables WHERE id = $1', [tableId]);
+  if (!rows[0]) throw new ApiError(404, 'That table was not found.');
+}
+
 /** A table booking is meaningless without a window; reject halves of one. */
 export function assertWindowValid(w: EventWindow): void {
   if (w.tableId === null) return;

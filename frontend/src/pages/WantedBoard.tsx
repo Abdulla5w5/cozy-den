@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, ApiError } from '../api/client';
+import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { Game } from '../types';
 
@@ -32,6 +32,8 @@ interface Post {
   createdAt: string;
   /** Session length, and what reserving the listing costs. */
   durationMin?: number;
+  /** Quoted price to reserve now — present on every open listing. */
+  reserveCents?: number;
   amountCents?: number;
   paymentState?: 'none' | 'pending_payment' | 'paid';
 }
@@ -42,7 +44,6 @@ export function WantedBoard() {
   const { t } = useI18n();
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [mine, setMine] = useState<Post[]>([]);
-  const [interestedIn, setInterestedIn] = useState<number[]>([]);
   const [reservingId, setReservingId] = useState<number | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -57,11 +58,10 @@ export function WantedBoard() {
 
   function loadMine() {
     api
-      .get<{ posts: Post[]; interestedIn: number[] }>('/wanted/mine')
+      .get<{ posts: Post[] }>('/wanted/mine')
       .then((r) => {
         setLoggedIn(true);
         setMine(r.posts);
-        setInterestedIn(r.interestedIn);
       })
       .catch(() => setLoggedIn(false));
   }
@@ -89,17 +89,6 @@ export function WantedBoard() {
       setNote(e instanceof Error ? e.message : t('wb.reserveFailed'));
     } finally {
       setReservingId(null);
-    }
-  }
-
-  async function registerInterest(id: number) {
-    setNote(null);
-    try {
-      await api.post(`/wanted/${id}/interest`);
-      loadBoard();
-      loadMine();
-    } catch (e) {
-      setNote(e instanceof ApiError ? e.message : t('wb.failed'));
     }
   }
 
@@ -144,7 +133,7 @@ export function WantedBoard() {
           </div>
           <div className="feature-grid">
             {mine.map((p) => (
-              <PostCard key={p.id} post={p} mine />
+              <PostCard key={p.id} post={p} />
             ))}
           </div>
         </section>
@@ -165,9 +154,6 @@ export function WantedBoard() {
               <PostCard
                 key={p.id}
                 post={p}
-                canJoin={loggedIn && p.status === 'open' && !interestedIn.includes(p.id)}
-                joined={interestedIn.includes(p.id)}
-                onJoin={() => registerInterest(p.id)}
                 canReserve={loggedIn && p.status === 'open' && p.paymentState === 'none'}
                 onReserve={() => reserve(p.id)}
                 reserving={reservingId === p.id}
@@ -182,19 +168,11 @@ export function WantedBoard() {
 
 function PostCard({
   post,
-  canJoin,
-  joined,
-  onJoin,
-  mine,
   canReserve,
   onReserve,
   reserving,
 }: {
   post: Post;
-  canJoin?: boolean;
-  joined?: boolean;
-  onJoin?: () => void;
-  mine?: boolean;
   canReserve?: boolean;
   onReserve?: () => void;
   reserving?: boolean;
@@ -216,30 +194,20 @@ function PostCard({
       {post.durationMin ? (
         <p className="muted">{t('wb.length', { n: post.durationMin / 60 })}</p>
       ) : null}
-      {/* Count only — never who. */}
-      <p className="price">
-        {t('wb.interested', { n: post.interestCount, max: post.maxPlayers })}
-      </p>
       {post.paymentState === 'paid' ? (
         <span className="pill">{t('wb.reservedAlready')}</span>
       ) : (
         <>
-          {mine ? null : joined ? (
-            <span className="pill">{t('wb.youAreIn')}</span>
-          ) : canJoin ? (
-            <button className="primary" onClick={onJoin}>
-              {t('wb.join')}
-            </button>
-          ) : post.status === 'completed' ? (
-            <span className="pill">{t('wb.full')}</span>
-          ) : null}
-          {/* Reserving is a commitment with money attached — distinct from
-              expressing interest, which schedules and costs nothing. */}
-          {!mine && canReserve && post.amountCents ? (
+          {post.status === 'completed' ? <span className="pill">{t('wb.full')}</span> : null}
+          {/* Reserving is the only action now — expressing interest was dropped,
+              since it committed to nothing. Open to any signed-in member, the
+              poster included; whoever reserves pays for the table. The price is
+              quoted from the listing (reserveCents) before anyone reserves. */}
+          {canReserve && post.reserveCents ? (
             <button className="cta" onClick={onReserve} disabled={reserving}>
               {reserving
                 ? t('bk.processing')
-                : t('wb.reserveFor', { amount: money(post.amountCents) })}
+                : t('wb.reserveFor', { amount: money(post.reserveCents) })}
             </button>
           ) : null}
         </>
