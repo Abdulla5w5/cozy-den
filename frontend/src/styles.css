@@ -2745,9 +2745,18 @@ table.data code {
   display: none;
 }
 @media print {
-  body {
-    background: #fff;
-    color: #000;
+  /* A receipt is printed, so it is white paper with black ink in BOTH themes.
+     `[data-theme='dark'] body` outranks a bare `body` selector, so the dark
+     surface (and its glow gradients) followed the receipt onto the page
+     wherever a browser prints backgrounds. Match that specificity here and
+     force the sheet back to paper. */
+  html,
+  body,
+  [data-theme='dark'] body {
+    background: #fff !important;
+    background-image: none !important;
+    color: #000 !important;
+    color-scheme: light;
   }
   /* The receipt is portalled to <body>, so hiding the app leaves it alone. */
   .app {
