@@ -33,6 +33,9 @@ export interface PublicPost {
    *  block rate. Present on every listing so the board can show it before
    *  anyone has reserved; amountCents only fills in once a reservation exists. */
   reserveCents?: number;
+  /** Each player's share if the table total were split among max players.
+   *  Display only for now — the organizer still pays the whole table. */
+  perPlayerCents?: number;
   amountCents?: number;
   paymentState?: 'none' | 'pending_payment' | 'paid';
   reservedBy?: number | null;
@@ -88,14 +91,19 @@ interface PublicRow {
 }
 
 function toPublic(r: PublicRow, rates: Rates): PublicPost {
-  // Whole 2/4/6-hour blocks, same as a table booking; whoever reserves pays all.
-  // Priced by the listing's preferred days, not the day it is viewed on.
+  // Whole 2/4/6-hour blocks, same as a table booking. Priced by the listing's
+  // preferred days, not the day it is viewed on.
   const blocks = Math.max(1, Math.ceil((r.duration_min || 120) / 120));
   const blockCents = blockCentsForDays(r.preferred_days, rates);
+  const tableCents = blockCents * blocks;
   return {
     id: r.id,
     durationMin: r.duration_min,
-    reserveCents: r.payment_state === 'none' ? blockCents * blocks : r.amount_cents,
+    // The organizer still pays the whole table; perPlayerCents is what each of
+    // the (max) players would owe if that total were split among them — shown
+    // for context, not yet charged per person.
+    reserveCents: r.payment_state === 'none' ? tableCents : r.amount_cents,
+    perPlayerCents: Math.ceil(tableCents / Math.max(1, r.max_players)),
     amountCents: r.amount_cents,
     paymentState: r.payment_state,
     reservedBy: r.reserved_by,

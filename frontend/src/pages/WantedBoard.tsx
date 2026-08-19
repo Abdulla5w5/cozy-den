@@ -34,6 +34,8 @@ interface Post {
   durationMin?: number;
   /** Quoted price to reserve now — present on every open listing. */
   reserveCents?: number;
+  /** Each player's share of the table total (display only for now). */
+  perPlayerCents?: number;
   amountCents?: number;
   paymentState?: 'none' | 'pending_payment' | 'paid';
 }
@@ -204,11 +206,18 @@ function PostCard({
               poster included; whoever reserves pays for the table. The price is
               quoted from the listing (reserveCents) before anyone reserves. */}
           {canReserve && post.reserveCents ? (
-            <button className="cta" onClick={onReserve} disabled={reserving}>
-              {reserving
-                ? t('bk.processing')
-                : t('wb.reserveFor', { amount: money(post.reserveCents) })}
-            </button>
+            <>
+              {post.perPlayerCents ? (
+                <p className="muted wb-per-player">
+                  {t('wb.perPlayer', { amount: money(post.perPlayerCents) })}
+                </p>
+              ) : null}
+              <button className="cta" onClick={onReserve} disabled={reserving}>
+                {reserving
+                  ? t('bk.processing')
+                  : t('wb.reserveFor', { amount: money(post.reserveCents) })}
+              </button>
+            </>
           ) : null}
         </>
       )}

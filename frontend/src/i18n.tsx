@@ -463,6 +463,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'wb.submit': { en: 'Post to the board', ar: 'انشر على اللوحة' },
   'wb.posting': { en: 'Posting…', ar: 'جاري النشر…' },
   'wb.failed': { en: 'That did not work. Please try again.', ar: 'ما ضبطت. حاول مرة ثانية.' },
+  'wb.perPlayer': { en: '{amount} / player', ar: '{amount} لكل لاعب' },
   'wb.players': { en: '{min}–{max} players', ar: '{min}–{max} لاعبين' },
   'wb.interested': { en: '{n} of {max} interested', ar: '{n} من {max} مهتمين' },
   'wb.join': { en: "I'm interested", ar: 'أنا مهتم' },
