@@ -91,6 +91,8 @@ export interface MenuItem {
   section?: string;
   section_ar?: string;
   display_order?: number;
+  /** Photo path (this site's own /menu assets) — absent for items without one. */
+  image_url?: string | null;
 }
 
 export interface BookingItemView {

@@ -96,7 +96,22 @@ export function MenuPage() {
             {s.items.map((m) => (
               <div className="mcard" key={m.id}>
                 <div className={`mcard-art ${m.category === 'drink' ? 'art-pink' : 'art-amber'}`}>
-                  <span>{EMOJI[m.category]}</span>
+                  {m.image_url ? (
+                    /* Lazy + async so a 180-item menu costs only the cards the
+                       visitor actually scrolls to, and decoding never blocks
+                       the scroll. The coloured tile stays underneath as the
+                       placeholder, so there is nothing to lay out twice. */
+                    <img
+                      src={m.image_url}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      width={480}
+                      height={480}
+                    />
+                  ) : (
+                    <span>{EMOJI[m.category]}</span>
+                  )}
                 </div>
                 <div className="mcard-body">
                   <div className="mcard-top">

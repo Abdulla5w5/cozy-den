@@ -9,7 +9,7 @@ import { removeOrRetire } from '../../utils/catalogue';
 export const menuRouter = Router();
 
 const SELECT = `SELECT id, name, name_ar, category, price_cents, description, description_ar,
-                       section, section_ar, display_order, available
+                       section, section_ar, display_order, available, image_url
                   FROM menu_items`;
 
 // GET /api/menu — what customers can order today.
@@ -49,6 +49,9 @@ const menuBody = z.object({
   section: z.string().trim().max(120).optional(),
   sectionAr: z.string().trim().max(120).optional(),
   displayOrder: z.number().int().min(0).max(100000).optional(),
+  // A path into this site's own /menu assets (what the Foodics import writes),
+  // or an absolute URL staff pasted for a one-off item.
+  imageUrl: z.string().trim().max(500).optional(),
 });
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
@@ -59,11 +62,12 @@ menuRouter.post('/', requireStaff, validate(menuBody), async (req, res, next) =>
     const b = req.body;
     const { rows } = await query<{ id: number }>(
       `INSERT INTO menu_items (name, category, price_cents, description, available,
-                               name_ar, description_ar, section, section_ar, display_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+                               name_ar, description_ar, section, section_ar, display_order,
+                               image_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
       [b.name, b.category, b.priceCents, b.description, b.available,
        b.nameAr ?? '', b.descriptionAr ?? '', b.section ?? '', b.sectionAr ?? '',
-       b.displayOrder ?? 0],
+       b.displayOrder ?? 0, b.imageUrl || null],
     );
     res.status(201).json({ id: rows[0].id });
   } catch (err) {
@@ -89,11 +93,14 @@ menuRouter.put(
                 description_ar=COALESCE($7, description_ar),
                 section=COALESCE($8, section),
                 section_ar=COALESCE($9, section_ar),
-                display_order=COALESCE($10, display_order)
-          WHERE id=$11`,
+                display_order=COALESCE($10, display_order),
+                -- '' clears the picture, an absent field leaves it as it is.
+                image_url=CASE WHEN $11::text IS NULL THEN image_url
+                               WHEN $11 = '' THEN NULL ELSE $11 END
+          WHERE id=$12`,
         [b.name, b.category, b.priceCents, b.description, b.available,
          b.nameAr ?? null, b.descriptionAr ?? null, b.section ?? null,
-         b.sectionAr ?? null, b.displayOrder ?? null,
+         b.sectionAr ?? null, b.displayOrder ?? null, b.imageUrl ?? null,
          Number(req.params.id)],
       );
       if (!rowCount) throw new ApiError(404, 'Menu item not found.');

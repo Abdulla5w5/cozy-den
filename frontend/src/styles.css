@@ -1265,6 +1265,16 @@ table.data code {
   display: grid;
   place-items: center;
   font-size: 2.5rem;
+  overflow: hidden;
+}
+/* The photo fills the tile it replaces, so a card with a picture and one
+   without are exactly the same size and the grid never reflows as lazy images
+   arrive. */
+.mcard-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .mcard-body {
   padding: 1.25rem;
