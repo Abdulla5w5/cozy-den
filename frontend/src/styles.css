@@ -2758,6 +2758,16 @@ table.data code {
     color: #000 !important;
     color-scheme: light;
   }
+  /* The dark theme also paints a fixed full-page overlay via body::before,
+     which is not part of .app and so survived it being hidden. */
+  body::before,
+  body::after,
+  [data-theme='dark'] body::before,
+  [data-theme='dark'] body::after {
+    display: none !important;
+    content: none !important;
+    background: none !important;
+  }
   /* The receipt is portalled to <body>, so hiding the app leaves it alone. */
   .app {
     display: none !important;
