@@ -11,6 +11,28 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The API answers in JSON on every path, including its errors — but the network
+ * between the browser and it does not. A gateway timeout, a proxy error page or
+ * a CDN challenge all arrive as HTML with an HTTP status attached, and parsing
+ * one of those bodies used to throw a raw `SyntaxError: Unexpected token '<'`.
+ * Staff saw "JSON parse error" while the status that actually explained the
+ * failure was discarded.
+ *
+ * So parse defensively: an unparseable body is simply *no* body, and the status
+ * carries the message instead.
+ */
+function parseBody(text: string): { error?: string; details?: unknown } & Record<string, unknown> {
+  if (!text.trim()) return {};
+  try {
+    const parsed = JSON.parse(text);
+    // `null`, a bare string or an array are valid JSON but not an API envelope.
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     credentials: 'include',
@@ -19,11 +41,25 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+  const data = parseBody(text);
 
   if (!res.ok) {
-    throw new ApiError(res.status, data.error || res.statusText, data.details);
+    throw new ApiError(
+      res.status,
+      (typeof data.error === 'string' && data.error) ||
+        res.statusText ||
+        `Request failed (${res.status}).`,
+      data.details,
+    );
   }
+
+  // A 2xx that is not JSON means something between us and the API answered in
+  // its place. Report that rather than handing the caller an empty object it
+  // would render as "no bookings".
+  if (text.trim() && Object.keys(data).length === 0) {
+    throw new ApiError(res.status, 'The server sent an unreadable response. Please try again.');
+  }
+
   return data as T;
 }
 

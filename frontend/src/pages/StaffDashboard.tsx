@@ -153,8 +153,13 @@ function TodayTab() {
   const [printing, setPrinting] = useState<StaffBooking | null>(null);
 
   const load = useCallback(() => {
+    // A date field held mid-edit (or cleared) reports an empty value, which the
+    // API rightly refuses — don't ask it, and don't flash "Validation failed"
+    // at someone who is halfway through typing a past date.
+    if (!date) return;
+    setError(null);
     api
-      .get<{ bookings: StaffBooking[] }>(`/staff/bookings?date=${date}`)
+      .get<{ bookings: StaffBooking[] }>(`/staff/bookings?date=${encodeURIComponent(date)}`)
       .then((r) => setBookings(r.bookings))
       .catch((e) => setError(e.message));
   }, [date]);
