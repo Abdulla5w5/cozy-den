@@ -114,6 +114,14 @@ export function createApp() {
           // those immutable JS/CSS files instead of asking this Node process on
           // every visit. Unversioned images/fonts retain Express's safe default.
           const relative = path.relative(frontendDist, filePath);
+          // Menu photographs are not content-hashed (their names come from the
+          // item), but they change only when the Foodics import is rerun. A day
+          // of browser caching turns a repeat visit to the menu into no image
+          // requests at all, and a stale photo for at most a day is harmless.
+          if (relative.startsWith(`menu${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return;
+          }
           if (relative.startsWith(`assets${path.sep}`)) {
             res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
           }

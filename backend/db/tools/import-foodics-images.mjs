@@ -1,7 +1,7 @@
 /**
  * Pull the Foodics item photos into this site's own assets.
  *
- *   node backend/db/tools/import-foodics-images.mjs > backend/db/migrations/025_menu_item_images.sql
+ *   node backend/db/tools/import-foodics-images.mjs > backend/db/migrations/026_menu_item_images.sql
  *
  * Companion to import-foodics-menu.mjs, and it reads the same `window.__NUXT__`
  * payload in the same sandboxed way, so item names match the menu migration
@@ -23,8 +23,14 @@ import path from 'node:path';
 
 const MENU_URL = 'https://cozyden.foodics.online/menu/-162282';
 const OUT_DIR = path.resolve('frontend/public/menu');
-const WIDTH = 480; // twice the widest card art on screen, for retina.
-const QUALITY = 72;
+// The card art is a third of a card, so ~160 CSS px at the widest; 320 covers
+// a 2x screen and nothing more. Anything larger is bytes no one can see.
+const WIDTH = 320;
+const QUALITY = 65;
+// Foodics falls back to one shared "no photo" cloche graphic. Reused artwork is
+// therefore generic, not a picture of the dish — better no image (the menu has
+// its own coloured tile) than the same grey cloche 15 times.
+const GENERIC_REUSE = 3;
 
 const sqlStr = (v) => `'${String(v ?? '').replace(/'/g, "''")}'`;
 const pick = (field, locale) => (field && typeof field === 'object' ? field[locale] : field) || '';
@@ -44,6 +50,15 @@ const payload = runInContext(`(${expr})`, createContext(Object.create(null)), { 
 const cats = payload?.state?.concept?.categoryItems;
 if (!Array.isArray(cats)) throw new Error('Payload has no state.concept.categoryItems.');
 
+// Count first: an image-uri shared by several items cannot be a photo of any
+// one of them.
+const uriUses = new Map();
+for (const entry of cats)
+  for (const item of entry?.attributes?.items ?? [])
+    if (item['image-uri']) uriUses.set(item['image-uri'], (uriUses.get(item['image-uri']) ?? 0) + 1);
+const generic = new Set([...uriUses].filter(([, n]) => n >= GENERIC_REUSE).map(([u]) => u));
+process.stderr.write(`${generic.size} shared placeholder image(s) ignored\n`);
+
 mkdirSync(OUT_DIR, { recursive: true });
 const rows = [];
 const seen = new Set();
@@ -52,7 +67,7 @@ for (const entry of cats) {
   for (const item of entry?.attributes?.items ?? []) {
     const name = pick(item.name, 'en-us').trim();
     const src = item['image-uri'];
-    if (!name || !src) continue;
+    if (!name || !src || generic.has(src)) continue;
     // Same first-wins rule as the menu import: `name` is uniquely indexed.
     if (seen.has(name.toLowerCase())) continue;
     seen.add(name.toLowerCase());
@@ -61,9 +76,20 @@ for (const entry of cats) {
     const out = path.join(OUT_DIR, file);
     const tmp = `${out}.src`;
     try {
-      const img = await fetch(src);
-      if (!img.ok) throw new Error(`HTTP ${img.status}`);
-      writeFileSync(tmp, Buffer.from(await img.arrayBuffer()));
+      // One retry: a single dropped connection should not silently cost an
+      // item its photo for the life of the migration.
+      let bytes;
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          const img = await fetch(src);
+          if (!img.ok) throw new Error(`HTTP ${img.status}`);
+          bytes = Buffer.from(await img.arrayBuffer());
+          break;
+        } catch (err) {
+          if (attempt === 3) throw err;
+        }
+      }
+      writeFileSync(tmp, bytes);
       // -resize W 0 keeps the aspect ratio; only ever shrink.
       execFileSync('cwebp', ['-quiet', '-q', String(QUALITY), '-resize', String(WIDTH), '0', tmp, '-o', out]);
       rows.push({ name, url: `/menu/${file}` });
@@ -88,6 +114,11 @@ process.stdout.write(`-- Photographs for the menu, matched to the live Foodics m
 BEGIN;
 
 ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+-- Clear first, so re-running the import after Foodics drops (or genericises) a
+-- photo actually removes it, and so this file lands the same whether or not an
+-- earlier image migration ran.
+UPDATE menu_items SET image_url = NULL;
 
 UPDATE menu_items m
    SET image_url = v.image_url
