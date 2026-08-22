@@ -2,7 +2,7 @@ import { query } from '../../db/pool';
 import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
-import { quoteBooking } from '../../utils/pricing';
+import { billableSeats, minSeatsFor, quoteBooking } from '../../utils/pricing';
 import { isValidDuration, minDurationFor } from '../../utils/slots';
 import { paymentProvider } from '../../payment';
 import { TAP_CHARGE_EXPIRY_MINUTES } from '../../payment/constants';
@@ -67,22 +67,33 @@ async function assertTableExists(tableId: number): Promise<{ capacity: number }>
  * Neither value is trusted: the length is checked against closing time, and the
  * headcount against the table's real capacity, so a tampered request cannot
  * hold a table past close or seat twelve people at a four-top.
+ *
+ * The headcount also drives the price, since seats are what is charged for. It
+ * is returned alongside `billedSeats` — the same number, except on the large
+ * tables, which carry a minimum charge a smaller party still pays.
  */
 function resolveSitting(
   timeSlot: string,
   capacity: number,
   durationMin?: number,
   partySize?: number,
-): { durationMin: number; partySize: number } {
+): { durationMin: number; partySize: number; billedSeats: number } {
   const duration = durationMin ?? minDurationFor(timeSlot);
   if (!isValidDuration(timeSlot, duration)) {
     throw new ApiError(400, 'That length is not available for the start time you picked.');
   }
-  const party = partySize ?? 1;
+  const party = partySize ?? minSeatsFor(capacity);
   if (party > capacity) {
     throw new ApiError(400, `That table seats ${capacity}.`);
   }
-  return { durationMin: duration, partySize: party };
+  // The large tables are not worth taking out of service for a pair, so they
+  // carry a minimum party. Enforced here rather than only in the form, since
+  // seats are what is charged for.
+  const floor = minSeatsFor(capacity);
+  if (party < floor) {
+    throw new ApiError(400, `That table is for parties of ${floor} or more.`);
+  }
+  return { durationMin: duration, partySize: party, billedSeats: billableSeats(capacity, party) };
 }
 
 interface InsertParams {
@@ -172,7 +183,9 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
   const { capacity } = await assertTableExists(input.tableId);
 
   const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
-  const feeCents = (await quoteBooking(input.date, input.timeSlot, sitting.durationMin)).totalCents;
+  const feeCents = (
+    await quoteBooking(input.date, input.timeSlot, sitting.durationMin, sitting.billedSeats)
+  ).totalCents;
   const bookingId = await insertBooking({
     tableId: input.tableId,
     date: input.date,
@@ -256,7 +269,9 @@ export async function startBookingCheckout(
   const { capacity } = await assertTableExists(input.tableId);
 
   const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
-  const feeCents = (await quoteBooking(input.date, input.timeSlot, sitting.durationMin)).totalCents;
+  const feeCents = (
+    await quoteBooking(input.date, input.timeSlot, sitting.durationMin, sitting.billedSeats)
+  ).totalCents;
   const bookingId = await insertBooking({
     tableId: input.tableId,
     date: input.date,

@@ -2,7 +2,12 @@ import { query } from '../db/pool';
 import { isLateStart, SESSION_MIN } from './slots';
 
 /**
- * What a table costs for a two-hour session on a given evening.
+ * What a seat costs for a two-hour session on a given evening.
+ *
+ * Every rate here is PER SEAT: a party of four on an off-peak evening pays four
+ * times the off-peak rate. The table itself is not priced — only the chairs
+ * actually taken — so the same table costs a pair half of what it costs four
+ * people.
  *
  * Resolution order:
  *   1. A staff-set override for that exact date — a holiday, a discount day, a
@@ -23,20 +28,44 @@ import { isLateStart, SESSION_MIN } from './slots';
 // Postgres DOW: 0 = Sunday .. 6 = Saturday.
 const PEAK_DAYS = new Set([4, 5, 6]); // Thursday, Friday, Saturday
 
+/**
+ * The bigger tables are not worth taking out of service for a pair, so a party
+ * below this floor cannot book one. Kept here, next to the per-seat rates,
+ * because it is the same idea from the other end: the floor is both the
+ * smallest party allowed and the fewest seats ever charged.
+ */
+export const LARGE_TABLE_CAPACITY = 12;
+export const LARGE_TABLE_MIN_SEATS = 4;
+
+/** The smallest party this table accepts — and so the fewest seats it bills. */
+export function minSeatsFor(capacity: number): number {
+  return capacity >= LARGE_TABLE_CAPACITY ? LARGE_TABLE_MIN_SEATS : 1;
+}
+
+/** Seats a booking is billed for: what was asked, or the table's floor. */
+export function billableSeats(capacity: number, partySize: number): number {
+  return Math.max(minSeatsFor(capacity), partySize);
+}
+
 export interface TableFee {
-  /** What one 2-hour block costs on this date. */
+  /** What one seat costs for one 2-hour block on this date. */
   cents: number;
   peak: boolean;
   /** Why this price: a staff label, 'weekend', or null for the normal rate. */
   reason: string | null;
-  /** Flat price for a late seating — a start after 01:00, which runs to close. */
+  /** Flat per-seat price for a late seating — a start after 01:00, which runs
+   *  to close. */
   lateCents: number;
 }
 
 /** What a specific booking costs, once its start and length are known. */
 export interface BookingQuote extends TableFee {
-  /** The amount actually charged. */
+  /** The amount actually charged: perSeatCents x seats. */
   totalCents: number;
+  /** What one seat costs for this sitting, before multiplying by the party. */
+  perSeatCents: number;
+  /** Seats charged for — the party, or the table's minimum, whichever is more. */
+  seats: number;
   /** 2-hour blocks charged; 0 for a late seating, which is a flat rate. */
   blocks: number;
   late: boolean;
@@ -68,7 +97,7 @@ export async function getRates(): Promise<Rates> {
 }
 
 /**
- * Block rate for a Wanted Board listing, chosen from its preferred days rather
+ * Per-seat block rate for a Wanted Board listing, chosen from its preferred days rather
  * than the day it happens to be viewed or reserved on. Peak only if EVERY
  * preferred day is a peak day; otherwise off-peak — the cheaper day the
  * customer could pick. A listing carries no date, so date overrides (holidays)
@@ -127,26 +156,45 @@ export async function getTableFee(date: string): Promise<TableFee> {
 /**
  * Price a specific booking.
  *
- * Normal seatings are charged per 2-hour block, rounded up: a 4-hour booking is
- * two blocks, and an odd 2.5 hours still pays for two. Late seatings — starts
- * after 01:00, which run to the 03:00 close and so cannot fill a block — pay
- * the flat late rate once.
+ * One seat is charged per 2-hour block, rounded up: a 4-hour booking is two
+ * blocks, and an odd 2.5 hours still pays for two. Late seatings — starts after
+ * 01:00, which run to the 03:00 close and so cannot fill a block — pay the flat
+ * late rate once. That per-seat figure is then multiplied by the party, floored
+ * at the table's minimum seats.
  *
- * Derived entirely from the date, start and length the customer chose. Nothing
- * about the price comes from the request, so a tampered client cannot buy six
- * hours for the price of two.
+ * Derived entirely from the date, start, length and headcount the customer
+ * chose, with the headcount already checked against the table. Nothing about
+ * the price comes from the request, so a tampered client cannot buy six hours
+ * for the price of two, or seat six people on one seat's fee.
  */
 export async function quoteBooking(
   date: string,
   timeSlot: string,
   durationMin: number,
+  seats = 1,
 ): Promise<BookingQuote> {
   const fee = await getTableFee(date);
+  const billed = Math.max(1, seats);
   if (isLateStart(timeSlot)) {
-    return { ...fee, totalCents: fee.lateCents, blocks: 0, late: true };
+    return {
+      ...fee,
+      perSeatCents: fee.lateCents,
+      seats: billed,
+      totalCents: fee.lateCents * billed,
+      blocks: 0,
+      late: true,
+    };
   }
   const blocks = Math.max(1, Math.ceil(durationMin / SESSION_MIN));
-  return { ...fee, totalCents: fee.cents * blocks, blocks, late: false };
+  const perSeatCents = fee.cents * blocks;
+  return {
+    ...fee,
+    perSeatCents,
+    seats: billed,
+    totalCents: perSeatCents * billed,
+    blocks,
+    late: false,
+  };
 }
 
 // ---------- Staff editor ----------

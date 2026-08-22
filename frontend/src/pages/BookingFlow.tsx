@@ -110,6 +110,14 @@ const OPEN_MIN = 14 * 60;
 // in between. A late seating is the exception and runs to closing instead.
 const BLOCK_DURATIONS = [SESSION_MIN, SESSION_MIN * 2, SESSION_MIN * 3];
 
+// Mirrors backend/src/utils/pricing.ts: the twelve-seaters are not worth taking
+// out of service for a pair, so they take parties of four or more. The server
+// enforces it — this only keeps the form from offering an impossible choice.
+const LARGE_TABLE_CAPACITY = 12;
+const LARGE_TABLE_MIN_SEATS = 4;
+const minSeatsFor = (capacity: number) =>
+  capacity >= LARGE_TABLE_CAPACITY ? LARGE_TABLE_MIN_SEATS : 1;
+
 function slotToMinutes(hhmm: string) {
   const [h, m] = hhmm.split(':').map(Number);
   const mins = h * 60 + m;
@@ -305,10 +313,15 @@ export function BookingFlow() {
     : floorMin;
   const durationChoices = late ? [floorMin] : BLOCK_DURATIONS.filter((d) => d <= roomMin);
 
-  // Charged per 2-hour block, rounded up; a late seating is one flat rate. The
-  // server recomputes this at checkout — this is the customer-facing preview.
+  // Charged per SEAT: one seat's fare (per 2-hour block, rounded up; a late
+  // seating is one flat rate) times the party. The big tables carry a minimum
+  // party, so they never bill fewer seats than that. The server recomputes all
+  // of this at checkout — what follows is the customer-facing preview.
   const blocks = Math.max(1, Math.ceil(durationMin / SESSION_MIN));
-  const totalCents = late ? fee.lateCents : fee.cents * blocks;
+  const perSeatCents = late ? fee.lateCents : fee.cents * blocks;
+  const minParty = selectedTable ? minSeatsFor(selectedTable.capacity) : 1;
+  const seats = Math.max(minParty, partySize);
+  const totalCents = perSeatCents * seats;
 
   useEffect(() => {
     // A new table or start time can allow a different range, so re-seat the
@@ -319,9 +332,12 @@ export function BookingFlow() {
   }, [timeSlot, tableId, floorMin, roomMin]);
 
   useEffect(() => {
-    // Likewise the headcount cannot exceed the table actually chosen.
-    if (selectedTable && partySize > selectedTable.capacity) setPartySize(selectedTable.capacity);
-  }, [selectedTable, partySize]);
+    // Likewise the headcount has to fit the table actually chosen — under its
+    // capacity, and at or above its minimum party.
+    if (!selectedTable) return;
+    if (partySize > selectedTable.capacity) setPartySize(selectedTable.capacity);
+    else if (partySize < minParty) setPartySize(minParty);
+  }, [selectedTable, partySize, minParty]);
 
   useEffect(() => {
     // A different table can have a different availability pattern. Always show
@@ -658,7 +674,10 @@ export function BookingFlow() {
                           value={partySize}
                           onChange={(e) => setPartySize(Number(e.target.value))}
                         >
-                          {Array.from({ length: selectedTable.capacity }, (_, i) => i + 1).map(
+                          {Array.from(
+                            { length: selectedTable.capacity - minParty + 1 },
+                            (_, i) => i + minParty,
+                          ).map(
                             (n) => (
                               <option key={n} value={n}>
                                 {n === 1 ? t('bk.onePerson') : t('bk.people', { n })}
@@ -668,6 +687,10 @@ export function BookingFlow() {
                         </select>
                       </label>
 
+                      <p className="sitting-note">
+                        {t('bk.perSeat', { amount: money(perSeatCents) })}
+                        {minParty > 1 ? ` · ${t('bk.minParty', { n: minParty })}` : ''}
+                      </p>
                       {late && <p className="sitting-note">{t('bk.lateSeatingHint')}</p>}
                     </div>
                   )}
@@ -724,7 +747,11 @@ export function BookingFlow() {
                   : blocks === 1
                     ? t('bk.blocks', { n: blocks })
                     : t('bk.blocksPlural', { n: blocks })}{' '}
-                — {money(totalCents)}
+                — {t('bk.seatMath', {
+                  seats: String(seats),
+                  each: money(perSeatCents),
+                  total: money(totalCents),
+                })}
                 {!late && fee.peak && (
                   <span className="pill">
                     {fee.reason === 'weekend' ? t('bk.peakWeekend') : fee.reason}

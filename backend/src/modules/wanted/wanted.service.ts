@@ -29,12 +29,12 @@ export type PostStatus = 'pending' | 'open' | 'completed' | 'rejected';
 export interface PublicPost {
   /** Session length in minutes, and what reserving it costs. */
   durationMin?: number;
-  /** Price to reserve this listing now, quoted from its length at today's
-   *  block rate. Present on every listing so the board can show it before
+  /** Price to reserve this listing now: one seat's fare times the seats the
+   *  listing holds. Present on every listing so the board can show it before
    *  anyone has reserved; amountCents only fills in once a reservation exists. */
   reserveCents?: number;
-  /** Each player's share if the table total were split among max players.
-   *  Display only for now — the organizer still pays the whole table. */
+  /** What one seat costs for this listing's length. Whoever reserves pays this
+   *  for every seat the listing holds. */
   perPlayerCents?: number;
   amountCents?: number;
   paymentState?: 'none' | 'pending_payment' | 'paid';
@@ -108,19 +108,19 @@ function toDateString(v: string | Date | null): string | null {
 }
 
 function toPublic(r: PublicRow, rates: Rates): PublicPost {
-  // Whole 2/4/6-hour blocks, same as a table booking. Priced by the listing's
-  // preferred days, not the day it is viewed on.
+  // Whole 2/4/6-hour blocks, same as a table booking, and priced the same way:
+  // per seat, by the listing's date rather than the day it is viewed on. A
+  // listing holds max_players seats, so that is what reserving it costs.
   const blocks = Math.max(1, Math.ceil((r.duration_min || 120) / 120));
-  const blockCents = blockCentsForDays(r.preferred_days, rates);
-  const tableCents = blockCents * blocks;
+  const perSeatCents = blockCentsForDays(r.preferred_days, rates) * blocks;
+  const tableCents = perSeatCents * Math.max(1, r.max_players);
   return {
     id: r.id,
     durationMin: r.duration_min,
-    // The organizer still pays the whole table; perPlayerCents is what each of
-    // the (max) players would owe if that total were split among them — shown
-    // for context, not yet charged per person.
+    // The organizer still pays for the whole listing; perPlayerCents is the
+    // per-seat fare it is built from, shown so the split is visible.
     reserveCents: r.payment_state === 'none' ? tableCents : r.amount_cents,
-    perPlayerCents: Math.ceil(tableCents / Math.max(1, r.max_players)),
+    perPlayerCents: perSeatCents,
     amountCents: r.amount_cents,
     paymentState: r.payment_state,
     reservedBy: r.reserved_by,
@@ -380,27 +380,33 @@ export async function deletePost(id: number): Promise<void> {
 // ---------- Reserving a listing ----------
 
 /**
- * A listing states how long its session runs, and the price follows from that
- * length at the ordinary table rate — four hours costs what a four-hour table
- * booking costs. Whoever reserves the listing pays for the whole thing.
+ * A listing states how long its session runs and how many players it seats, and
+ * the price follows from both at the ordinary per-seat rate — the same as
+ * booking that many seats for that long. Whoever reserves it pays for the
+ * whole listing.
  *
- * The rate is resolved server-side from the duration stored on the post, never
- * from anything the client sends, so a tampered request cannot buy a six-hour
- * session at the two-hour price.
+ * Both are resolved server-side from the post, never from anything the client
+ * sends, so a tampered request cannot buy a six-hour session at the two-hour
+ * price or twelve seats at one seat's fare.
  */
 export async function quoteListing(postId: number): Promise<{ durationMin: number; cents: number }> {
-  const { rows } = await query<{ duration_min: number; preferred_days: number[] }>(
-    'SELECT duration_min, preferred_days FROM wanted_posts WHERE id = $1',
+  const { rows } = await query<{
+    duration_min: number;
+    preferred_days: number[];
+    max_players: number;
+  }>(
+    'SELECT duration_min, preferred_days, max_players FROM wanted_posts WHERE id = $1',
     [postId],
   );
   if (!rows[0]) throw new ApiError(404, 'Post not found.');
   const durationMin = rows[0].duration_min;
-  // A listing names days of the week, not a date, so it is priced by those days
-  // rather than whenever it happens to be reserved — the same basis the board
-  // shows, so the quoted price and the charged price always agree.
+  // Priced by the listing's own day rather than whenever it happens to be
+  // reserved — the same basis the board shows, so the quoted price and the
+  // charged price always agree — and by its seats, since seats are what the
+  // café charges for.
   const blockCents = blockCentsForDays(rows[0].preferred_days, await getRates());
   const blocks = Math.max(1, Math.ceil(durationMin / 120));
-  return { durationMin, cents: blockCents * blocks };
+  return { durationMin, cents: blockCents * blocks * Math.max(1, rows[0].max_players) };
 }
 
 export interface ListingHold {
