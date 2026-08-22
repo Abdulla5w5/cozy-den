@@ -504,6 +504,11 @@ export async function holdSeats(
   seats: number,
 ): Promise<SeatHold> {
   await clearOwnAbandonedHolds(postId, memberId);
+  // Read the rates BEFORE taking a client. getRates() goes to the pool for a
+  // client of its own, and asking for one while already holding one deadlocks
+  // the pool the moment there are as many concurrent buyers as there are
+  // clients: every transaction sits on a client waiting for a client.
+  const rates = await getRates();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -533,7 +538,7 @@ export async function holdSeats(
     }
 
     const blocks = Math.max(1, Math.ceil(post.duration_min / 120));
-    const perSeat = blockCentsForDays(post.preferred_days, await getRates()) * blocks;
+    const perSeat = blockCentsForDays(post.preferred_days, rates) * blocks;
     const amountCents = perSeat * seats;
 
     const { rows: held } = await client.query<{ id: number }>(
