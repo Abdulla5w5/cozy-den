@@ -142,7 +142,9 @@ export function Home() {
           <div className="ev-strip">
             {events.slice(0, 4).map((e) => (
               <Link to="/events" className="ev-card" key={e.id}>
-                {e.image_url && <img className="ev-card-img" src={e.image_url} alt="" />}
+                {e.image_url && (
+                  <img className="ev-card-img" src={e.image_url} alt="" loading="lazy" decoding="async" />
+                )}
                 <span className={`pill ${e.type === 'external' ? 'ext' : ''}`}>
                   {e.type === 'internal' ? t('ev.internal') : t('ev.external')}
                 </span>

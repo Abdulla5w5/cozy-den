@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import compression from 'compression';
 import helmet from 'helmet';
 import path from 'path';
 import cors, { CorsOptions } from 'cors';
@@ -31,6 +32,14 @@ export function createApp() {
   // Behind a reverse proxy / load balancer that terminates TLS, trust it so
   // client IPs (rate limiting) and Secure cookies work correctly.
   app.set('trust proxy', 1);
+
+  // Compress everything this process sends — the JSON API and, in production,
+  // the React bundle it serves. The menu, the games list and the Wanted Board
+  // are each tens of kilobytes of repetitive JSON that gzip to a tenth of that,
+  // which is the difference between instant and noticeable on a phone.
+  // Already-compressed bytes (images, fonts) are skipped by the library's own
+  // content-type filter.
+  app.use(compression());
 
   // Security headers apply to both the API and the production SPA. The Google
   // Identity script/frame are the only third-party executable origins needed

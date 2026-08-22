@@ -14,8 +14,10 @@
     "test": "npm run build && node --test tests/*.test.cjs"
   },
   "dependencies": {
+    "@types/compression": "^1.8.1",
     "@types/nodemailer": "^8.0.1",
     "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

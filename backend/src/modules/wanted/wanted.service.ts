@@ -189,12 +189,23 @@ export async function getPublicPost(id: number): Promise<PublicPost | null> {
   return rows[0] ? toPublic(rows[0], await getRates()) : null;
 }
 
-/** The public board: approved posts only, identity-free. */
+/**
+ * The public board: approved posts only, identity-free, and only sessions that
+ * have not happened yet.
+ *
+ * A listing names one date, so once that date passes it is not something anyone
+ * can join — leaving it up made the board grow without limit and buried the
+ * live listings under dead ones. Posts from before listings carried a date have
+ * no date to judge, so they stay until staff clear them.
+ */
 export async function listPublicPosts(): Promise<PublicPost[]> {
   const { rows } = await query<PublicRow>(
     `${PUBLIC_SELECT}
       WHERE p.status IN ('open', 'completed')
-      ORDER BY CASE p.status WHEN 'open' THEN 0 ELSE 1 END, p.created_at DESC`,
+        AND (p.session_date IS NULL OR p.session_date >= current_date)
+      ORDER BY CASE p.status WHEN 'open' THEN 0 ELSE 1 END,
+               p.session_date NULLS LAST, p.created_at DESC
+      LIMIT 200`,
   );
   const rates = await getRates();
   return rows.map((r) => toPublic(r, rates));
