@@ -5905,6 +5905,17 @@ button.link {
   font-size: 0.72rem;
   line-height: 1.4;
 }
+/* The party is too small for this table. Loud enough to be read before the
+   customer wonders why the button stopped working, quiet enough not to look
+   like an error they caused. */
+.sitting-note.warn {
+  padding: 0.5rem 0.65rem;
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+}
 @media (min-width: 480px) {
   .sitting-options {
     grid-template-columns: 1fr 1fr;

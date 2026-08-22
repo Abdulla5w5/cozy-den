@@ -250,6 +250,18 @@ const dict: Record<string, { en: string; ar: string }> = {
   'bk.people': { en: '{n} people', ar: '{n} أشخاص' },
   'bk.perSeat': { en: '{amount} per person', ar: '{amount} للشخص' },
   'bk.minParty': { en: 'this table takes {n} or more', ar: 'هذي الطاولة من {n} أشخاص فأكثر' },
+  'bk.partyTooSmall': {
+    en: 'This {seats}-seat table is for parties of {n} or more.',
+    ar: 'هذي الطاولة ({seats} مقاعد) للمجموعات من {n} أشخاص فأكثر.',
+  },
+  'bk.tryTables': {
+    en: 'A smaller table would suit you better — try {tables}.',
+    ar: 'طاولة أصغر أنسب لكم — جربوا {tables}.',
+  },
+  'bk.tryFewerTables': {
+    en: 'Try a smaller table, or add more people to your party.',
+    ar: 'جربوا طاولة أصغر، أو زيدوا عدد الأشخاص.',
+  },
   'bk.seatMath': {
     en: '{seats} × {each} = {total}',
     ar: '{seats} × {each} = {total}',

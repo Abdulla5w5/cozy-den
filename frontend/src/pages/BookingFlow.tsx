@@ -110,13 +110,18 @@ const OPEN_MIN = 14 * 60;
 // in between. A late seating is the exception and runs to closing instead.
 const BLOCK_DURATIONS = [SESSION_MIN, SESSION_MIN * 2, SESSION_MIN * 3];
 
-// Mirrors backend/src/utils/pricing.ts: the twelve-seaters are not worth taking
-// out of service for a pair, so they take parties of four or more. The server
-// enforces it — this only keeps the form from offering an impossible choice.
-const LARGE_TABLE_CAPACITY = 12;
-const LARGE_TABLE_MIN_SEATS = 4;
+// Mirrors MIN_SEATS_LADDER in backend/src/utils/pricing.ts: a big table is not
+// worth taking out of service for a pair, so each size takes a minimum party.
+// The server enforces it — this exists so the form can say so before the
+// customer fills in their details and gets refused at the last step.
+const MIN_SEATS_LADDER: [number, number][] = [
+  [12, 5],
+  [8, 4],
+  [6, 3],
+  [4, 2],
+];
 const minSeatsFor = (capacity: number) =>
-  capacity >= LARGE_TABLE_CAPACITY ? LARGE_TABLE_MIN_SEATS : 1;
+  MIN_SEATS_LADDER.find(([seats]) => capacity >= seats)?.[1] ?? 1;
 
 function slotToMinutes(hhmm: string) {
   const [h, m] = hhmm.split(':').map(Number);
@@ -226,7 +231,9 @@ export function BookingFlow() {
   const [tableId, setTableId] = useState<number | null>(null);
   const [timeSlot, setTimeSlot] = useState<string | null>(null);
   const [durationMin, setDurationMin] = useState<number>(draft?.durationMin ?? SESSION_MIN);
-  const [partySize, setPartySize] = useState<number>(draft?.partySize ?? 1);
+  // Two, not one: the smallest table on the floor seats four and so takes a
+  // party of two, which makes one an opening state no table would accept.
+  const [partySize, setPartySize] = useState<number>(draft?.partySize ?? 2);
 
   const [guestName, setGuestName] = useState(draft?.guestName ?? '');
   const [guestEmail, setGuestEmail] = useState(draft?.guestEmail ?? '');
@@ -320,6 +327,12 @@ export function BookingFlow() {
   const blocks = Math.max(1, Math.ceil(durationMin / SESSION_MIN));
   const perSeatCents = late ? fee.lateCents : fee.cents * blocks;
   const minParty = selectedTable ? minSeatsFor(selectedTable.capacity) : 1;
+  // Too small a party for this table: the server would refuse the booking, so
+  // the panel blocks it here and names the tables that would take them.
+  const partyTooSmall = partySize < minParty;
+  const fittingTables = availability
+    .filter((tb) => partySize <= tb.capacity && partySize >= minSeatsFor(tb.capacity))
+    .map((tb) => tb.label);
   const seats = Math.max(minParty, partySize);
   const totalCents = perSeatCents * seats;
 
@@ -332,12 +345,12 @@ export function BookingFlow() {
   }, [timeSlot, tableId, floorMin, roomMin]);
 
   useEffect(() => {
-    // Likewise the headcount has to fit the table actually chosen — under its
-    // capacity, and at or above its minimum party.
-    if (!selectedTable) return;
-    if (partySize > selectedTable.capacity) setPartySize(selectedTable.capacity);
-    else if (partySize < minParty) setPartySize(minParty);
-  }, [selectedTable, partySize, minParty]);
+    // The headcount cannot exceed the table actually chosen. A headcount BELOW
+    // the table's minimum is left alone on purpose: quietly raising it would
+    // charge for seats nobody asked for, so the panel says so instead and
+    // offers the tables that do fit.
+    if (selectedTable && partySize > selectedTable.capacity) setPartySize(selectedTable.capacity);
+  }, [selectedTable, partySize]);
 
   useEffect(() => {
     // A different table can have a different availability pattern. Always show
@@ -674,10 +687,7 @@ export function BookingFlow() {
                           value={partySize}
                           onChange={(e) => setPartySize(Number(e.target.value))}
                         >
-                          {Array.from(
-                            { length: selectedTable.capacity - minParty + 1 },
-                            (_, i) => i + minParty,
-                          ).map(
+                          {Array.from({ length: selectedTable.capacity }, (_, i) => i + 1).map(
                             (n) => (
                               <option key={n} value={n}>
                                 {n === 1 ? t('bk.onePerson') : t('bk.people', { n })}
@@ -687,10 +697,22 @@ export function BookingFlow() {
                         </select>
                       </label>
 
-                      <p className="sitting-note">
-                        {t('bk.perSeat', { amount: money(perSeatCents) })}
-                        {minParty > 1 ? ` · ${t('bk.minParty', { n: minParty })}` : ''}
-                      </p>
+                      {partyTooSmall ? (
+                        <p className="sitting-note warn" role="status">
+                          {t('bk.partyTooSmall', {
+                            seats: selectedTable.capacity,
+                            n: minParty,
+                          })}{' '}
+                          {fittingTables.length > 0
+                            ? t('bk.tryTables', { tables: fittingTables.join(', ') })
+                            : t('bk.tryFewerTables')}
+                        </p>
+                      ) : (
+                        <p className="sitting-note">
+                          {t('bk.perSeat', { amount: money(perSeatCents) })}
+                          {minParty > 1 ? ` · ${t('bk.minParty', { n: minParty })}` : ''}
+                        </p>
+                      )}
                       {late && <p className="sitting-note">{t('bk.lateSeatingHint')}</p>}
                     </div>
                   )}
@@ -699,14 +721,16 @@ export function BookingFlow() {
                     <div>
                       <span>{t('bk.selection')}</span>
                       <strong>
-                        {timeSlot
-                          ? `${selectedTable.label} · ${timeSlot}–${endLabel(timeSlot, durationMin)} · ${money(totalCents)}`
-                          : t('bk.chooseTime')}
+                        {partyTooSmall
+                          ? t('bk.minParty', { n: minParty })
+                          : timeSlot
+                            ? `${selectedTable.label} · ${timeSlot}–${endLabel(timeSlot, durationMin)} · ${money(totalCents)}`
+                            : t('bk.chooseTime')}
                       </strong>
                     </div>
                     <button
                       className="primary"
-                      disabled={!timeSlot}
+                      disabled={!timeSlot || partyTooSmall}
                       onClick={() => setStep(2)}
                     >
                       {t('bk.nextDetails')} <span aria-hidden="true">→</span>

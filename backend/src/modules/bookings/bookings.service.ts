@@ -86,12 +86,17 @@ function resolveSitting(
   if (party > capacity) {
     throw new ApiError(400, `That table seats ${capacity}.`);
   }
-  // The large tables are not worth taking out of service for a pair, so they
-  // carry a minimum party. Enforced here rather than only in the form, since
-  // seats are what is charged for.
+  // A big table is not worth taking out of service for a pair, so each size
+  // carries a minimum party. Enforced here rather than only in the form, since
+  // seats are what is charged for. The message names the shortfall and points
+  // at the way out, because "no" on its own leaves the customer stuck.
   const floor = minSeatsFor(capacity);
   if (party < floor) {
-    throw new ApiError(400, `That table is for parties of ${floor} or more.`);
+    throw new ApiError(
+      400,
+      `This ${capacity}-seat table is for parties of ${floor} or more. ` +
+        `Pick a smaller table for ${party}.`,
+    );
   }
   return { durationMin: duration, partySize: party, billedSeats: billableSeats(capacity, party) };
 }

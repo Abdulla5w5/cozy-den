@@ -29,17 +29,25 @@ import { isLateStart, SESSION_MIN } from './slots';
 const PEAK_DAYS = new Set([4, 5, 6]); // Thursday, Friday, Saturday
 
 /**
- * The bigger tables are not worth taking out of service for a pair, so a party
- * below this floor cannot book one. Kept here, next to the per-seat rates,
- * because it is the same idea from the other end: the floor is both the
+ * A big table is not worth taking out of service for a pair, so each size takes
+ * a minimum party — roughly half its seats. Kept here, next to the per-seat
+ * rates, because it is the same idea from the other end: the floor is both the
  * smallest party allowed and the fewest seats ever charged.
+ *
+ * Read as a ladder, largest first, so an odd capacity still lands somewhere
+ * sensible: a 7-seater takes 3 like a 6-seater, and a 5-seater takes 2 like a
+ * 4-seater. Anything under four seats has no floor at all.
  */
-export const LARGE_TABLE_CAPACITY = 12;
-export const LARGE_TABLE_MIN_SEATS = 4;
+const MIN_SEATS_LADDER: readonly (readonly [capacity: number, minSeats: number])[] = [
+  [12, 5],
+  [8, 4],
+  [6, 3],
+  [4, 2],
+];
 
 /** The smallest party this table accepts — and so the fewest seats it bills. */
 export function minSeatsFor(capacity: number): number {
-  return capacity >= LARGE_TABLE_CAPACITY ? LARGE_TABLE_MIN_SEATS : 1;
+  return MIN_SEATS_LADDER.find(([seats]) => capacity >= seats)?.[1] ?? 1;
 }
 
 /** Seats a booking is billed for: what was asked, or the table's floor. */
