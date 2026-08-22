@@ -438,6 +438,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'wb.type.males_only': { en: 'Males only', ar: 'شباب فقط' },
   'wb.type.females_only': { en: 'Females only', ar: 'بنات فقط' },
   'wb.days': { en: 'Preferred days', ar: 'الأيام المناسبة' },
+  'wb.date': { en: 'Date of the session', ar: 'تاريخ الجلسة' },
   'wb.ack': {
     en: 'I know this game and I will lead and teach the session for anyone new to it.',
     ar: 'أعرف هاللعبة وألتزم إني أقود الجلسة وأعلّم أي أحد جديد عليها.',
@@ -447,6 +448,8 @@ const dict: Record<string, { en: string; ar: string }> = {
     ar: 'أكد إنك تعرف اللعبة وبتقود الجلسة.',
   },
   'wb.daysRequired': { en: 'Pick at least one day.', ar: 'اختر يوم واحد على الأقل.' },
+  'wb.dateRequired': { en: 'Pick the date you want to play on.', ar: 'اختر تاريخ اللعب.' },
+  'wb.datePast': { en: 'That date has already passed.', ar: 'هذا التاريخ مضى بالفعل.' },
   'wb.gameRequired': { en: 'Pick or name a game.', ar: 'اختر لعبة أو اكتب اسمها.' },
   'wb.rangeBad': {
     en: 'Maximum players cannot be lower than minimum.',

@@ -8,8 +8,8 @@ import { Game } from '../types';
  * The Wanted Board — members advertise a game they will run and collect
  * expressions of interest.
  *
- * Nothing here is a booking and nothing is scheduled: a post carries days of
- * the week, never a date or time. Once a post fills, staff contact the
+ * Nothing here is a booking and nothing is scheduled: a post names the one date
+ * the session is for, and no time. Once a post fills, staff contact the
  * interested members and arrange the session by hand.
  *
  * The board deliberately shows only HOW MANY people are interested. Names and
@@ -26,6 +26,7 @@ interface Post {
   minPlayers: number;
   maxPlayers: number;
   sessionType: SessionType;
+  sessionDate: string | null;
   preferredDays: number[];
   status: 'pending' | 'open' | 'completed' | 'rejected';
   interestCount: number;
@@ -41,6 +42,25 @@ interface Post {
 }
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/** YYYY-MM-DD in the reader's locale, e.g. "Sun, 24 Aug 2026". */
+export function formatSessionDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString(undefined, {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+}
+
+/** Today as YYYY-MM-DD, for the date input's floor. */
+function today(): string {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
 
 export function WantedBoard() {
   const { t } = useI18n();
@@ -180,7 +200,10 @@ function PostCard({
   reserving?: boolean;
 }) {
   const { t, money } = useI18n();
-  const days = post.preferredDays.map((d) => t(`day.${DAY_KEYS[d]}`)).join(' · ');
+  // New listings carry an exact date; older ones only ever had weekdays.
+  const days = post.sessionDate
+    ? formatSessionDate(post.sessionDate)
+    : post.preferredDays.map((d) => t(`day.${DAY_KEYS[d]}`)).join(' · ');
 
   return (
     <div className="feature-card">
@@ -236,7 +259,7 @@ function PostForm({ onDone }: { onDone: () => void }) {
   // Whole blocks, same as a table booking. The price follows from this and is
   // worked out server-side, so the form never sends an amount.
   const [durationMin, setDurationMin] = useState(120);
-  const [days, setDays] = useState<number[]>([]);
+  const [sessionDate, setSessionDate] = useState('');
   // Mandatory. The server refuses without it and the database has a CHECK
   // constraint, so this is a courtesy to the poster, not the actual guard.
   const [ack, setAck] = useState(false);
@@ -250,15 +273,12 @@ function PostForm({ onDone }: { onDone: () => void }) {
       .catch(() => setGames([]));
   }, []);
 
-  function toggleDay(d: number) {
-    setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
-  }
-
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     if (!ack) return setError(t('wb.ackRequired'));
-    if (days.length === 0) return setError(t('wb.daysRequired'));
+    if (!sessionDate) return setError(t('wb.dateRequired'));
+    if (sessionDate < today()) return setError(t('wb.datePast'));
     if (gameId === '' && !gameName.trim()) return setError(t('wb.gameRequired'));
     if (maxPlayers < minPlayers) return setError(t('wb.rangeBad'));
 
@@ -271,7 +291,7 @@ function PostForm({ onDone }: { onDone: () => void }) {
         maxPlayers,
         sessionType,
         durationMin,
-        preferredDays: days,
+        sessionDate,
         acknowledgmentConfirmed: ack,
       });
       onDone();
@@ -348,17 +368,15 @@ function PostForm({ onDone }: { onDone: () => void }) {
         </label>
       </div>
 
-      <fieldset className="field">
-        <legend>{t('wb.days')}</legend>
-        <div className="row">
-          {DAY_KEYS.map((k, i) => (
-            <label key={k} className="field inline">
-              <input type="checkbox" checked={days.includes(i)} onChange={() => toggleDay(i)} />{' '}
-              {t(`day.${k}`)}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <label className="field inline">
+        {t('wb.date')}
+        <input
+          type="date"
+          min={today()}
+          value={sessionDate}
+          onChange={(e) => setSessionDate(e.target.value)}
+        />
+      </label>
 
       <label className="field">
         <span>

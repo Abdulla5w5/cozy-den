@@ -27,9 +27,9 @@ const createSchema = z.object({
   minPlayers: z.number().int().min(1).max(50),
   maxPlayers: z.number().int().min(1).max(50),
   sessionType: z.enum(['males_only', 'females_only', 'open']),
-  // 0 = Sunday .. 6 = Saturday. Days of the week only — a post never carries a
-  // date or a time; staff arrange the actual session by hand.
-  preferredDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+  // The exact date the session is for. A wanted session is a one-off, not a
+  // recurring event, so it names a day rather than a set of weekdays.
+  sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick the date you want to play on.'),
   // Whole blocks only, exactly as a table booking. The price is derived from
   // this server-side, so the client never sends a price.
   durationMin: z.union([z.literal(120), z.literal(240), z.literal(360)]).default(120),

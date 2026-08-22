@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
+import { formatSessionDate } from './WantedBoard';
 
 /**
  * Staff side of the Wanted Board.
@@ -20,6 +21,7 @@ interface StaffPost {
   minPlayers: number;
   maxPlayers: number;
   sessionType: 'males_only' | 'females_only' | 'open';
+  sessionDate: string | null;
   preferredDays: number[];
   status: 'pending' | 'open' | 'completed' | 'rejected';
   interestCount: number;
@@ -91,7 +93,9 @@ export function StaffWanted({ isAdmin }: { isAdmin: boolean }) {
               {t('wb.interested', { n: p.interestCount, max: p.maxPlayers })}
             </p>
             <p className="muted">
-              {p.preferredDays.map((d) => t(`day.${DAY_KEYS[d]}`)).join(' · ')}
+              {p.sessionDate
+                ? formatSessionDate(p.sessionDate)
+                : p.preferredDays.map((d) => t(`day.${DAY_KEYS[d]}`)).join(' · ')}
             </p>
             <p className="muted">
               {t('staff.wbPoster')}: {p.posterName} — {p.posterEmail}

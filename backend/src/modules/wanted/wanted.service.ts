@@ -45,6 +45,9 @@ export interface PublicPost {
   minPlayers: number;
   maxPlayers: number;
   sessionType: SessionType;
+  /** The exact day the session is for (YYYY-MM-DD). Null on posts made before
+   *  listings carried a date. */
+  sessionDate: string | null;
   preferredDays: number[];
   status: PostStatus;
   interestCount: number;
@@ -59,7 +62,8 @@ export interface CreatePostInput {
   minPlayers: number;
   maxPlayers: number;
   sessionType: SessionType;
-  preferredDays: number[];
+  /** YYYY-MM-DD. A listing is a one-off, so it names the actual date. */
+  sessionDate: string;
   acknowledgmentConfirmed: boolean;
 }
 
@@ -68,7 +72,7 @@ const PUBLIC_SELECT = `
   SELECT p.id, p.game_id, COALESCE(g.title, p.game_name) AS game_title,
          p.duration_min, p.amount_cents, p.payment_state, p.reserved_by,
          p.min_players, p.max_players, p.session_type,
-         p.preferred_days, p.status, p.created_at,
+         p.preferred_days, p.session_date, p.status, p.created_at,
          (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id) AS interest_count
     FROM wanted_posts p
     LEFT JOIN games g ON g.id = p.game_id`;
@@ -85,9 +89,22 @@ interface PublicRow {
   max_players: number;
   session_type: SessionType;
   preferred_days: number[];
+  session_date: string | Date | null;
   status: PostStatus;
   created_at: Date;
   interest_count: string;
+}
+
+/**
+ * node-postgres hands back a Date for DATE columns, built at LOCAL midnight.
+ * Formatting it through toISOString() would shift it a day in any timezone west
+ * of UTC, so the calendar parts are read directly.
+ */
+function toDateString(v: string | Date | null): string | null {
+  if (!v) return null;
+  if (typeof v === 'string') return v.slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
 }
 
 function toPublic(r: PublicRow, rates: Rates): PublicPost {
@@ -112,6 +129,7 @@ function toPublic(r: PublicRow, rates: Rates): PublicPost {
     minPlayers: r.min_players,
     maxPlayers: r.max_players,
     sessionType: r.session_type,
+    sessionDate: toDateString(r.session_date),
     preferredDays: r.preferred_days,
     status: r.status,
     interestCount: Number(r.interest_count),
@@ -131,6 +149,16 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
   if (input.maxPlayers < input.minPlayers) {
     throw new ApiError(400, 'Maximum players cannot be lower than minimum players.');
   }
+  // One exact date, and never one that has already passed.
+  const sessionDate = input.sessionDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate ?? '')) {
+    throw new ApiError(400, 'Pick the date you want to play on.');
+  }
+  const day = new Date(`${sessionDate}T00:00:00Z`);
+  if (Number.isNaN(day.getTime())) throw new ApiError(400, 'That date is not a real date.');
+  if (sessionDate < new Date().toISOString().slice(0, 10)) {
+    throw new ApiError(400, 'That date has already passed.');
+  }
   if (!input.gameId && !input.gameName?.trim()) {
     throw new ApiError(400, 'Pick a game from the library or type its name.');
   }
@@ -142,8 +170,9 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
   const { rows } = await query<{ id: number }>(
     `INSERT INTO wanted_posts
        (member_id, game_id, game_name, min_players, max_players,
-        session_type, preferred_days, acknowledgment_confirmed, duration_min)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,$8)
+        session_type, preferred_days, session_date,
+        acknowledgment_confirmed, duration_min)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9)
      RETURNING id`,
     [
       memberId,
@@ -152,7 +181,10 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
       input.minPlayers,
       input.maxPlayers,
       input.sessionType,
-      input.preferredDays,
+      // Derived, never sent by the client, so the weekday used for pricing
+      // always matches the date the listing is for.
+      [day.getUTCDay()],
+      sessionDate,
       input.durationMin ?? 120,
     ],
   );
@@ -274,7 +306,7 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
             p.duration_min, p.amount_cents, p.payment_state, p.reserved_by,
             ru.name AS reserved_by_name, ru.phone AS reserved_by_phone,
             p.min_players, p.max_players, p.session_type,
-            p.preferred_days, p.status, p.created_at,
+            p.preferred_days, p.session_date, p.status, p.created_at,
             (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id)
               AS interest_count,
             u.name AS poster_name, u.email AS poster_email
