@@ -36,6 +36,12 @@ bookingsRouter.post(
           returnUrl: `${base}/api/bookings/tap/return`,
           webhookUrl: `${base}/api/bookings/tap/webhook`,
         });
+        // A retry can discover that the earlier attempt actually succeeded. Hand
+        // back that booking rather than a second payment page.
+        if (start.booking) {
+          res.status(201).json({ booking: start.booking });
+          return;
+        }
         res.status(201).json({ redirectUrl: start.redirectUrl, code: start.code });
         return;
       }

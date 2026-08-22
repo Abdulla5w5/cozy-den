@@ -145,11 +145,38 @@ export interface SeatHold {
   amountCents: number;
 }
 
+/**
+ * Clear this guest's OWN abandoned holds on this event before counting seats.
+ *
+ * Same reasoning as table checkout: a customer whose payment page died holds
+ * seats they never bought, and on a nearly-full event the person that shuts out
+ * is themselves, retrying. The charge is re-asked of the gateway first, so a
+ * payment that actually went through is settled rather than thrown away.
+ */
+async function clearOwnAbandonedHolds(eventId: number, email: string): Promise<void> {
+  const { rows } = await query<{ id: number; payment_ref: string | null }>(
+    `SELECT id, payment_ref FROM event_reservations
+      WHERE event_id = $1 AND status = 'pending_payment' AND lower(guest_email) = lower($2)`,
+    [eventId, email],
+  );
+  for (const row of rows) {
+    if (row.payment_ref?.startsWith('chg_') && paymentProvider.retrieveCharge) {
+      try {
+        if ((await finalizeSeatCharge(row.payment_ref)) === 'paid') continue;
+      } catch (err) {
+        console.error('[events] could not re-check an abandoned charge', err);
+      }
+    }
+    await releaseSeats(row.id);
+  }
+}
+
 export async function holdSeats(
   eventId: number,
   seats: number,
   guest: { name: string; email: string; phone?: string | null; memberId?: number | null },
 ): Promise<SeatHold> {
+  await clearOwnAbandonedHolds(eventId, guest.email);
   return withTransaction(async (client) => {
     const { rows } = await client.query<{
       capacity: number | null;

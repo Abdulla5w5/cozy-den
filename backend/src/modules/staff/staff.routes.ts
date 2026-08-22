@@ -272,11 +272,14 @@ staffRouter.post(
   },
 );
 
-// DELETE /api/staff/wanted/:id — destructive moderation is admin-only. The
-// server guard is authoritative; hiding the button from ordinary staff is not.
+// DELETE /api/staff/wanted/:id — any staff member who can approve a post can
+// also remove one. Approving and removing are the same job done at different
+// moments: the post that should never have been published and the one that has
+// served its purpose both land on whoever is running the board that day, and
+// making them wait for an admin left dead listings up.
 staffRouter.delete(
   '/wanted/:id',
-  requireAdmin,
+  requireStaff,
   validate(idParam, 'params'),
   async (req, res, next) => {
     try {

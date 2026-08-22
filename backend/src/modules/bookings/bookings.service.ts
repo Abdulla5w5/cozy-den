@@ -252,9 +252,14 @@ function sendReceipt(view: BookingView) {
 
 export interface CheckoutStart {
   /** Send the customer's browser here to pay. */
-  redirectUrl: string;
+  redirectUrl?: string;
   /** So the caller can build the eventual /confirmation/{code} link. */
   code: string;
+  /** Set instead of redirectUrl when this exact session turns out to be paid
+   *  for already — the customer's earlier attempt did go through, and they came
+   *  back to try again not knowing that. Show them the booking, do not charge
+   *  them twice. */
+  booking?: BookingView;
 }
 
 /**
@@ -272,6 +277,16 @@ export async function startBookingCheckout(
   }
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
   const { capacity } = await assertTableExists(input.tableId);
+
+  // A retry after a failed payment attempt must not be blocked by the wreckage
+  // of that attempt. Runs before the insert, so the window is already free.
+  const alreadyPaid = await resolveOwnStaleHold({
+    tableId: input.tableId,
+    date: input.date,
+    timeSlot: input.timeSlot,
+    guestEmail: input.guestEmail,
+  });
+  if (alreadyPaid) return { code: alreadyPaid.verificationCode, booking: alreadyPaid };
 
   const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
   const feeCents = (
@@ -472,6 +487,62 @@ export async function finalizeCharge(
  */
 export async function expireHold(bookingId: number): Promise<boolean> {
   return expirePaymentHold(bookingId);
+}
+
+
+/**
+ * Clear the caller's OWN abandoned hold on the window they are trying to book.
+ *
+ * A customer whose connection dies on the payment page leaves a
+ * 'pending_payment' row holding that window. The sweep releases it eventually,
+ * but "eventually" is up to half an hour, and in the meantime the one person
+ * who most wants the slot — the same customer, hitting back and trying again —
+ * is the one it locks out.
+ *
+ * So a repeat attempt at the same table, date and time by the same email
+ * resolves the earlier hold on the spot:
+ *
+ *  - The charge is re-asked of the gateway first. If it actually went through,
+ *    the booking is confirmed by finalizeCharge and this returns it: the right
+ *    answer to "did my payment work?" is their booking, not a second one.
+ *  - Otherwise the hold is expired, freeing the window immediately so the retry
+ *    can proceed.
+ *
+ * Only ever touches a row with the SAME guest email, so it can never be used to
+ * knock somebody else off a table. A charge that settles after this is not lost
+ * either: finalizeCharge flags a capture against a cancelled booking for staff
+ * review rather than swallowing it.
+ */
+async function resolveOwnStaleHold(input: {
+  tableId: number;
+  date: string;
+  timeSlot: string;
+  guestEmail: string;
+}): Promise<BookingView | null> {
+  const { rows } = await query<{ id: number; payment_ref: string | null }>(
+    `SELECT id, payment_ref FROM bookings
+      WHERE status = 'pending_payment' AND source = 'online'
+        AND table_id = $1 AND booking_date = $2 AND time_slot = $3
+        AND lower(guest_email) = lower($4)`,
+    [input.tableId, input.date, input.timeSlot, input.guestEmail],
+  );
+
+  for (const row of rows) {
+    if (row.payment_ref?.startsWith('chg_') && paymentProvider.retrieveCharge) {
+      try {
+        const { outcome } = await finalizeCharge(row.payment_ref, 'reconcile');
+        if (outcome === 'paid') return await getBookingById(row.id);
+        // 'review' means staff have to look at it. Leave the row alone.
+        if (outcome === 'review') continue;
+      } catch (err) {
+        // The gateway being unreachable must not block the retry; the hold is
+        // this customer's own, and the sweep will re-check the charge later.
+        console.error('[checkout] could not re-check an abandoned charge', err);
+      }
+    }
+    await expireHold(row.id);
+  }
+  return null;
 }
 
 /**

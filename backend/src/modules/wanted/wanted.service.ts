@@ -389,11 +389,27 @@ export async function moderatePost(id: number, decision: 'approve' | 'reject'): 
 }
 
 /**
- * Permanently remove one post. Its interest rows are removed by the database's
- * ON DELETE CASCADE foreign key, keeping the operation atomic even if a post
- * has many interested members. Authorization belongs to the admin-only route.
+ * Permanently remove one post. Its interest rows and seat rows are removed by
+ * the database's ON DELETE CASCADE foreign keys, keeping the operation atomic
+ * even if a post has many of either.
+ *
+ * A listing somebody has PAID for is refused, because deleting it would destroy
+ * the only record that the money was taken while doing nothing about the money
+ * itself. Staff refund first, and the listing can go once no paid seat remains.
  */
 export async function deletePost(id: number): Promise<void> {
+  const { rows } = await query<{ seats: string }>(
+    `SELECT COALESCE(sum(seats), 0)::text AS seats
+       FROM wanted_post_seats WHERE post_id = $1 AND payment_state = 'paid'`,
+    [id],
+  );
+  if (Number(rows[0].seats) > 0) {
+    throw new ApiError(
+      409,
+      'Players have paid for seats on this listing. Refund them first — deleting it ' +
+        'would remove the record of their payment.',
+    );
+  }
   const { rowCount } = await query('DELETE FROM wanted_posts WHERE id = $1', [id]);
   if (!rowCount) throw new ApiError(404, 'Post not found.');
 }
@@ -457,11 +473,37 @@ export interface SeatHold {
  * cannot move under us: two members buying the last seat at the same moment
  * are serialised, and the second one is told it has gone.
  */
+/**
+ * Clear this member's OWN abandoned holds on this listing before counting what
+ * is left. A member whose payment page died is otherwise blocked by their own
+ * held seats — on a listing with one seat going, by exactly the seat they were
+ * trying to buy. The charge is re-asked of the gateway first, so a payment that
+ * did go through is settled rather than thrown away.
+ */
+async function clearOwnAbandonedHolds(postId: number, memberId: number): Promise<void> {
+  const { rows } = await query<{ id: number; payment_ref: string | null }>(
+    `SELECT id, payment_ref FROM wanted_post_seats
+      WHERE post_id = $1 AND member_id = $2 AND payment_state = 'pending_payment'`,
+    [postId, memberId],
+  );
+  for (const row of rows) {
+    if (row.payment_ref?.startsWith('chg_') && paymentProvider.retrieveCharge) {
+      try {
+        if ((await finalizeListingCharge(row.payment_ref)) === 'paid') continue;
+      } catch (err) {
+        console.error('[wanted] could not re-check an abandoned charge', err);
+      }
+    }
+    await releaseListing(row.id);
+  }
+}
+
 export async function holdSeats(
   postId: number,
   memberId: number,
   seats: number,
 ): Promise<SeatHold> {
+  await clearOwnAbandonedHolds(postId, memberId);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

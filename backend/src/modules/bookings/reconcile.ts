@@ -197,7 +197,7 @@ let timer: NodeJS.Timeout | undefined;
 let running = false;
 
 /** Start the periodic sweep. No-op unless a redirect gateway is configured. */
-export function startReconciler(intervalMs = 5 * 60 * 1000): void {
+export function startReconciler(intervalMs = 2 * 60 * 1000): void {
   if (paymentProvider.kind !== 'redirect') return;
   if (timer) return;
   const run = async () => {

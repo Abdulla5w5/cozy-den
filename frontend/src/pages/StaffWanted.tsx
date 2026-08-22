@@ -37,7 +37,7 @@ interface StaffPost {
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-export function StaffWanted({ isAdmin }: { isAdmin: boolean }) {
+export function StaffWanted() {
   const { t } = useI18n();
   const [posts, setPosts] = useState<StaffPost[] | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
@@ -144,16 +144,14 @@ export function StaffWanted({ isAdmin }: { isAdmin: boolean }) {
               </div>
             )}
 
-            {isAdmin && (
-              <button
-                type="button"
-                className="link"
-                disabled={busy === p.id}
-                onClick={() => remove(p)}
-              >
-                {t('staff.wbDelete')}
-              </button>
-            )}
+            <button
+              type="button"
+              className="link"
+              disabled={busy === p.id}
+              onClick={() => remove(p)}
+            >
+              {t('staff.wbDelete')}
+            </button>
 
             {p.interested.length > 0 && (
               <>
