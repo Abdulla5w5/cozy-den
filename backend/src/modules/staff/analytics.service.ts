@@ -107,6 +107,10 @@ export async function getMonthlyAnalytics(month: string): Promise<MonthlyAnalyti
 
   const tableUtilization = (
     await query<{ label: string; capacity: number; bookings: string }>(
+      // Retired tables keep their rows so old bookings still name the table
+      // they were on, but a table that is no longer on the floor and took no
+      // bookings this month is just a dead name padding the list. Kept only
+      // where the month actually used it, so history stays honest.
       `SELECT t.label, t.capacity, COUNT(b.id) AS bookings
          FROM tables t
          LEFT JOIN bookings b
@@ -114,7 +118,8 @@ export async function getMonthlyAnalytics(month: string): Promise<MonthlyAnalyti
           AND b.status <> 'cancelled'
           AND b.booking_date >= $1::date
           AND b.booking_date < ($1::date + INTERVAL '1 month')
-        GROUP BY t.id, t.label, t.capacity
+        GROUP BY t.id, t.label, t.capacity, t.is_active
+        HAVING t.is_active OR COUNT(b.id) > 0
         ORDER BY bookings DESC, t.capacity`,
       [start]
     )
