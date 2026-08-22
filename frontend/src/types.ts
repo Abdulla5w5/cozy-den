@@ -146,7 +146,15 @@ export interface MonthlyAnalytics {
   tableUtilization: { label: string; capacity: number; bookings: number }[];
 }
 
-export const money = (cents: number) => `KD ${(cents / 100).toFixed(2)}`;
+/**
+ * Money is stored as whole hundredths of a dinar, so two decimals is the whole
+ * of it — a third would promise a precision the amounts cannot hold. Every
+ * price the site shows or puts in an editable field goes through one of these.
+ */
+export const kd = (cents: number) => (cents / 100).toFixed(2);
+export const money = (cents: number) => `KD ${kd(cents)}`;
+/** The inverse, for a price typed into a form. */
+export const kdToCents = (typed: string) => Math.round(parseFloat(typed || '0') * 100);
 
 export interface TeamMember {
   isAdmin: boolean;

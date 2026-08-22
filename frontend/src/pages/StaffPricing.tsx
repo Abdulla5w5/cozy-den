@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
+import { kd, kdToCents } from '../types';
 
 /**
  * Staff price editor.
@@ -10,8 +11,8 @@ import { useI18n } from '../i18n';
  * discount and an event upcharge are all the same operation, so staff never
  * need a deploy to change a price.
  *
- * Prices are entered in KD and stored in hundredths, since the whole system
- * keeps money as integers to avoid rounding drift.
+ * Prices are entered in KD to two decimals and stored in hundredths, since the
+ * whole system keeps money as integers to avoid rounding drift.
  */
 
 interface Rates {
@@ -26,8 +27,8 @@ interface Override {
   feeCents: number;
 }
 
-const toKd = (cents: number) => (cents / 100).toFixed(3);
-const toCents = (kd: string) => Math.round(parseFloat(kd || '0') * 100);
+const toKd = kd;
+const toCents = kdToCents;
 
 export function StaffPricing() {
   const { t } = useI18n();

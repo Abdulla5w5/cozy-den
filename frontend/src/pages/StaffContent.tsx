@@ -1,7 +1,7 @@
 import { Fragment, FormEvent, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
-import { EventItem, EventReservation, Game, MenuItem, Promo } from '../types';
+import { EventItem, EventReservation, Game, kd, kdToCents, MenuItem, Promo } from '../types';
 
 
 /**
@@ -67,7 +67,7 @@ const blank = {
   startTime: '',
   durationMin: '' as string,
   capacity: '' as string,
-  seatPriceKd: '0.000',
+  seatPriceKd: '0.00',
 };
 
 /** Staff: full CRUD over events (create / edit / delete / feature). */
@@ -114,7 +114,7 @@ export function EventsTab() {
       startTime: e.start_time ?? '',
       durationMin: e.duration_min ? String(e.duration_min) : '',
       capacity: e.capacity ? String(e.capacity) : '',
-      seatPriceKd: ((e.seat_price_cents ?? 0) / 100).toFixed(3),
+      seatPriceKd: kd(e.seat_price_cents ?? 0),
     });
   }
 
@@ -133,7 +133,7 @@ export function EventsTab() {
         startTime: form.startTime || null,
         durationMin: form.durationMin ? Number(form.durationMin) : null,
         capacity: form.capacity ? Number(form.capacity) : null,
-        seatPriceCents: Math.round(parseFloat(form.seatPriceKd || '0') * 100),
+        seatPriceCents: kdToCents(form.seatPriceKd),
       };
       if (editingId) await api.put(`/events/${editingId}`, body);
       else await api.post('/events', body);
@@ -748,7 +748,7 @@ export function MenuTab() {
   const { t, money } = useI18n();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [form, setForm] = useState<typeof blankItem | null>(null);
-  const [priceKd, setPriceKd] = useState('0.000');
+  const [priceKd, setPriceKd] = useState('0.00');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -765,7 +765,7 @@ export function MenuTab() {
   function startEdit(m: MenuItem) {
     setEditingId(m.id);
     setNote(null);
-    setPriceKd((m.price_cents / 100).toFixed(3));
+    setPriceKd(kd(m.price_cents));
     setForm({
       name: m.name,
       category: m.category,
@@ -787,7 +787,7 @@ export function MenuTab() {
     setError(null);
     try {
       // Staff type KD; the API only ever deals in integer fils.
-      const body = { ...form, priceCents: Math.round(parseFloat(priceKd || '0') * 100) };
+      const body = { ...form, priceCents: kdToCents(priceKd) };
       if (editingId) await api.put(`/menu/${editingId}`, body);
       else await api.post('/menu', body);
       setForm(null);
