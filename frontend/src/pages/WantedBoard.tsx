@@ -33,12 +33,11 @@ interface Post {
   createdAt: string;
   /** Session length, and what reserving the listing costs. */
   durationMin?: number;
-  /** Quoted price to reserve now — present on every open listing. */
-  reserveCents?: number;
-  /** Each player's share of the table total (display only for now). */
+  /** What ONE seat on this listing costs. */
   perPlayerCents?: number;
-  amountCents?: number;
-  paymentState?: 'none' | 'pending_payment' | 'paid';
+  /** Seats sold or held, and seats still going. */
+  seatsTaken?: number;
+  seatsLeft?: number;
 }
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -94,14 +93,17 @@ export function WantedBoard() {
   }, []);
 
   /**
-   * Take the listing and pay for it. Paid listings hand the browser to the
-   * gateway exactly as table checkout does; the server confirms only after
-   * re-retrieving the charge.
+   * Buy seats on a listing. The browser is handed to the gateway exactly as
+   * table checkout does; the server confirms only after re-retrieving the
+   * charge.
    */
-  async function reserve(id: number) {
+  async function reserve(id: number, seats: number) {
     setReservingId(id);
     try {
-      const res = await api.post<{ redirectUrl?: string; free?: boolean }>(`/wanted/${id}/reserve`);
+      const res = await api.post<{ redirectUrl?: string; free?: boolean }>(
+        `/wanted/${id}/reserve`,
+        { seats },
+      );
       if (res.redirectUrl) {
         window.location.assign(res.redirectUrl);
         return; // keep the spinner up while the browser navigates away
@@ -176,8 +178,8 @@ export function WantedBoard() {
               <PostCard
                 key={p.id}
                 post={p}
-                canReserve={loggedIn && p.status === 'open' && p.paymentState === 'none'}
-                onReserve={() => reserve(p.id)}
+                canReserve={loggedIn && p.status === 'open' && (p.seatsLeft ?? 0) > 0}
+                onReserve={(seats) => reserve(p.id, seats)}
                 reserving={reservingId === p.id}
               />
             ))}
@@ -196,10 +198,15 @@ function PostCard({
 }: {
   post: Post;
   canReserve?: boolean;
-  onReserve?: () => void;
+  onReserve?: (seats: number) => void;
   reserving?: boolean;
 }) {
   const { t, money } = useI18n();
+  // Seats are bought individually: one by default, since a member joining a
+  // game is usually joining it alone, with the rest left for other players.
+  const [seats, setSeats] = useState(1);
+  const seatsLeft = post.seatsLeft ?? 0;
+  const taking = Math.min(seats, Math.max(1, seatsLeft));
   // New listings carry an exact date; older ones only ever had weekdays.
   const days = post.sessionDate
     ? formatSessionDate(post.sessionDate)
@@ -219,26 +226,41 @@ function PostCard({
       {post.durationMin ? (
         <p className="muted">{t('wb.length', { n: post.durationMin / 60 })}</p>
       ) : null}
-      {post.paymentState === 'paid' ? (
-        <span className="pill">{t('wb.reservedAlready')}</span>
+      {seatsLeft === 0 ? (
+        <span className="pill">{t('wb.full')}</span>
       ) : (
         <>
-          {post.status === 'completed' ? <span className="pill">{t('wb.full')}</span> : null}
-          {/* Reserving is the only action now — expressing interest was dropped,
-              since it committed to nothing. Open to any signed-in member, the
-              poster included; whoever reserves pays for the table. The price is
-              quoted from the listing (reserveCents) before anyone reserves. */}
-          {canReserve && post.reserveCents ? (
+          <p className="muted">
+            {seatsLeft === 1 ? t('wb.oneSeatLeft') : t('wb.seatsLeft', { n: seatsLeft })}
+          </p>
+          {/* Buying a seat is the only action now — expressing interest was
+              dropped, since it committed to nothing. Open to any signed-in
+              member, the poster included. You pay for the seats you take and
+              the rest stay on the board for other players. */}
+          {canReserve && post.perPlayerCents ? (
             <>
-              {post.perPlayerCents ? (
-                <p className="muted wb-per-player">
-                  {t('wb.perPlayer', { amount: money(post.perPlayerCents) })}
-                </p>
+              <p className="muted wb-per-player">
+                {t('wb.perPlayer', { amount: money(post.perPlayerCents) })}
+              </p>
+              {seatsLeft > 1 ? (
+                <label className="field inline">
+                  {t('wb.seats')}
+                  <select value={seats} onChange={(e) => setSeats(Number(e.target.value))}>
+                    {Array.from({ length: seatsLeft }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               ) : null}
-              <button className="cta" onClick={onReserve} disabled={reserving}>
+              <button className="cta" onClick={() => onReserve?.(taking)} disabled={reserving}>
                 {reserving
                   ? t('bk.processing')
-                  : t('wb.reserveFor', { amount: money(post.reserveCents) })}
+                  : t(taking === 1 ? 'wb.reserveSeat' : 'wb.reserveSeats', {
+                      n: taking,
+                      amount: money(post.perPlayerCents * taking),
+                    })}
               </button>
             </>
           ) : null}

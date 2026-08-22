@@ -29,16 +29,11 @@ export type PostStatus = 'pending' | 'open' | 'completed' | 'rejected';
 export interface PublicPost {
   /** Session length in minutes, and what reserving it costs. */
   durationMin?: number;
-  /** Price to reserve this listing now: one seat's fare times the seats the
-   *  listing holds. Present on every listing so the board can show it before
-   *  anyone has reserved; amountCents only fills in once a reservation exists. */
-  reserveCents?: number;
-  /** What one seat costs for this listing's length. Whoever reserves pays this
-   *  for every seat the listing holds. */
+  /** What one seat on this listing costs. A member pays this per seat taken. */
   perPlayerCents?: number;
-  amountCents?: number;
-  paymentState?: 'none' | 'pending_payment' | 'paid';
-  reservedBy?: number | null;
+  /** Seats sold or held, and seats still going. */
+  seatsTaken?: number;
+  seatsLeft?: number;
   id: number;
   gameId: number | null;
   gameTitle: string;
@@ -70,7 +65,9 @@ export interface CreatePostInput {
 // Public projection. Deliberately selects no member identity of any kind.
 const PUBLIC_SELECT = `
   SELECT p.id, p.game_id, COALESCE(g.title, p.game_name) AS game_title,
-         p.duration_min, p.amount_cents, p.payment_state, p.reserved_by,
+         p.duration_min,
+         COALESCE((SELECT sum(s.seats) FROM wanted_post_seats s
+                    WHERE s.post_id = p.id), 0) AS seats_taken,
          p.min_players, p.max_players, p.session_type,
          p.preferred_days, p.session_date, p.status, p.created_at,
          (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id) AS interest_count
@@ -80,9 +77,7 @@ const PUBLIC_SELECT = `
 interface PublicRow {
   id: number;
   duration_min: number;
-  amount_cents: number;
-  payment_state: 'none' | 'pending_payment' | 'paid';
-  reserved_by: number | null;
+  seats_taken: string;
   game_id: number | null;
   game_title: string;
   min_players: number;
@@ -109,21 +104,17 @@ function toDateString(v: string | Date | null): string | null {
 
 function toPublic(r: PublicRow, rates: Rates): PublicPost {
   // Whole 2/4/6-hour blocks, same as a table booking, and priced the same way:
-  // per seat, by the listing's date rather than the day it is viewed on. A
-  // listing holds max_players seats, so that is what reserving it costs.
+  // per seat, by the listing's date rather than the day it is viewed on. Seats
+  // are bought individually, so this is what ONE player pays.
   const blocks = Math.max(1, Math.ceil((r.duration_min || 120) / 120));
   const perSeatCents = blockCentsForDays(r.preferred_days, rates) * blocks;
-  const tableCents = perSeatCents * Math.max(1, r.max_players);
+  const taken = Number(r.seats_taken);
   return {
     id: r.id,
     durationMin: r.duration_min,
-    // The organizer still pays for the whole listing; perPlayerCents is the
-    // per-seat fare it is built from, shown so the split is visible.
-    reserveCents: r.payment_state === 'none' ? tableCents : r.amount_cents,
     perPlayerCents: perSeatCents,
-    amountCents: r.amount_cents,
-    paymentState: r.payment_state,
-    reservedBy: r.reserved_by,
+    seatsTaken: taken,
+    seatsLeft: Math.max(0, r.max_players - taken),
     gameId: r.game_id,
     gameTitle: r.game_title,
     minPlayers: r.min_players,
@@ -297,14 +288,18 @@ export interface StaffPost extends PublicPost {
   posterName: string;
   posterEmail: string;
   interested: { name: string; contact: string; registeredAt: string }[];
+  /** Who actually bought seats, and how many. Staff need this to run the
+   *  session; the public board never sees it. */
+  seatBuyers: { name: string; contact: string; seats: number; paid: boolean }[];
 }
 
 /** Full detail including identities — staff routes only. */
 export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[]> {
   const { rows } = await query<PublicRow & { poster_name: string; poster_email: string }>(
     `SELECT p.id, p.game_id, COALESCE(g.title, p.game_name) AS game_title,
-            p.duration_min, p.amount_cents, p.payment_state, p.reserved_by,
-            ru.name AS reserved_by_name, ru.phone AS reserved_by_phone,
+            p.duration_min,
+            COALESCE((SELECT sum(s.seats) FROM wanted_post_seats s
+                       WHERE s.post_id = p.id), 0) AS seats_taken,
             p.min_players, p.max_players, p.session_type,
             p.preferred_days, p.session_date, p.status, p.created_at,
             (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id)
@@ -313,7 +308,6 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
        FROM wanted_posts p
        LEFT JOIN games g ON g.id = p.game_id
        JOIN users u ON u.id = p.member_id
-       LEFT JOIN users ru ON ru.id = p.reserved_by
       WHERE ($1::text IS NULL OR p.status = $1)
       ORDER BY CASE p.status WHEN 'pending' THEN 0 WHEN 'open' THEN 1 ELSE 2 END,
                p.created_at DESC`,
@@ -345,12 +339,39 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
     byPost.set(i.post_id, list);
   }
 
+  const { rows: seatRows } = await query<{
+    post_id: number;
+    name: string;
+    email: string;
+    seats: number;
+    payment_state: string;
+  }>(
+    `SELECT s.post_id, u.name, u.email, s.seats, s.payment_state
+       FROM wanted_post_seats s
+       JOIN users u ON u.id = s.member_id
+      WHERE s.post_id = ANY($1::int[])
+      ORDER BY s.created_at`,
+    [rows.map((r) => r.id)],
+  );
+  const seatsByPost = new Map<number, StaffPost['seatBuyers']>();
+  for (const b of seatRows) {
+    const list = seatsByPost.get(b.post_id) ?? [];
+    list.push({
+      name: b.name,
+      contact: b.email,
+      seats: b.seats,
+      paid: b.payment_state === 'paid',
+    });
+    seatsByPost.set(b.post_id, list);
+  }
+
   const rates = await getRates();
   return rows.map((r) => ({
     ...toPublic(r, rates),
     posterName: r.poster_name,
     posterEmail: r.poster_email,
     interested: byPost.get(r.id) ?? [],
+    seatBuyers: seatsByPost.get(r.id) ?? [],
   }));
 }
 
@@ -378,123 +399,186 @@ export async function deletePost(id: number): Promise<void> {
 }
 
 // ---------- Reserving a listing ----------
-
 /**
- * A listing states how long its session runs and how many players it seats, and
- * the price follows from both at the ordinary per-seat rate — the same as
- * booking that many seats for that long. Whoever reserves it pays for the
- * whole listing.
+ * Seats, not tables.
  *
- * Both are resolved server-side from the post, never from anything the client
- * sends, so a tampered request cannot buy a six-hour session at the two-hour
- * price or twelve seats at one seat's fare.
+ * A listing holds max_players seats and they are sold one at a time: a member
+ * buys the seats they are actually taking, the listing counts down, and it
+ * completes when the last seat goes. A held seat already counts as gone, so two
+ * people cannot buy the last one twice.
+ *
+ * Price comes from the post — its length and its date — never from the request,
+ * so a tampered client cannot buy a six-hour seat at the two-hour price. The
+ * only thing the client chooses is HOW MANY seats, and that is checked against
+ * what is left.
  */
-export async function quoteListing(postId: number): Promise<{ durationMin: number; cents: number }> {
+export async function perSeatCentsFor(postId: number): Promise<{
+  durationMin: number;
+  perSeatCents: number;
+  seatsLeft: number;
+  maxPlayers: number;
+}> {
   const { rows } = await query<{
     duration_min: number;
     preferred_days: number[];
     max_players: number;
+    taken: string;
   }>(
-    'SELECT duration_min, preferred_days, max_players FROM wanted_posts WHERE id = $1',
+    `SELECT p.duration_min, p.preferred_days, p.max_players,
+            COALESCE((SELECT sum(s.seats) FROM wanted_post_seats s
+                       WHERE s.post_id = p.id), 0) AS taken
+       FROM wanted_posts p WHERE p.id = $1`,
     [postId],
   );
   if (!rows[0]) throw new ApiError(404, 'Post not found.');
-  const durationMin = rows[0].duration_min;
-  // Priced by the listing's own day rather than whenever it happens to be
-  // reserved — the same basis the board shows, so the quoted price and the
-  // charged price always agree — and by its seats, since seats are what the
-  // café charges for.
-  const blockCents = blockCentsForDays(rows[0].preferred_days, await getRates());
-  const blocks = Math.max(1, Math.ceil(durationMin / 120));
-  return { durationMin, cents: blockCents * blocks * Math.max(1, rows[0].max_players) };
+  const blocks = Math.max(1, Math.ceil(rows[0].duration_min / 120));
+  return {
+    durationMin: rows[0].duration_min,
+    // Priced by the listing's own day rather than whenever it happens to be
+    // reserved, so the price the board quotes and the price charged agree.
+    perSeatCents: blockCentsForDays(rows[0].preferred_days, await getRates()) * blocks,
+    seatsLeft: Math.max(0, rows[0].max_players - Number(rows[0].taken)),
+    maxPlayers: rows[0].max_players,
+  };
 }
 
-export interface ListingHold {
+export interface SeatHold {
+  /** The seat row's id. Everything downstream — the charge metadata, the sweep,
+   *  the release — refers to the HOLD, not to the post. */
+  holdId: number;
   amountCents: number;
-  durationMin: number;
+  seats: number;
 }
 
 /**
- * Claim the listing for this member.
+ * Take `seats` seats on this listing for this member.
  *
- * The claim is a conditional update rather than a read-then-write: whichever
- * transaction updates a row wins and the other affects none, so two people
- * reserving at once cannot both succeed.
+ * The post row is locked for the duration so the count of seats already sold
+ * cannot move under us: two members buying the last seat at the same moment
+ * are serialised, and the second one is told it has gone.
  */
-export async function holdListing(postId: number, memberId: number): Promise<ListingHold> {
-  const quote = await quoteListing(postId);
-  const { rowCount } = await query(
-    `UPDATE wanted_posts
-        SET reserved_by = $2, reserved_at = now(),
-            amount_cents = $3, payment_state = 'pending_payment'
-      WHERE id = $1 AND payment_state = 'none' AND status = 'open'`,
-    [postId, memberId, quote.cents],
-  );
-  if (!rowCount) {
-    throw new ApiError(409, 'That listing is no longer available to reserve.');
+export async function holdSeats(
+  postId: number,
+  memberId: number,
+  seats: number,
+): Promise<SeatHold> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: postRows } = await client.query<{
+      status: PostStatus;
+      duration_min: number;
+      preferred_days: number[];
+      max_players: number;
+    }>(
+      `SELECT status, duration_min, preferred_days, max_players
+         FROM wanted_posts WHERE id = $1 FOR UPDATE`,
+      [postId],
+    );
+    const post = postRows[0];
+    if (!post) throw new ApiError(404, 'Post not found.');
+    if (post.status !== 'open') throw new ApiError(409, 'This listing is not taking players.');
+
+    const { rows: takenRows } = await client.query<{ taken: string }>(
+      `SELECT COALESCE(sum(seats), 0)::text AS taken
+         FROM wanted_post_seats WHERE post_id = $1`,
+      [postId],
+    );
+    const left = post.max_players - Number(takenRows[0].taken);
+    if (left <= 0) throw new ApiError(409, 'This listing is full.');
+    if (seats > left) {
+      throw new ApiError(409, `Only ${left} seat${left === 1 ? '' : 's'} left on this listing.`);
+    }
+
+    const blocks = Math.max(1, Math.ceil(post.duration_min / 120));
+    const perSeat = blockCentsForDays(post.preferred_days, await getRates()) * blocks;
+    const amountCents = perSeat * seats;
+
+    const { rows: held } = await client.query<{ id: number }>(
+      `INSERT INTO wanted_post_seats
+         (post_id, member_id, seats, amount_cents, payment_state)
+       VALUES ($1, $2, $3, $4, 'pending_payment')
+       RETURNING id`,
+      [postId, memberId, seats, amountCents],
+    );
+    await client.query('COMMIT');
+    return { holdId: held[0].id, amountCents, seats };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-  return { amountCents: quote.cents, durationMin: quote.durationMin };
 }
 
-/** Payment failed or was abandoned — put the listing back on the board. */
-export async function releaseListing(postId: number): Promise<void> {
-  await query(
-    `UPDATE wanted_posts
-        SET reserved_by = NULL, reserved_at = NULL, amount_cents = 0,
-            payment_state = 'none', payment_ref = NULL
-      WHERE id = $1 AND payment_state = 'pending_payment'`,
-    [postId],
-  );
-}
-
-/** The money arrived; the listing is taken. */
-export async function confirmListing(postId: number, paymentRef: string): Promise<void> {
-  await query(
-    `UPDATE wanted_posts
-        SET payment_state = 'paid', payment_ref = $2, status = 'completed'
-      WHERE id = $1 AND payment_state = 'pending_payment'`,
-    [postId, paymentRef],
-  );
+/** Payment failed or was abandoned — the seats go back on the board. */
+export async function releaseListing(holdId: number): Promise<void> {
+  await query(`DELETE FROM wanted_post_seats WHERE id = $1 AND payment_state = 'pending_payment'`, [
+    holdId,
+  ]);
 }
 
 /**
- * Record the gateway charge against the held listing, at the moment the charge
- * is opened. Without it the sweep would have nothing to ask Tap about and could
- * only release by age, taking a listing away from someone who had paid.
+ * The money arrived; the seats are sold. A listing whose last seat has just
+ * gone is completed in the same transaction, so the board never shows a full
+ * listing as still open.
  */
-export async function attachListingCharge(postId: number, chargeId: string): Promise<void> {
+export async function confirmListing(holdId: number, paymentRef: string): Promise<void> {
+  const { rows } = await query<{ post_id: number }>(
+    `UPDATE wanted_post_seats SET payment_state = 'paid', payment_ref = $2
+      WHERE id = $1 AND payment_state = 'pending_payment'
+      RETURNING post_id`,
+    [holdId, paymentRef],
+  );
+  if (!rows[0]) return;
   await query(
-    `UPDATE wanted_posts SET payment_ref = $2
-      WHERE id = $1 AND payment_state = 'pending_payment'`,
-    [postId, chargeId],
+    `UPDATE wanted_posts p
+        SET status = 'completed'
+      WHERE p.id = $1 AND p.status = 'open'
+        AND (SELECT COALESCE(sum(s.seats), 0) FROM wanted_post_seats s
+              WHERE s.post_id = p.id AND s.payment_state = 'paid') >= p.max_players`,
+    [rows[0].post_id],
   );
 }
 
 /**
- * Settle a listing charge from the gateway's own answer. Shared by the return,
- * the webhook and the sweep; the charge is always re-retrieved, never believed.
+ * Record the gateway charge against the held seats, at the moment the charge is
+ * opened. Without it the sweep would have nothing to ask Tap about and could
+ * only release by age, taking seats away from someone who had paid.
+ */
+export async function attachListingCharge(holdId: number, chargeId: string): Promise<void> {
+  await query(
+    `UPDATE wanted_post_seats SET payment_ref = $2
+      WHERE id = $1 AND payment_state = 'pending_payment'`,
+    [holdId, chargeId],
+  );
+}
+
+/**
+ * Settle a seat charge from the gateway's own answer. Shared by the return, the
+ * webhook and the sweep; the charge is always re-retrieved, never believed.
  */
 export async function finalizeListingCharge(
   chargeId: string,
 ): Promise<'paid' | 'failed' | 'pending'> {
   if (!paymentProvider.retrieveCharge) return 'failed';
   const charge = await paymentProvider.retrieveCharge(chargeId);
-  const postId = Number(charge.metadata?.postId ?? 0);
-  if (!postId) return 'failed';
+  const holdId = Number(charge.metadata?.holdId ?? 0);
+  if (!holdId) return 'failed';
   if (charge.paid) {
-    await confirmListing(postId, chargeId);
+    await confirmListing(holdId, chargeId);
     return 'paid';
   }
-  // Only a declined charge frees the listing. An unfinished one leaves it held
+  // Only a declined charge frees the seats. An unfinished one leaves them held
   // until the age check decides it was abandoned.
   if (charge.failed) {
-    await releaseListing(postId);
+    await releaseListing(holdId);
     return 'failed';
   }
   return 'pending';
 }
 
-/** Listing holds old enough to be worth re-checking, oldest first. */
+/** Seat holds old enough to be worth re-checking, oldest first. */
 export async function listStaleListingHolds(
   staleAfterMin: number,
   expiryMin: number,
@@ -502,11 +586,11 @@ export async function listStaleListingHolds(
 ): Promise<{ id: number; paymentRef: string | null; expirable: boolean }[]> {
   const { rows } = await query<{ id: number; payment_ref: string | null; expirable: boolean }>(
     `SELECT id, payment_ref,
-            reserved_at < now() - ($2 || ' minutes')::interval AS expirable
-       FROM wanted_posts
+            created_at < now() - ($2 || ' minutes')::interval AS expirable
+       FROM wanted_post_seats
       WHERE payment_state = 'pending_payment'
-        AND reserved_at < now() - ($1 || ' minutes')::interval
-      ORDER BY reserved_at
+        AND created_at < now() - ($1 || ' minutes')::interval
+      ORDER BY created_at
       LIMIT ${limit}`,
     [String(staleAfterMin), String(expiryMin)],
   );

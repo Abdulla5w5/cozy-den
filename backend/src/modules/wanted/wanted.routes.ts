@@ -7,7 +7,7 @@ import {
   confirmListing,
   createPost,
   finalizeListingCharge,
-  holdListing,
+  holdSeats,
   listMyPosts,
   listPublicPosts,
   myInterestPostIds,
@@ -98,29 +98,36 @@ wantedRouter.post(
 
 // ---------- Reserving a listing ----------
 
+const reserveSchema = z.object({
+  // How many seats you are taking. One by default — you are joining a game, not
+  // buying the table — and capped by what the listing has left.
+  seats: z.number().int().min(1).max(50).default(1),
+});
+
 /**
- * POST /api/wanted/:id/reserve — take the listing and pay for it.
+ * POST /api/wanted/:id/reserve — take seats on the listing and pay for them.
  *
  * Distinct from /interest, which remains what it always was: a note that you
- * would like to play. Reserving is a commitment with money attached, so it goes
- * through the same redirect checkout a table booking uses and is only confirmed
- * once the charge has been re-retrieved from the gateway.
+ * would like to play. Buying a seat is a commitment with money attached, so it
+ * goes through the same redirect checkout a table booking uses and is only
+ * confirmed once the charge has been re-retrieved from the gateway.
  */
 wantedRouter.post(
   '/:id/reserve',
   requireAuth,
   validate(idParam, 'params'),
+  validate(reserveSchema),
   async (req, res, next) => {
     const postId = Number(req.params.id);
     try {
-      const hold = await holdListing(postId, req.user!.sub);
+      const hold = await holdSeats(postId, req.user!.sub, req.body.seats);
 
       if (hold.amountCents === 0) {
-        await confirmListing(postId, 'free');
+        await confirmListing(hold.holdId, 'free');
         return res.status(201).json({ free: true });
       }
       if (!paymentProvider.createCharge) {
-        await releaseListing(postId);
+        await releaseListing(hold.holdId);
         throw new ApiError(500, 'Payment is not configured.');
       }
 
@@ -129,20 +136,22 @@ wantedRouter.post(
         const charge = await paymentProvider.createCharge({
           amountCents: hold.amountCents,
           currency: 'KWD',
-          description: `Cozy Den Wanted Board listing #${postId}`,
+          description:
+            `Cozy Den Wanted Board — ${hold.seats} seat` +
+            `${hold.seats === 1 ? '' : 's'} on listing #${postId}`,
           redirectUrl: `${base}/api/wanted/reserve/return`,
           webhookUrl: `${base}/api/wanted/reserve/webhook`,
           customer: { name: req.user!.name, email: req.user!.email },
-          metadata: { postId: String(postId) },
+          metadata: { holdId: String(hold.holdId) },
           expiryMinutes: TAP_CHARGE_EXPIRY_MINUTES,
         });
         // Recorded before redirecting, so a customer who pays but never comes
         // back can still be settled by the sweep.
-        await attachListingCharge(postId, charge.chargeId);
+        await attachListingCharge(hold.holdId, charge.chargeId);
         return res.status(201).json({ redirectUrl: charge.transactionUrl });
       } catch (err) {
-        // Never leave a listing held behind a charge that failed to open.
-        await releaseListing(postId);
+        // Never leave seats held behind a charge that failed to open.
+        await releaseListing(hold.holdId);
         throw err;
       }
     } catch (err) {

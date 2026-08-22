@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { formatSessionDate } from './WantedBoard';
+import { money } from '../types';
 
 /**
  * Staff side of the Wanted Board.
@@ -28,6 +29,10 @@ interface StaffPost {
   posterName: string;
   posterEmail: string;
   interested: { name: string; contact: string; registeredAt: string }[];
+  seatsTaken?: number;
+  seatsLeft?: number;
+  perPlayerCents?: number;
+  seatBuyers?: { name: string; contact: string; seats: number; paid: boolean }[];
 }
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -100,6 +105,25 @@ export function StaffWanted({ isAdmin }: { isAdmin: boolean }) {
             <p className="muted">
               {t('staff.wbPoster')}: {p.posterName} — {p.posterEmail}
             </p>
+            {/* Seats are bought individually, so a listing can have several
+                payers. Staff run the session from this list. */}
+            <p className="muted">
+              {t('staff.wbSeats', {
+                taken: p.seatsTaken ?? 0,
+                max: p.maxPlayers,
+                amount: money(p.perPlayerCents ?? 0),
+              })}
+            </p>
+            {p.seatBuyers && p.seatBuyers.length > 0 ? (
+              <ul className="muted">
+                {p.seatBuyers.map((b, i) => (
+                  <li key={i}>
+                    {b.name} — {b.contact} · {t('staff.wbSeatCount', { n: b.seats })}
+                    {b.paid ? '' : ` · ${t('staff.wbSeatPending')}`}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
 
             {p.status === 'pending' && (
               <div className="row">
