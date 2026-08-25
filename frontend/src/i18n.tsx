@@ -116,30 +116,6 @@ const dict: Record<string, { en: string; ar: string }> = {
   'games.trending': { en: 'Trending', ar: 'رايجة' },
   'games.book': { en: 'Book →', ar: 'احجز ←' },
   'games.showing': { en: 'Showing {n} of {total} games', ar: 'عارض {n} من {total} لعبة' },
-  'flavor.Strategy': {
-    en: 'Brains over brawn — outwit every rival at the table. 🧠',
-    ar: 'عقل وتخطيط — خل تفكيرك يغلبهم. 🧠',
-  },
-  'flavor.Family': {
-    en: 'Easy to learn, impossible to put down.',
-    ar: 'سهلة وتحبس — ما تقدر تتركها.',
-  },
-  'flavor.Party': {
-    en: 'Loud, chaotic, and a guaranteed blast! 🎉',
-    ar: 'صياح وونس ومضمونة تكسر السهرة! 🎉',
-  },
-  'flavor.Cooperative': {
-    en: 'Win together or lose together — no pressure. 🤝',
-    ar: 'تربحون سوا أو تخسرون سوا — عادي. 🤝',
-  },
-  'flavor.Abstract': {
-    en: 'Elegant, tactile, delightfully mind-bending.',
-    ar: 'أنيقة وتلعب بمخك، حلوة وايد.',
-  },
-  'flavor.default': {
-    en: 'A cozy-night favourite worth a spin. ✨',
-    ar: 'لعبة تونس، تستاهل تجربها. ✨',
-  },
 
   // ---- menu ----
   'menu.eyebrow': { en: 'The provisions', ar: 'المونة' },
@@ -711,10 +687,6 @@ const dict: Record<string, { en: string; ar: string }> = {
   'ev.past': { en: 'Past', ar: 'سابقة' },
 
   // ---- game library ----
-  'gl.showing': {
-    en: 'Showing {shown} of {total} games',
-    ar: 'يعرض {shown} من {total} لعبة',
-  },
   'gl.loadMore': { en: 'Show {n} more', ar: 'اعرض {n} أكثر' },
   'gl.buy': { en: 'Buy on Board Games Panda', ar: 'اشترها من بورد جيمز باندا' },
   'gl.storeTitle': { en: 'Loved a game? Take it home.', ar: 'عجبتك لعبة؟ خذها بيتك.' },

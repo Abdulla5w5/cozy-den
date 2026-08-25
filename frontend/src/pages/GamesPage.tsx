@@ -11,7 +11,6 @@ const ART = ['art-emerald', 'art-amber', 'art-pink'];
 // customer's phone real work for cards most visitors never scroll to, so the
 // list starts at one page and grows only when asked.
 const PAGE_SIZE = 50;
-const FLAVOR_KEYS = ['Strategy', 'Family', 'Party', 'Cooperative', 'Abstract'];
 
 type Variant = 'feature' | 'side' | 'small';
 
@@ -24,7 +23,6 @@ function playerRange(g: Game): string | null {
 function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
   const { t } = useI18n();
   const amber = variant === 'side';
-  const flavorKey = FLAVOR_KEYS.includes(g.category) ? `flavor.${g.category}` : 'flavor.default';
   const range = playerRange(g);
   return (
     <div className={`gcard bento-${variant} ${amber ? 'amber' : ''}`}>
@@ -35,9 +33,12 @@ function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
           <span>{gameEmoji(g.title, g.category)}</span>
         )}
       </div>
+      {/* The hover panel carries the game's own face and its details. It used
+          to open with a line of flavour text keyed off the category, which the
+          imported library turned into the same sentence on nearly every card —
+          three hundred games all called a cozy-night favourite. */}
       <div className="game-pop" aria-hidden="true">
         <span className="game-pop-emoji">{gameEmoji(g.title, g.category)}</span>
-        <p>{t(flavorKey)}</p>
         <span className="game-pop-meta">
           {range ? `${range} ${t('players')} · ` : ''}
           {g.category}
@@ -154,18 +155,17 @@ export function GamesPage() {
 
       {remaining > 0 && (
         <div className="load-more">
-          <p className="muted">
-            {t('gl.showing', { shown: shown.length, total: matching.length })}
-          </p>
           <button className="primary" onClick={() => setLimit((n) => n + PAGE_SIZE)}>
             {t('gl.loadMore', { n: Math.min(PAGE_SIZE, remaining) })}
           </button>
         </div>
       )}
 
+      {/* One count for the page, and it counts what the filter is showing —
+          "12 of 12" under the Kids chip, not "12 of 329". */}
       {shown.length > 0 && (
         <p className="showing muted">
-          {t('games.showing', { n: shown.length, total: games.length })}
+          {t('games.showing', { n: shown.length, total: matching.length })}
         </p>
       )}
     </div>
