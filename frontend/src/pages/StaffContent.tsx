@@ -497,8 +497,10 @@ export function PromoTab() {
 
 const blankGame = {
   title: '',
-  minPlayers: 2,
-  maxPlayers: 4,
+  // Empty, not 2 and 4: most of the imported library has no recorded range, and
+  // a blank box is what "we have not counted this one yet" looks like.
+  minPlayers: '',
+  maxPlayers: '',
   category: '',
   description: '',
   imageUrl: '',
@@ -528,8 +530,8 @@ export function GamesTab() {
     setNote(null);
     setForm({
       title: g.title,
-      minPlayers: g.min_players,
-      maxPlayers: g.max_players,
+      minPlayers: g.min_players == null ? '' : String(g.min_players),
+      maxPlayers: g.max_players == null ? '' : String(g.max_players),
       category: g.category,
       description: g.description,
       imageUrl: g.image_url ?? '',
@@ -546,6 +548,9 @@ export function GamesTab() {
     try {
       const body = {
         ...form,
+        // Blank stays blank rather than becoming a number nobody chose.
+        minPlayers: form.minPlayers === '' ? null : Number(form.minPlayers),
+        maxPlayers: form.maxPlayers === '' ? null : Number(form.maxPlayers),
         imageUrl: form.imageUrl || null,
         purchaseUrl: form.purchaseUrl || null,
       };
@@ -608,7 +613,7 @@ export function GamesTab() {
                 min={1}
                 max={100}
                 value={form.minPlayers}
-                onChange={(e) => setForm({ ...form, minPlayers: Number(e.target.value) })}
+                onChange={(e) => setForm({ ...form, minPlayers: e.target.value })}
               />
             </label>
             <label className="field inline">
@@ -618,7 +623,7 @@ export function GamesTab() {
                 min={1}
                 max={100}
                 value={form.maxPlayers}
-                onChange={(e) => setForm({ ...form, maxPlayers: Number(e.target.value) })}
+                onChange={(e) => setForm({ ...form, maxPlayers: e.target.value })}
               />
             </label>
           </div>
@@ -702,8 +707,10 @@ export function GamesTab() {
                 <tr key={g.id}>
                   <td>{g.title}</td>
                   <td>{g.category}</td>
+                  {/* An em dash, not "null–null": most of the imported library
+                      has no recorded range until staff add one. */}
                   <td>
-                    {g.min_players}–{g.max_players}
+                    {g.min_players && g.max_players ? `${g.min_players}–${g.max_players}` : '—'}
                   </td>
                   <td>
                     <span className="pill">

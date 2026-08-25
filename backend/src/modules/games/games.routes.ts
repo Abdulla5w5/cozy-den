@@ -37,15 +37,22 @@ gamesRouter.get('/all', requireStaff, async (_req, res, next) => {
 const gameBody = z
   .object({
     title: z.string().trim().min(1).max(200),
-    minPlayers: z.number().int().min(1).max(100),
-    maxPlayers: z.number().int().min(1).max(100),
+    // Optional: the library was imported from a sheet that carried titles and
+    // categories only, so a game may legitimately not know its player range
+    // yet. Give both or neither — half a range says nothing.
+    minPlayers: z.number().int().min(1).max(100).nullable().optional(),
+    maxPlayers: z.number().int().min(1).max(100).nullable().optional(),
     category: z.string().trim().min(1).max(60),
     description: z.string().trim().max(2000).default(''),
     imageUrl: linkish(1000),
     purchaseUrl: linkish(1000),
     isActive: z.boolean().default(true),
   })
-  .refine((v) => v.maxPlayers >= v.minPlayers, {
+  .refine((v) => (v.minPlayers == null) === (v.maxPlayers == null), {
+    message: 'Give both a minimum and a maximum, or leave both empty.',
+    path: ['maxPlayers'],
+  })
+  .refine((v) => v.minPlayers == null || v.maxPlayers == null || v.maxPlayers >= v.minPlayers, {
     message: 'Maximum players cannot be lower than minimum players.',
     path: ['maxPlayers'],
   });
@@ -60,7 +67,7 @@ gamesRouter.post('/', requireStaff, validate(gameBody), async (req, res, next) =
       `INSERT INTO games (title, min_players, max_players, category, description,
                           image_url, purchase_url, is_active)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-      [b.title, b.minPlayers, b.maxPlayers, b.category, b.description,
+      [b.title, b.minPlayers ?? null, b.maxPlayers ?? null, b.category, b.description,
        b.imageUrl || null, b.purchaseUrl || null, b.isActive],
     );
     res.status(201).json({ id: rows[0].id });
@@ -86,7 +93,7 @@ gamesRouter.put(
         `UPDATE games SET title=$1, min_players=$2, max_players=$3, category=$4,
                           description=$5, image_url=$6, purchase_url=$7, is_active=$8
           WHERE id=$9`,
-        [b.title, b.minPlayers, b.maxPlayers, b.category, b.description,
+        [b.title, b.minPlayers ?? null, b.maxPlayers ?? null, b.category, b.description,
          b.imageUrl || null, b.purchaseUrl || null, b.isActive, Number(req.params.id)],
       );
       if (!rowCount) throw new ApiError(404, 'Game not found.');

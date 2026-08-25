@@ -17,8 +17,10 @@ export interface TableAvailability {
 export interface Game {
   id: number;
   title: string;
-  min_players: number;
-  max_players: number;
+  /** Null until staff record the range — the library was imported from a sheet
+   *  that carried titles and categories only. */
+  min_players: number | null;
+  max_players: number | null;
   category: string;
   description: string;
   image_url: string | null;

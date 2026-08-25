@@ -10,10 +10,17 @@ const FLAVOR_KEYS = ['Strategy', 'Family', 'Party', 'Cooperative', 'Abstract'];
 
 type Variant = 'feature' | 'side' | 'small';
 
+/** "2–6", or null when the range is not recorded yet — the library was imported
+ *  from a sheet carrying titles and categories only. */
+function playerRange(g: Game): string | null {
+  return g.min_players && g.max_players ? `${g.min_players}–${g.max_players}` : null;
+}
+
 function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
   const { t } = useI18n();
   const amber = variant === 'side';
   const flavorKey = FLAVOR_KEYS.includes(g.category) ? `flavor.${g.category}` : 'flavor.default';
+  const range = playerRange(g);
   return (
     <div className={`gcard bento-${variant} ${amber ? 'amber' : ''}`}>
       <div className={`gcard-art ${ART[i % ART.length]}`}>
@@ -27,7 +34,8 @@ function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
         <span className="game-pop-emoji">{EMOJI[i % EMOJI.length]}</span>
         <p>{t(flavorKey)}</p>
         <span className="game-pop-meta">
-          {g.min_players}–{g.max_players} {t('players')} · {g.category}
+          {range ? `${range} ${t('players')} · ` : ''}
+          {g.category}
         </span>
       </div>
       <div className="gcard-body">
@@ -39,9 +47,11 @@ function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
         <h3>{g.title}</h3>
         <div className="tag-row">
           <span className="tag">{g.category}</span>
-          <span className="tag">
-            {g.min_players}–{g.max_players} {t('players')}
-          </span>
+          {range && (
+            <span className="tag">
+              {range} {t('players')}
+            </span>
+          )}
         </div>
         {g.description && <p className="muted gcard-desc">{g.description}</p>}
         {g.purchase_url && (
@@ -55,9 +65,7 @@ function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
           </a>
         )}
         <div className="gcard-foot">
-          <span>
-            👥 {g.min_players}–{g.max_players}
-          </span>
+          <span>{range ? `👥 ${range}` : ''}</span>
           <Link to="/book" className="card-link">
             {t('games.book')}
           </Link>
