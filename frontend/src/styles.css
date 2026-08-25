@@ -5979,3 +5979,18 @@ button.link {
   justify-content: flex-end;
   margin-top: 0.6rem;
 }
+
+
+/* "Show 50 more" under the game grid. Centred and given room, so the end of a
+   page reads as a place you can continue from rather than the end of the list. */
+.load-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 2rem 0 1rem;
+  text-align: center;
+}
+.load-more p {
+  margin: 0;
+}

@@ -3,9 +3,14 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { Game } from '../types';
+import { gameEmoji } from './gameEmoji';
 
 const ART = ['art-emerald', 'art-amber', 'art-pink'];
-const EMOJI = ['🎲', '♟️', '🃏', '🧩', '🎯', '🀄'];
+
+// The library runs to hundreds of titles. Rendering all of them costs the
+// customer's phone real work for cards most visitors never scroll to, so the
+// list starts at one page and grows only when asked.
+const PAGE_SIZE = 50;
 const FLAVOR_KEYS = ['Strategy', 'Family', 'Party', 'Cooperative', 'Abstract'];
 
 type Variant = 'feature' | 'side' | 'small';
@@ -27,11 +32,11 @@ function GameCard({ g, variant, i }: { g: Game; variant: Variant; i: number }) {
         {g.image_url ? (
           <img className="gcard-img" src={g.image_url} alt={g.title} loading="lazy" />
         ) : (
-          <span>{EMOJI[i % EMOJI.length]}</span>
+          <span>{gameEmoji(g.title, g.category)}</span>
         )}
       </div>
       <div className="game-pop" aria-hidden="true">
-        <span className="game-pop-emoji">{EMOJI[i % EMOJI.length]}</span>
+        <span className="game-pop-emoji">{gameEmoji(g.title, g.category)}</span>
         <p>{t(flavorKey)}</p>
         <span className="game-pop-meta">
           {range ? `${range} ${t('players')} · ` : ''}
@@ -88,7 +93,16 @@ export function GamesPage() {
     () => ['All', ...Array.from(new Set(games.map((g) => g.category))).sort()],
     [games]
   );
-  const shown = filter === 'All' ? games : games.filter((g) => g.category === filter);
+  const matching = useMemo(
+    () => (filter === 'All' ? games : games.filter((g) => g.category === filter)),
+    [games, filter],
+  );
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  // A new filter is a new list; start it at the top rather than carrying the
+  // previous filter's scroll depth into it.
+  useEffect(() => setLimit(PAGE_SIZE), [filter]);
+  const shown = matching.slice(0, limit);
+  const remaining = matching.length - shown.length;
 
   return (
     <div>
@@ -137,6 +151,17 @@ export function GamesPage() {
           />
         ))}
       </div>
+
+      {remaining > 0 && (
+        <div className="load-more">
+          <p className="muted">
+            {t('gl.showing', { shown: shown.length, total: matching.length })}
+          </p>
+          <button className="primary" onClick={() => setLimit((n) => n + PAGE_SIZE)}>
+            {t('gl.loadMore', { n: Math.min(PAGE_SIZE, remaining) })}
+          </button>
+        </div>
+      )}
 
       {shown.length > 0 && (
         <p className="showing muted">

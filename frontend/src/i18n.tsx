@@ -711,6 +711,11 @@ const dict: Record<string, { en: string; ar: string }> = {
   'ev.past': { en: 'Past', ar: 'سابقة' },
 
   // ---- game library ----
+  'gl.showing': {
+    en: 'Showing {shown} of {total} games',
+    ar: 'يعرض {shown} من {total} لعبة',
+  },
+  'gl.loadMore': { en: 'Show {n} more', ar: 'اعرض {n} أكثر' },
   'gl.buy': { en: 'Buy on Board Games Panda', ar: 'اشترها من بورد جيمز باندا' },
   'gl.storeTitle': { en: 'Loved a game? Take it home.', ar: 'عجبتك لعبة؟ خذها بيتك.' },
   'gl.storeSub': {
