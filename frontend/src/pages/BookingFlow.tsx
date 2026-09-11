@@ -1,103 +1,15 @@
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { Booking, TableAvailability } from '../types';
+import { CafeFloorPlan } from '../components/CafeFloorPlan';
 
 // POST /bookings returns one of two shapes: the finished booking (direct/mock
 // provider) or a gateway redirect URL (Tap). One handler covers both.
 type CheckoutResponse = { booking?: Booking; redirectUrl?: string };
 
 type Step = 1 | 2;
-
-type FloorShape = 'small' | 'round' | 'wide' | 'communal' | 'floor' | 'hall';
-
-interface FloorPlacement {
-  x: number;
-  y: number;
-  shape: FloorShape;
-  angle?: number;
-}
-
-// These coordinates describe the physical cafe sketch, not booking data. The
-// API remains the source of truth for which tables exist and which slots are
-// free; an unknown future table still receives a sensible fallback position.
-const FLOOR_PLACEMENTS: Record<string, FloorPlacement> = {
-  'Small Table 1': { x: 52, y: 39, shape: 'communal', angle: 0 },
-  'Small Table 2': { x: 80, y: 50, shape: 'small', angle: 1 },
-  'Small Table 3': { x: 65, y: 18, shape: 'small', angle: -1 },
-  'Big Table 1': { x: 38, y: 18, shape: 'wide', angle: 0 },
-  'Big Table 2': { x: 53, y: 65, shape: 'round', angle: 0 },
-  'Big Table 3': { x: 72, y: 82, shape: 'wide', angle: 0 },
-  'Big Table 4 (D&D)': { x: 20, y: 80, shape: 'hall', angle: 0 },
-  'Floor Table': { x: 85, y: 19, shape: 'floor', angle: 2 },
-};
-
-const FALLBACK_PLACEMENTS: FloorPlacement[] = [
-  { x: 16, y: 20, shape: 'small' },
-  { x: 40, y: 20, shape: 'small' },
-  { x: 68, y: 20, shape: 'small' },
-  { x: 20, y: 58, shape: 'wide' },
-  { x: 50, y: 47, shape: 'round' },
-  { x: 75, y: 62, shape: 'wide' },
-  { x: 45, y: 78, shape: 'communal' },
-  { x: 84, y: 42, shape: 'floor' },
-];
-
-function floorPlacement(label: string, index: number) {
-  return FLOOR_PLACEMENTS[label] ?? FALLBACK_PLACEMENTS[index % FALLBACK_PLACEMENTS.length];
-}
-
-function mapTableName(label: string) {
-  if (label.includes('(D&D)')) return 'D&D';
-  return label
-    .replace('Small Table ', 'S')
-    .replace('Big Table ', 'B')
-    .replace('Floor Table', 'Floor');
-}
-
-interface ChairPosition {
-  x: number;
-  y: number;
-  angle: number;
-}
-
-function chairPositions(shape: FloorShape, count: number): ChairPosition[] {
-  // Round, floor and D&D tables read best with seats following their silhouette.
-  if (shape === 'round' || shape === 'floor' || shape === 'communal') {
-    const start = shape === 'communal' ? -90 : -90;
-    return Array.from({ length: count }, (_, index) => {
-      const degrees = start + (360 / count) * index;
-      const radians = (degrees * Math.PI) / 180;
-      const radiusX = shape === 'round' ? 60 : shape === 'communal' ? 59 : 57;
-      const radiusY = shape === 'round' ? 60 : shape === 'communal' ? 59 : 61;
-      return {
-        x: 50 + Math.cos(radians) * radiusX,
-        y: 50 + Math.sin(radians) * radiusY,
-        angle: degrees + 90,
-      };
-    });
-  }
-
-  // Rectangular tables place extension chairs along their long edges, with the
-  // remaining chairs at the ends. This keeps 12-seat tables readable as tables
-  // that extend beyond their standard eight-seat setup.
-  const sideCount = Math.min(2, count);
-  const edgeCount = count - sideCount;
-  const topCount = Math.ceil(edgeCount / 2);
-  const bottomCount = Math.floor(edgeCount / 2);
-  const positions: ChairPosition[] = [];
-  const addEdge = (amount: number, y: number, angle: number) => {
-    for (let index = 0; index < amount; index += 1) {
-      positions.push({ x: ((index + 1) / (amount + 1)) * 100, y, angle });
-    }
-  };
-  addEdge(topCount, -10, 0);
-  addEdge(bottomCount, 110, 180);
-  if (sideCount >= 1) positions.push({ x: -8, y: 50, angle: 90 });
-  if (sideCount >= 2) positions.push({ x: 108, y: 50, angle: -90 });
-  return positions;
-}
 
 // Café hours, mirrored from the server's utils/slots. These only shape what the
 // form offers; the server re-derives length, price and capacity on checkout, so
@@ -486,116 +398,36 @@ export function BookingFlow() {
                 </span>
               </div>
 
-              <div className="cafe-floor-viewport">
-                <div className="cafe-floor-plan" aria-label={t('bk.floorPlan')}>
-                  <div className="floor-window floor-window-one" aria-hidden="true" />
-                  <div className="floor-window floor-window-two" aria-hidden="true" />
-                  <div className="floor-counter" aria-hidden="true">
-                    <span>{t('bk.counter')}</span>
-                    <i /><i /><i />
-                  </div>
-                  <div className="floor-shelf" aria-hidden="true">
-                    <span>{t('bk.gameWall')}</span>
-                  </div>
-                  {/* The D&D table sits in its own walled room, gated off from
-                      the main hall with a doorway — as in the real cafe. */}
-                  <div className="floor-room-dnd" aria-hidden="true">
-                    <span>{t('bk.dndRoom')}</span>
-                  </div>
-                  <img
-                    className="floor-brand-mark"
-                    src="/brand/cd-mark.png"
-                    alt=""
-                    aria-hidden="true"
-                  />
-                  <span className="floor-plant plant-one" aria-hidden="true">✦</span>
-                  <span className="floor-plant plant-two" aria-hidden="true">✦</span>
-                  <span className="floor-game-prop floor-die-prop" aria-hidden="true">
-                    <i /><i /><i /><i />
-                  </span>
-                  <span className="floor-game-prop floor-card-prop" aria-hidden="true">
-                    <b>A</b><em>♠</em>
-                  </span>
-                  <span className="floor-game-prop floor-door-prop" aria-hidden="true" />
-                  <span className="floor-game-prop floor-domino-prop" aria-hidden="true">
-                    <i /><i /><i /><i />
-                  </span>
-                  <span className="floor-entrance" aria-hidden="true">{t('bk.entrance')}</span>
-
-                  {loadingAvailability && (
-                    <div className="floor-loading" aria-live="polite">
-                      <span className="floor-loading-die" aria-hidden="true">⚄</span>
-                      {t('bk.loadingTables')}
-                    </div>
-                  )}
-
-                  {!loadingAvailability && availability.length === 0 && (
-                    <div className="floor-loading floor-load-error" role="alert">
-                      <span className="floor-loading-die" aria-hidden="true">⚀</span>
-                      <strong>{t('bk.tablesUnavailable')}</strong>
-                      <span>{t('bk.tablesUnavailableSub')}</span>
-                      <button type="button" onClick={() => setAvailabilityRetry((n) => n + 1)}>
-                        {t('bk.retryTables')}
-                      </button>
-                    </div>
-                  )}
-
-                  {!loadingAvailability && availability.map((tb, index) => {
-                    const placement = floorPlacement(tb.label, index);
-                    const selected = tableId === tb.tableId;
-                    const soldOut = tb.freeSlots.length === 0;
-                    const chairs = chairPositions(placement.shape, tb.capacity);
-                    // Tables low in the room would push their tooltip past the
-                    // floor's clipped edge, so those flip it above instead.
-                    const tipAbove = placement.y > 58;
-                    const style = {
-                      '--table-x': `${placement.x}%`,
-                      '--table-y': `${placement.y}%`,
-                      '--table-angle': `${placement.angle ?? 0}deg`,
-                    } as CSSProperties;
-                    return (
-                      <button
-                        key={tb.tableId}
-                        type="button"
-                        style={style}
-                        className={`floor-table floor-table-${placement.shape} ${selected ? 'selected' : ''} ${soldOut ? 'sold-out' : ''} ${tipAbove ? 'tip-above' : ''}`}
-                        aria-pressed={selected}
-                        aria-label={t('bk.tableMapLabel', {
-                          table: tb.label,
-                          seats: tb.capacity,
-                          slots: tb.freeSlots.length,
-                        })}
-                        onClick={() => selectTable(tb.tableId)}
-                      >
-                        <span className="table-shape-halo" aria-hidden="true" />
-                        <span className="table-seats" aria-hidden="true">
-                          {chairs.map((chair, chairIndex) => (
-                            <i
-                              key={chairIndex}
-                              style={{
-                                '--chair-x': `${chair.x}%`,
-                                '--chair-y': `${chair.y}%`,
-                                '--chair-angle': `${chair.angle}deg`,
-                              } as CSSProperties}
-                            />
-                          ))}
-                        </span>
-                        <span className="floor-table-surface">
-                          <strong>{mapTableName(tb.label)}</strong>
-                          <small>{t('bk.seatsShort', { n: tb.capacity })}</small>
-                        </span>
-                        <span className="floor-table-tooltip" aria-hidden="true">
-                          <strong>{tb.label}</strong>
-                          <small>
-                            {soldOut ? t('bk.noOpenSlots') : t('bk.openSlots', { n: tb.freeSlots.length })}
-                          </small>
-                          {!soldOut && <em>{tb.freeSlots.slice(0, 3).join(' · ')}</em>}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <CafeFloorPlan
+                tables={availability}
+                selectedId={tableId}
+                onSelect={selectTable}
+                loading={loadingAvailability}
+                loadError={!loadingAvailability && availability.length === 0}
+                onRetry={() => setAvailabilityRetry((n) => n + 1)}
+                decorate={(tb) => {
+                  const avail = availability.find((a) => a.tableId === tb.tableId);
+                  const free = avail?.freeSlots ?? [];
+                  const soldOut = free.length === 0;
+                  return {
+                    className: soldOut ? 'sold-out' : '',
+                    ariaLabel: t('bk.tableMapLabel', {
+                      table: tb.label,
+                      seats: tb.capacity,
+                      slots: free.length,
+                    }),
+                    tooltip: (
+                      <>
+                        <strong>{tb.label}</strong>
+                        <small>
+                          {soldOut ? t('bk.noOpenSlots') : t('bk.openSlots', { n: free.length })}
+                        </small>
+                        {!soldOut && <em>{free.slice(0, 3).join(' · ')}</em>}
+                      </>
+                    ),
+                  };
+                }}
+              />
 
               <div className="floor-legend" aria-label={t('bk.legend')}>
                 <span><i className="available" />{t('bk.available')}</span>

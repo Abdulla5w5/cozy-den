@@ -7,6 +7,7 @@ export interface TodayBooking {
   timeSlot: string;
   guestName: string;
   guestContact: string;
+  tableId: number;
   tableLabel: string;
   status: string;
   source: string;
@@ -23,6 +24,7 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     time_slot: string;
     guest_name: string;
     guest_email: string;
+    table_id: number;
     table_label: string;
     status: string;
     source: string;
@@ -31,7 +33,7 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     party_size: number;
   }>(
     `SELECT b.id, b.verification_code, b.time_slot, b.guest_name, b.guest_email,
-            t.label AS table_label, b.status, b.source, b.total_cents,
+            b.table_id, t.label AS table_label, b.status, b.source, b.total_cents,
             b.duration_min, b.party_size
        FROM bookings b
        JOIN tables t ON t.id = b.table_id
@@ -75,6 +77,7 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     timeSlot: r.time_slot,
     guestName: r.guest_name,
     guestContact: r.guest_email,
+    tableId: r.table_id,
     tableLabel: r.table_label,
     status: r.status,
     source: r.source,

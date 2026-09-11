@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
@@ -8,6 +8,7 @@ import { EventsTab, PromoTab, GamesTab, MenuTab } from './StaffContent';
 import { SupportTab } from './StaffSupport';
 import { StaffWanted } from './StaffWanted';
 import { StaffPricing } from './StaffPricing';
+import { CafeFloorPlan, FloorTable } from '../components/CafeFloorPlan';
 
 type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support' | 'wanted' | 'pricing' | 'games' | 'menu';
 
@@ -263,6 +264,8 @@ function TodayTab() {
 
       {error && <div className="alert error">{error}</div>}
 
+      <TableFloorView date={date} bookings={bookings} onAct={act} onPrint={setPrinting} />
+
       <div className="table-scroll">
         <table className="data">
         <thead>
@@ -328,6 +331,259 @@ function TodayTab() {
         </div>
       {printing && <Receipt booking={printing} date={date} />}
     </section>
+  );
+}
+
+// Café hours, mirrored from the server's utils/slots: the day runs 14:00 to
+// 03:00, so a slot before opening belongs to the small hours after midnight.
+const FLOOR_OPEN_MIN = 14 * 60;
+const FLOOR_SESSION_MIN = 120;
+
+function slotMinutes(hhmm: string) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const minutes = h * 60 + m;
+  return minutes < FLOOR_OPEN_MIN ? minutes + 24 * 60 : minutes;
+}
+
+function minutesLabel(min: number) {
+  const h = Math.floor(min / 60) % 24;
+  return `${String(h).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+}
+
+/**
+ * The service date the clock currently sits in, and how far into it we are.
+ * At 01:00 the café is still serving *yesterday's* date — closing is 03:00 —
+ * so the small hours count towards the previous day, not the next.
+ */
+function serviceNow() {
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const day = new Date(now);
+  if (minutes < FLOOR_OPEN_MIN) day.setDate(day.getDate() - 1);
+  const y = day.getFullYear();
+  const mo = String(day.getMonth() + 1).padStart(2, '0');
+  const d = String(day.getDate()).padStart(2, '0');
+  return {
+    date: `${y}-${mo}-${d}`,
+    minutes: minutes < FLOOR_OPEN_MIN ? minutes + 24 * 60 : minutes,
+  };
+}
+
+type Phase = 'earlier' | 'now' | 'upcoming';
+
+/**
+ * The floor as staff see it: every table drawn where it stands, coloured by
+ * whether someone is sitting there right now or due later. Picking a table
+ * lists everything booked on it for the picked day — one service day, 14:00
+ * through the 02:00 last seating — finished, in progress and still to come,
+ * including holds still waiting on payment, so a table that looks free on the
+ * map is never a surprise at the door.
+ */
+function TableFloorView({
+  date,
+  bookings,
+  onAct,
+  onPrint,
+}: {
+  date: string;
+  bookings: StaffBooking[];
+  onAct: (path: string) => void;
+  onPrint: (b: StaffBooking) => void;
+}) {
+  const { t } = useI18n();
+  const [tables, setTables] = useState<FloorTable[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  // Re-classify "now" as the evening moves on without anyone touching the page.
+  const [clock, setClock] = useState(serviceNow);
+
+  function pick(id: number) {
+    const next = selectedId === id ? null : id;
+    setSelectedId(next);
+    // On a phone the panel sits below the map, out of view; bring it up so the
+    // tap visibly did something.
+    if (next !== null && window.matchMedia('(max-width: 960px)').matches) {
+      requestAnimationFrame(() =>
+        panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      );
+    }
+  }
+
+  useEffect(() => {
+    setLoadFailed(false);
+    api
+      .get<{ tables: Table[] }>('/tables')
+      .then((r) => setTables(r.tables.map((tb) => ({ tableId: tb.id, label: tb.label, capacity: tb.capacity }))))
+      .catch(() => setLoadFailed(true));
+  }, [retry]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(serviceNow()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const isToday = clock.date === date;
+  const isPast = date < clock.date;
+
+  function phaseOf(b: StaffBooking): Phase {
+    if (isPast) return 'earlier';
+    if (!isToday) return 'upcoming';
+    const start = slotMinutes(b.timeSlot);
+    const end = start + (b.durationMin ?? FLOOR_SESSION_MIN);
+    if (clock.minutes >= end) return 'earlier';
+    if (clock.minutes >= start) return 'now';
+    return 'upcoming';
+  }
+
+  function endOf(b: StaffBooking) {
+    return minutesLabel(slotMinutes(b.timeSlot) + (b.durationMin ?? FLOOR_SESSION_MIN));
+  }
+
+  const byTable = new Map<number, StaffBooking[]>();
+  for (const b of bookings) {
+    const list = byTable.get(b.tableId) ?? [];
+    list.push(b);
+    byTable.set(b.tableId, list);
+  }
+  for (const list of byTable.values()) {
+    list.sort((a, b) => slotMinutes(a.timeSlot) - slotMinutes(b.timeSlot));
+  }
+
+  const selected = tables.find((tb) => tb.tableId === selectedId) ?? null;
+  const selectedBookings = selected ? byTable.get(selected.tableId) ?? [] : [];
+  const phases: Phase[] = ['now', 'upcoming', 'earlier'];
+
+  return (
+    <div className="floor-booking-layout staff-floor">
+      <div className="cafe-map-shell">
+        <div className="map-heading">
+          <div>
+            <span className="map-title">{t('bk.floorPlan')}</span>
+            <span className="map-hint">{t('staff.floorHint')}</span>
+          </div>
+          <span className="map-live-badge">
+            <i aria-hidden="true" /> {isToday ? t('staff.floorLive') : date}
+          </span>
+        </div>
+
+        <CafeFloorPlan
+          tables={tables}
+          selectedId={selectedId}
+          onSelect={pick}
+          loading={tables.length === 0 && !loadFailed}
+          loadError={loadFailed}
+          onRetry={() => setRetry((n) => n + 1)}
+          decorate={(tb) => {
+            const list = byTable.get(tb.tableId) ?? [];
+            const live = list.find((b) => phaseOf(b) === 'now');
+            const next = list.find((b) => phaseOf(b) === 'upcoming');
+            const className = live ? 'live' : list.length ? 'booked' : '';
+            const summary = live
+              ? t('staff.seatedUntil', { name: live.guestName, time: endOf(live) })
+              : next
+                ? t('staff.nextAt', { time: next.timeSlot, name: next.guestName })
+                : list.length
+                  ? t('staff.allDone')
+                  : t('staff.freeAllDay');
+            return {
+              className,
+              ariaLabel: `${tb.label}: ${t('staff.bookingsCount', { n: list.length })}. ${summary}`,
+              badge: list.length ? <b className="table-count">{list.length}</b> : undefined,
+              tooltip: (
+                <>
+                  <strong>{tb.label}</strong>
+                  <small>{t('staff.bookingsCount', { n: list.length })}</small>
+                  <em>{summary}</em>
+                </>
+              ),
+            };
+          }}
+        />
+
+        <div className="floor-legend" aria-label={t('bk.legend')}>
+          <span><i className="available" />{t('staff.legendFree')}</span>
+          <span><i className="booked" />{t('staff.legendBooked')}</span>
+          <span><i className="live" />{t('staff.legendLive')}</span>
+        </div>
+      </div>
+
+      <aside
+        ref={panelRef}
+        className={`booking-slot-panel ${selected ? 'has-table' : ''}`}
+        aria-live="polite"
+      >
+        {selected ? (
+          <>
+            <div className="slot-panel-head">
+              <span className="slot-panel-kicker">{t('bk.table')}</span>
+              <h2>{selected.label}</h2>
+              <div className="slot-panel-meta">
+                <span>♟ {t('bk.seats', { n: selected.capacity })}</span>
+                <span className={selectedBookings.length ? 'open' : 'closed'}>
+                  <i aria-hidden="true" />
+                  {t('staff.bookingsCount', { n: selectedBookings.length })}
+                </span>
+              </div>
+            </div>
+            <div className="slot-panel-body table-day">
+              {selectedBookings.length === 0 && (
+                <p className="muted center">{t('staff.noTableBookings')}</p>
+              )}
+              {phases.map((phase) => {
+                const rows = selectedBookings.filter((b) => phaseOf(b) === phase);
+                if (rows.length === 0) return null;
+                return (
+                  <section key={phase} className={`table-day-group ${phase}`}>
+                    <h3>{t(`staff.phase.${phase}`)}</h3>
+                    {rows.map((b) => (
+                      <div key={b.id} className="table-day-row">
+                        <div className="table-day-time">
+                          <strong>{b.timeSlot}</strong>
+                          <small>→ {endOf(b)}</small>
+                        </div>
+                        <div className="table-day-who">
+                          <strong>{b.guestName}</strong>
+                          <small>
+                            {b.partySize ? `${t('bk.seats', { n: b.partySize })} · ` : ''}
+                            <code>{b.verificationCode}</code>
+                          </small>
+                        </div>
+                        <div className="table-day-state">
+                          <span className={`status ${b.status}`}>{t(`status.${b.status}`)}</span>
+                          {b.status === 'pending' && (
+                            <button className="link" onClick={() => onAct(`/staff/bookings/${b.id}/confirm`)}>
+                              {t('staff.confirmBtn')}
+                            </button>
+                          )}
+                          {b.status === 'arrived' && (
+                            <button className="link" onClick={() => onAct(`/staff/bookings/${b.id}/complete`)}>
+                              {t('staff.completeBtn')}
+                            </button>
+                          )}
+                          {(b.status === 'arrived' || b.status === 'order_complete') && (
+                            <button className="link" onClick={() => onPrint(b)}>
+                              {t('staff.printBtn')}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </section>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="slot-panel-empty">
+            <span className="empty-map-pin" aria-hidden="true">⌖</span>
+            <h2>{t('staff.pickTable')}</h2>
+            <p>{t('staff.pickTableSub')}</p>
+          </div>
+        )}
+      </aside>
+    </div>
   );
 }
 

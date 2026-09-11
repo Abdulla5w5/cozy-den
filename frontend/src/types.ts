@@ -130,6 +130,7 @@ export interface StaffBooking {
   timeSlot: string;
   guestName: string;
   guestContact: string;
+  tableId: number;
   tableLabel: string;
   status: string;
   source: string;
