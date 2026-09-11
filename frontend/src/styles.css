@@ -5090,8 +5090,10 @@ button.link {
   to { transform: translateY(-5px) rotate(8deg); }
 }
 .floor-table {
-  --table-accent: #f47700;
-  --table-glow: rgba(244, 119, 0, 0.3);
+  /* Colour comes per table from the placement list (set inline as
+     --table-accent); the shape rules below only set geometry. */
+  --table-accent: #2d8b57;
+  --table-glow: color-mix(in srgb, var(--table-accent) 33%, transparent);
   position: absolute;
   z-index: 3;
   left: var(--table-x);
@@ -5134,7 +5136,7 @@ button.link {
   border-radius: 16px;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 48%),
-    #2d7055;
+    var(--table-accent);
   box-shadow:
     0 0.75cqw 0 #242424,
     0 1.6cqw 2.7cqw rgba(36, 36, 36, 0.18),
@@ -5162,68 +5164,62 @@ button.link {
   font-size: clamp(0.44rem, 1.5cqw, 0.62rem);
   font-weight: 800;
 }
-.floor-table-small {
-  --table-accent: #f47700;
-  --table-glow: rgba(244, 119, 0, 0.32);
-  width: 10.6cqw;
-  aspect-ratio: 70 / 54;
+.floor-table-square {
+  width: 10cqw;
+  aspect-ratio: 1;
+}
+.floor-table-square .floor-table-surface {
+  border-radius: 12px;
 }
 .floor-table-round {
-  --table-accent: #1177ee;
-  --table-glow: rgba(17, 119, 238, 0.34);
   width: 13cqw;
   aspect-ratio: 1;
 }
 .floor-table-round .floor-table-surface {
   border-radius: 50%;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 48%), #3678c5;
+}
+/* A circle centres its label in less width than the table has; let "Floor"
+   spill rather than ellipse to "Flo…". */
+.floor-table-round .floor-table-surface strong {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
 }
 .floor-table-wide {
-  --table-accent: #2d8b57;
-  --table-glow: rgba(45, 139, 87, 0.34);
   width: 18.1cqw;
   aspect-ratio: 120 / 62;
 }
 /* The gated-room table: a long wooden table, taller than a plain wide one, so
    it fills its room the way the big D&D table does in the real cafe. */
 .floor-table-hall {
-  --table-accent: #b5722e;
-  --table-glow: rgba(181, 114, 46, 0.34);
   width: 17cqw;
   aspect-ratio: 120 / 88;
 }
-.floor-table-hall .floor-table-surface {
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.16), transparent 48%),
-    #a86a34;
-}
-.floor-table-communal {
-  --table-accent: #f13619;
-  --table-glow: rgba(241, 54, 25, 0.34);
+.floor-table-hex {
   width: 16.9cqw;
   aspect-ratio: 112 / 90;
   /* The hexagon is a clip-path, so its lift has to come from drop-shadow.
      Static only — never transitioned. */
   filter: drop-shadow(0 0.9cqw 0 #242424);
 }
-.floor-table-communal .floor-table-surface {
+.floor-table-hex .floor-table-surface {
   z-index: 2;
   border-radius: 0;
   clip-path: polygon(25% 2%, 75% 2%, 98% 50%, 75% 98%, 25% 98%, 2% 50%);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 48%), #f47700;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 48%), var(--table-accent);
   box-shadow:
     inset 0 0 0 2px rgba(255, 255, 255, 0.22),
     inset 0 -7px 0 rgba(117, 52, 8, 0.24);
 }
-.floor-table-communal .floor-table-surface::before,
-.floor-table-communal .floor-table-surface::after {
+.floor-table-hex .floor-table-surface::before,
+.floor-table-hex .floor-table-surface::after {
   display: none;
 }
 /* The hexagon centres its content, so the label has less room than the table's
    width suggests and "D&D" was ellipsing to "D…". Let it size with the room
    like every other label, and spill rather than truncate — the same treatment
    the floor table already uses. */
-.floor-table-communal .floor-table-surface strong {
+.floor-table-hex .floor-table-surface strong {
   direction: ltr;
   max-width: none;
   overflow: visible;
@@ -5251,7 +5247,7 @@ button.link {
   box-shadow: 0 0.45cqw 0 rgba(36, 36, 36, 0.92);
   transform: translate(-50%, -50%) rotate(var(--chair-angle));
 }
-.floor-table-communal .table-seats::after {
+.floor-table-hex .table-seats::after {
   content: '';
   position: absolute;
   z-index: 0;
@@ -5259,35 +5255,8 @@ button.link {
   clip-path: polygon(25% 2%, 75% 2%, 98% 50%, 75% 98%, 25% 98%, 2% 50%);
   background: #242424;
 }
-.floor-table-communal .table-seats i {
+.floor-table-hex .table-seats i {
   z-index: 1;
-}
-.floor-table-floor .table-seats i {
-  width: 2.7cqw;
-  height: 1.8cqw;
-  border-radius: 45% 55% 48% 52%;
-  background: #d49a62;
-}
-.floor-table-floor {
-  --table-accent: #bc742e;
-  --table-glow: rgba(188, 116, 46, 0.38);
-  width: 16.9cqw;
-  aspect-ratio: 112 / 72;
-}
-.floor-table-floor .floor-table-surface {
-  border-radius: 45% 55% 48% 52%;
-  background:
-    repeating-linear-gradient(28deg, rgba(255, 255, 255, 0.13) 0 7px, transparent 7px 15px),
-    #bc742e;
-}
-.floor-table-floor .floor-table-surface strong {
-  width: 100%;
-  max-width: none;
-  overflow: visible;
-  padding-inline: 0.25rem;
-  font-size: clamp(0.55rem, 2cqw, 0.8rem);
-  text-overflow: clip;
-  white-space: nowrap;
 }
 .floor-table.selected .floor-table-surface {
   background:
@@ -5313,12 +5282,9 @@ button.link {
 .floor-table-round .table-shape-halo {
   border-radius: 50%;
 }
-.floor-table-communal .table-shape-halo {
+.floor-table-hex .table-shape-halo {
   border-radius: 0;
   clip-path: polygon(25% 2%, 75% 2%, 98% 50%, 75% 98%, 25% 98%, 2% 50%);
-}
-.floor-table-floor .table-shape-halo {
-  border-radius: 45% 55% 48% 52%;
 }
 .floor-table:focus-visible .table-shape-halo,
 .floor-table.selected .table-shape-halo {
@@ -5441,18 +5407,6 @@ button.link {
 }
 /* On the customer map each shape has its own accent for looks; here colour
    must mean something, so every table takes the colour of its state. */
-.staff-floor .floor-table {
-  --table-accent: #2d7055;
-  --table-glow: rgba(45, 112, 85, 0.3);
-}
-.staff-floor .floor-table.booked {
-  --table-accent: var(--blue);
-  --table-glow: rgba(37, 99, 235, 0.3);
-}
-.staff-floor .floor-table.live {
-  --table-accent: var(--orange);
-  --table-glow: rgba(244, 119, 0, 0.3);
-}
 .staff-floor .floor-table .floor-table-surface {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.2), transparent 48%),

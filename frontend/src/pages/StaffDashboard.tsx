@@ -489,6 +489,7 @@ function TableFloorView({
                   : t('staff.freeAllDay');
             return {
               className,
+              accent: live ? '#f47700' : list.length ? '#1177ee' : '#2d7055',
               ariaLabel: `${tb.label}: ${t('staff.bookingsCount', { n: list.length })}. ${summary}`,
               badge: list.length ? <b className="table-count">{list.length}</b> : undefined,
               tooltip: (

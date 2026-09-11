@@ -6,14 +6,24 @@ import { useI18n } from '../i18n';
 // colour the tables differently (free times vs. who is sitting there), so the
 // per-table look is handed in by the caller through `decorate`.
 
-type FloorShape = 'small' | 'round' | 'wide' | 'communal' | 'floor' | 'hall';
+// square: a small four-top. wide: a long rectangle. hex: the six-sided table.
+// round: a circle. hall: the long room-filling table behind the D&D door.
+type FloorShape = 'square' | 'round' | 'wide' | 'hex' | 'hall';
 
 interface FloorPlacement {
   x: number;
   y: number;
   shape: FloorShape;
+  /** The table top's colour. Shape and colour are set per table, not tied. */
+  color: string;
   angle?: number;
 }
+
+const GREEN = '#2d8b57';
+const RED = '#e03a1f';
+const BLUE = '#1177ee';
+const BROWN = '#a86a34';
+const BLACK = '#3a3a3a';
 
 // These coordinates describe the physical cafe sketch, not booking data. The
 // API remains the source of truth for which tables exist and which slots are
@@ -21,25 +31,25 @@ interface FloorPlacement {
 // Keyed by the table's current name, so a rename in the database must be
 // mirrored here for the table to stay where it physically is.
 const FLOOR_PLACEMENTS: Record<string, FloorPlacement> = {
-  'Small Table 1': { x: 80, y: 50, shape: 'small', angle: 1 },
-  'Small Table 2': { x: 52, y: 39, shape: 'communal', angle: 0 },
-  'Small Table 3': { x: 65, y: 18, shape: 'small', angle: -1 },
-  'Big Table 1': { x: 72, y: 82, shape: 'wide', angle: 0 },
-  'Big Table 2': { x: 53, y: 65, shape: 'round', angle: 0 },
-  'Big Table 3': { x: 38, y: 18, shape: 'wide', angle: 0 },
-  'Big Table 4 (D&D)': { x: 20, y: 80, shape: 'hall', angle: 0 },
-  'Floor Table': { x: 85, y: 19, shape: 'floor', angle: 2 },
+  'Small Table 1': { x: 80, y: 50, shape: 'square', color: GREEN, angle: 1 },
+  'Small Table 2': { x: 52, y: 39, shape: 'square', color: GREEN, angle: 0 },
+  'Small Table 3': { x: 65, y: 18, shape: 'square', color: RED, angle: -1 },
+  'Big Table 1': { x: 72, y: 82, shape: 'wide', color: GREEN, angle: 0 },
+  'Big Table 2': { x: 53, y: 65, shape: 'hex', color: BLUE, angle: 0 },
+  'Big Table 3': { x: 38, y: 18, shape: 'wide', color: RED, angle: 0 },
+  'Big Table 4 (D&D)': { x: 20, y: 80, shape: 'hall', color: BLACK, angle: 0 },
+  'Floor Table': { x: 85, y: 19, shape: 'round', color: BROWN, angle: 0 },
 };
 
 const FALLBACK_PLACEMENTS: FloorPlacement[] = [
-  { x: 16, y: 20, shape: 'small' },
-  { x: 40, y: 20, shape: 'small' },
-  { x: 68, y: 20, shape: 'small' },
-  { x: 20, y: 58, shape: 'wide' },
-  { x: 50, y: 47, shape: 'round' },
-  { x: 75, y: 62, shape: 'wide' },
-  { x: 45, y: 78, shape: 'communal' },
-  { x: 84, y: 42, shape: 'floor' },
+  { x: 16, y: 20, shape: 'square', color: GREEN },
+  { x: 40, y: 20, shape: 'square', color: GREEN },
+  { x: 68, y: 20, shape: 'square', color: GREEN },
+  { x: 20, y: 58, shape: 'wide', color: GREEN },
+  { x: 50, y: 47, shape: 'round', color: BROWN },
+  { x: 75, y: 62, shape: 'wide', color: GREEN },
+  { x: 45, y: 78, shape: 'hex', color: BLUE },
+  { x: 84, y: 42, shape: 'round', color: BROWN },
 ];
 
 function floorPlacement(label: string, index: number) {
@@ -61,14 +71,14 @@ interface ChairPosition {
 }
 
 function chairPositions(shape: FloorShape, count: number): ChairPosition[] {
-  // Round, floor and D&D tables read best with seats following their silhouette.
-  if (shape === 'round' || shape === 'floor' || shape === 'communal') {
+  // Round and six-sided tables read best with seats following their silhouette.
+  if (shape === 'round' || shape === 'hex') {
     const start = -90;
     return Array.from({ length: count }, (_, index) => {
       const degrees = start + (360 / count) * index;
       const radians = (degrees * Math.PI) / 180;
-      const radiusX = shape === 'round' ? 60 : shape === 'communal' ? 59 : 57;
-      const radiusY = shape === 'round' ? 60 : shape === 'communal' ? 59 : 61;
+      const radiusX = shape === 'round' ? 60 : 59;
+      const radiusY = shape === 'round' ? 60 : 59;
       return {
         x: 50 + Math.cos(radians) * radiusX,
         y: 50 + Math.sin(radians) * radiusY,
@@ -106,6 +116,8 @@ export interface FloorTable {
 export interface TableDecoration {
   /** Extra class names on the table button (e.g. `sold-out`, `live`). */
   className?: string;
+  /** Override the table's own colour (staff view colours by state). */
+  accent?: string;
   /** Screen-reader name for the button. */
   ariaLabel: string;
   /** Hover / focus card. */
@@ -201,6 +213,7 @@ export function CafeFloorPlan({
               '--table-x': `${placement.x}%`,
               '--table-y': `${placement.y}%`,
               '--table-angle': `${placement.angle ?? 0}deg`,
+              '--table-accent': deco.accent ?? placement.color,
             } as CSSProperties;
             return (
               <button
