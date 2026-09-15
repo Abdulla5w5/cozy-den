@@ -247,11 +247,16 @@ export async function registerInterest(
       member_id: number;
       status: PostStatus;
       max_players: number;
-    }>('SELECT id, member_id, status, max_players FROM wanted_posts WHERE id = $1 FOR UPDATE', [
-      postId,
-    ]);
+      expired: boolean;
+    }>(
+      `SELECT id, member_id, status, max_players, session_date < current_date AS expired
+         FROM wanted_posts WHERE id = $1 FOR UPDATE`,
+      [postId],
+    );
     const post = postRows[0];
     if (!post) throw new ApiError(404, 'Post not found.');
+    // The board hides these, but a link in an old chat still resolves here.
+    if (post.expired) throw new ApiError(409, 'The date for this session has passed.');
     if (post.status === 'pending') throw new ApiError(409, 'This post is awaiting staff approval.');
     if (post.status !== 'open') throw new ApiError(409, 'This post is no longer accepting players.');
     if (post.member_id === member.id) {
@@ -528,13 +533,16 @@ export async function holdSeats(
       duration_min: number;
       preferred_days: number[];
       max_players: number;
+      expired: boolean;
     }>(
-      `SELECT status, duration_min, preferred_days, max_players
+      `SELECT status, duration_min, preferred_days, max_players,
+              session_date < current_date AS expired
          FROM wanted_posts WHERE id = $1 FOR UPDATE`,
       [postId],
     );
     const post = postRows[0];
     if (!post) throw new ApiError(404, 'Post not found.');
+    if (post.expired) throw new ApiError(409, 'The date for this session has passed.');
     if (post.status !== 'open') throw new ApiError(409, 'This listing is not taking players.');
 
     const { rows: takenRows } = await client.query<{ taken: string }>(
