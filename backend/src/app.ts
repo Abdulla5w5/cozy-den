@@ -127,7 +127,8 @@ export function createApp() {
           // item), but they change only when the Foodics import is rerun. A day
           // of browser caching turns a repeat visit to the menu into no image
           // requests at all, and a stale photo for at most a day is harmless.
-          if (relative.startsWith(`menu${path.sep}`)) {
+          // Brand marks change about as often as the menu photos do.
+          if (relative.startsWith(`menu${path.sep}`) || relative.startsWith(`brand${path.sep}`)) {
             res.setHeader('Cache-Control', 'public, max-age=86400');
             return;
           }
