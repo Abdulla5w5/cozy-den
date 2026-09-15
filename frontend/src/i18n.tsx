@@ -350,6 +350,8 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.phase.now': { en: 'Now', ar: 'الحين' },
   'staff.phase.upcoming': { en: 'Upcoming', ar: 'الجاي' },
   'staff.phase.earlier': { en: 'Earlier', ar: 'سابق' },
+  'staff.length': { en: 'Length', ar: 'المدة' },
+  'staff.party': { en: 'Guests', ar: 'الأشخاص' },
   'staff.noBookings': { en: 'No bookings for this date.', ar: 'ما في حجوزات بهذا التاريخ.' },
   'staff.time': { en: 'Time', ar: 'الوقت' },
   'staff.code': { en: 'Code', ar: 'الكود' },

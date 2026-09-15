@@ -271,6 +271,8 @@ function TodayTab() {
         <thead>
           <tr>
             <th>{t('staff.time')}</th>
+            <th>{t('staff.length')}</th>
+            <th>{t('staff.party')}</th>
             <th>{t('staff.code')}</th>
             <th>{t('staff.guest')}</th>
             <th>{t('staff.contact')}</th>
@@ -284,7 +286,7 @@ function TodayTab() {
         <tbody>
           {shown.length === 0 && (
             <tr>
-              <td colSpan={9} className="muted center">
+              <td colSpan={11} className="muted center">
                 {t('staff.noBookings')}
               </td>
             </tr>
@@ -292,6 +294,9 @@ function TodayTab() {
           {shown.map((b) => (
             <tr key={b.id}>
               <td>{b.timeSlot}</td>
+              {/* Older rows predate these columns; show a dash, not "NaN". */}
+              <td>{b.durationMin ? `${b.durationMin / 60}h` : '—'}</td>
+              <td>{b.partySize ?? '—'}</td>
               <td>
                 <code>{b.verificationCode}</code>
               </td>
