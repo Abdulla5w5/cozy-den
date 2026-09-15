@@ -78,6 +78,19 @@ function createMailer(): Mailer {
 
 export const mailer: Mailer = createMailer();
 
+/** "18:30" + 240 minutes -> "22:30"; wraps past midnight for late sittings. */
+function endTime(start: string, durationMin: number): string {
+  const [h, m] = start.split(':').map(Number);
+  const end = (h * 60 + m + durationMin) % (24 * 60);
+  return `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+}
+
+function hoursLabel(durationMin: number): string {
+  const h = durationMin / 60;
+  const n = Number.isInteger(h) ? String(h) : h.toFixed(1);
+  return `${n}-hour`;
+}
+
 export function formatReceiptEmail(booking: {
   guestName: string;
   verificationCode: string;
@@ -86,8 +99,14 @@ export function formatReceiptEmail(booking: {
   tableLabel: string;
   tableFeeCents: number;
   totalCents: number;
+  durationMin: number;
+  partySize: number;
 }): { subject: string; text: string } {
   const money = (c: number) => `KD ${(c / 100).toFixed(2)}`;
+  // The length and headcount are what the customer paid for, so the receipt
+  // must state them — a 4-hour, 4-seat booking described as "2-hour session"
+  // reads as being charged for something they did not get.
+  const session = `${booking.timeSlot}–${endTime(booking.timeSlot, booking.durationMin)} (${hoursLabel(booking.durationMin)} session)`;
 
   return {
     subject: `Your Cozy Den booking is confirmed — code ${booking.verificationCode}`,
@@ -99,8 +118,9 @@ export function formatReceiptEmail(booking: {
       `    ${booking.verificationCode}`,
       '',
       `Date:  ${booking.date}`,
-      `Time:  ${booking.timeSlot} (2-hour session)`,
+      `Time:  ${session}`,
       `Table: ${booking.tableLabel}`,
+      `Party: ${booking.partySize} ${booking.partySize === 1 ? 'guest' : 'guests'}`,
       '',
       `Table-holding fee paid: ${money(booking.tableFeeCents)}`,
       `Total paid: ${money(booking.totalCents)}`,
