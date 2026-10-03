@@ -60,7 +60,16 @@ export function createApp() {
           frameSrc: ["'self'", 'https://accounts.google.com'],
           connectSrc: ["'self'", 'https://accounts.google.com'],
           imgSrc: ["'self'", 'data:', 'https:'],
-          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          // Google Identity Services fetches its button stylesheet from
+          // accounts.google.com/gsi/style. Without it here the sign-in button
+          // still mounts but renders unstyled and invisible, so Google sign-in
+          // looks like it has simply disappeared from the page.
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://fonts.googleapis.com',
+            'https://accounts.google.com',
+          ],
           fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
           frameAncestors: ["'none'"],
         },
