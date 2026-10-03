@@ -398,6 +398,11 @@ const dict: Record<string, { en: string; ar: string }> = {
   'auth.forgot': { en: 'Forgot?', ar: 'نسيت؟' },
   'auth.enter': { en: 'Enter the Den', ar: 'ادخل الدن' },
   'auth.create': { en: 'Create Account', ar: 'إنشاء حساب' },
+  'auth.googleNeedsPhone': {
+    en: 'Almost there — add your Kuwait phone number to finish creating your account.',
+    ar: 'باقي خطوة — أضيفوا رقم هاتفكم الكويتي عشان نكمل إنشاء الحساب.',
+  },
+  'auth.googleFinish': { en: 'Finish signing up', ar: 'أكملوا التسجيل' },
   'auth.quick': { en: 'Quick Connect', ar: 'دخول سريع' },
   'auth.google': { en: 'Google', ar: 'جوجل' },
   'auth.discord': { en: 'Discord', ar: 'ديسكورد' },

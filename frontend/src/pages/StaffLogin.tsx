@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { api, notifyAuthChanged } from '../api/client';
+import { api, ApiError, notifyAuthChanged } from '../api/client';
 import { useI18n } from '../i18n';
 
 type Mode = 'login' | 'signup';
@@ -75,6 +75,8 @@ export function StaffLogin() {
   // Google works on a browser that has never seen the account.
   const gsiRef = useRef<HTMLDivElement>(null);
   const [gsiReady, setGsiReady] = useState(false);
+  // A verified Google credential waiting only on a phone number.
+  const [pendingCredential, setPendingCredential] = useState<string | null>(null);
 
   function afterAuth(u: AuthUser) {
     notifyAuthChanged();
@@ -103,20 +105,44 @@ export function StaffLogin() {
     }
   }
 
-  const handleCredential = async (resp: { credential: string }) => {
-    if (mode === 'signup' && !isKuwaitPhone(phoneRef.current)) {
-      setError(t('auth.phoneInvalid'));
-      return;
-    }
+  /**
+   * Trade a Google credential for a session.
+   *
+   * A brand-new account needs a Kuwait phone number, which the Google popup
+   * has no way to ask for. Rather than dead-ending — which is what picking an
+   * account used to do, silently, whenever the form's phone box was empty —
+   * the credential is kept and the number asked for on the spot, so the person
+   * never has to go back through Google a second time.
+   */
+  async function submitGoogle(credential: string, phoneValue?: string) {
+    setBusy(true);
     try {
       const { user } = await api.post<{ user: AuthUser }>('/auth/google', {
-        idToken: resp.credential,
-        ...(mode === 'signup' ? { phone: phoneRef.current } : {}),
+        idToken: credential,
+        ...(phoneValue ? { phone: phoneValue } : {}),
       });
       afterAuth(user);
     } catch (e) {
+      // 400 from this endpoint means exactly one thing: a new account with no
+      // number yet. Anything else is a real failure worth showing.
+      if (e instanceof ApiError && e.status === 400) {
+        setPendingCredential(credential);
+        setError(null);
+        setNote(t('auth.googleNeedsPhone'));
+        return;
+      }
+      setPendingCredential(null);
       setError(e instanceof Error ? e.message : 'Google sign-in failed.');
+    } finally {
+      setBusy(false);
     }
+  }
+
+  const handleCredential = async (resp: { credential: string }) => {
+    // Send the number only once it is actually a Kuwait one; a half-typed box
+    // must not turn a returning customer's sign-in into a validation error.
+    const typed = phoneRef.current;
+    await submitGoogle(resp.credential, isKuwaitPhone(typed) ? typed : undefined);
   };
 
   useEffect(() => {
@@ -297,6 +323,42 @@ export function StaffLogin() {
             <span>{t('auth.quick')}</span>
             <span className="line" />
           </div>
+
+          {pendingCredential && (
+            <div className="auth-field google-finish">
+              <label>{t('auth.phone')}</label>
+              <div className="auth-input">
+                <span className="ico">📱</span>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  dir="ltr"
+                  maxLength={20}
+                  autoFocus
+                  placeholder={t('auth.phonePh')}
+                  value={phone}
+                  onChange={(e) => updatePhone(e.target.value)}
+                />
+              </div>
+              <small className="muted">{t('auth.phoneHint')}</small>
+              <button
+                type="button"
+                className="auth-submit"
+                disabled={busy}
+                onClick={() => {
+                  if (!isKuwaitPhone(phone)) {
+                    setError(t('auth.phoneInvalid'));
+                    return;
+                  }
+                  setError(null);
+                  submitGoogle(pendingCredential, phone);
+                }}
+              >
+                {busy ? t('staff.signing') : t('auth.googleFinish')}
+              </button>
+            </div>
+          )}
 
           <div className="auth-social single">
             <div ref={gsiRef} />
