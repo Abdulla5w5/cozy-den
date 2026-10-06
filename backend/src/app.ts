@@ -39,7 +39,16 @@ export function createApp() {
   // which is the difference between instant and noticeable on a phone.
   // Already-compressed bytes (images, fonts) are skipped by the library's own
   // content-type filter.
-  app.use(compression());
+  // memLevel 7 (default is 8) trims the zlib deflate state held for the
+  // duration of each in-flight response — the allocation that scales with
+  // concurrency rather than with total traffic. Per zlib's own formula that
+  // state is (1 << windowBits+2) + (1 << memLevel+9), so 256 KB at the
+  // defaults against 192 KB here: about a quarter off every concurrent
+  // compressed response. The cost is a slightly worse ratio on the repetitive
+  // JSON this API sends, which is the right trade on a 512 MB instance.
+  // threshold keeps sub-1KB replies (health checks, small writes) uncompressed
+  // so they never allocate a stream at all.
+  app.use(compression({ memLevel: 7, threshold: 1024 }));
 
   // Security headers apply to both the API and the production SPA. The Google
   // Identity script/frame are the only third-party executable origins needed
