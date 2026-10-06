@@ -125,6 +125,15 @@ export async function listMyRequests(userId: number): Promise<SupportRequest[]> 
   return rows.map(mapRequest);
 }
 
+/**
+ * The staff inbox. Unfiltered, this is every ticket ever filed joined against
+ * every message on it, so the result grew forever while the inbox it feeds
+ * only ever shows the top of the list.
+ *
+ * The cap is safe because of the ORDER BY above it: urgent first, then most
+ * recently touched. Anything past 200 is the stalest low-severity end of the
+ * list, and the status filter is the way staff reach older tickets.
+ */
 export async function listAllRequests(status?: Status): Promise<SupportRequest[]> {
   const { rows } = await query(
     `SELECT r.*, COALESCE(u.name, r.guest_name) AS customer_name,
@@ -137,7 +146,8 @@ export async function listAllRequests(status?: Status): Promise<SupportRequest[]
       GROUP BY r.id, u.name, u.email
       ORDER BY
         CASE r.severity WHEN 'urgent' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
-        r.updated_at DESC`,
+        r.updated_at DESC
+      LIMIT 200`,
     [status ?? null],
   );
   return rows.map(mapRequest);
