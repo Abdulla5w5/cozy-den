@@ -53,6 +53,33 @@ export function toMinutes(hhmm: string): number {
   return minutes < OPEN_MIN ? minutes + 24 * 60 : minutes;
 }
 
+/**
+ * Kuwait keeps UTC+3 all year — no daylight saving — so the offset is a
+ * constant rather than a timezone lookup. That also keeps the server's own
+ * clock zone (UTC on App Platform) out of the answer entirely.
+ */
+const KUWAIT_OFFSET = '+03:00';
+
+/**
+ * The moment a slot actually begins, as epoch milliseconds.
+ *
+ * Uses the same rollover as the database's booking_window(): a slot before
+ * opening (01:00, 02:00) belongs to the night that started on `date`, so it
+ * falls on the following calendar day. toMinutes() already encodes that.
+ */
+export function slotStartsAt(date: string, slot: string): number {
+  return Date.parse(`${date}T00:00:00${KUWAIT_OFFSET}`) + toMinutes(slot) * 60_000;
+}
+
+/**
+ * True once a slot's start time has passed. Decided on the server, in Kuwait
+ * time — never from the customer's device clock, which can be wrong or set to
+ * another zone.
+ */
+export function slotHasStarted(date: string, slot: string, now: number = Date.now()): boolean {
+  return slotStartsAt(date, slot) <= now;
+}
+
 /** A start too late to fit a full session; it runs to closing instead. */
 export function isLateStart(start: string): boolean {
   return toMinutes(start) > CLOSE_MIN - SESSION_MIN;

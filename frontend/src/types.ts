@@ -10,6 +10,8 @@ export interface TableAvailability {
   capacity: number;
   freeSlots: string[];
   takenSlots: string[];
+  /** Starts already over, per the server's clock. Hidden, not shown as taken. */
+  pastSlots?: string[];
   /** Start time -> longest bookable length in minutes, given this table's day. */
   maxDuration: Record<string, number>;
 }

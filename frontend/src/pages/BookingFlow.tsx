@@ -467,7 +467,11 @@ export function BookingFlow() {
                     </div>
 
                     <div ref={slotListRef} className="booking-slots">
-                      {slots.map((slot) => {
+                      {slots
+                        // A time that has already gone by is not "taken" — it
+                        // is simply over. Leave it out rather than grey it.
+                        .filter((slot) => !selectedTable.pastSlots?.includes(slot))
+                        .map((slot) => {
                         const free = selectedTable.freeSlots.includes(slot);
                         const active = timeSlot === slot;
                         return (

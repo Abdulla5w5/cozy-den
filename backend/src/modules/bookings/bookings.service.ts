@@ -3,7 +3,7 @@ import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
 import { billableSeats, minSeatsFor, quoteBooking } from '../../utils/pricing';
-import { isValidDuration, minDurationFor } from '../../utils/slots';
+import { isValidDuration, minDurationFor, slotHasStarted } from '../../utils/slots';
 import { paymentProvider } from '../../payment';
 import { TAP_CHARGE_EXPIRY_MINUTES } from '../../payment/constants';
 import {
@@ -185,6 +185,14 @@ async function insertBooking(p: InsertParams): Promise<number> {
  */
 export async function createBooking(input: CreateBookingInput): Promise<BookingView> {
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
+  // The date check alone let any slot on today through, hours after it began.
+  // The availability list already hides these; this is the rule itself, for a
+  // page left open past the slot or a request that never saw that list.
+  // (Staff bookings are deliberately exempt: a walk-in for the 16:00 slot is
+  // recorded at 16:10.)
+  if (slotHasStarted(input.date, input.timeSlot)) {
+    throw new ApiError(400, 'That time has already passed. Please pick a later slot.');
+  }
   const { capacity } = await assertTableExists(input.tableId);
 
   const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
@@ -276,6 +284,14 @@ export async function startBookingCheckout(
     throw new ApiError(500, 'Configured payment provider does not support redirect checkout.');
   }
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
+  // The date check alone let any slot on today through, hours after it began.
+  // The availability list already hides these; this is the rule itself, for a
+  // page left open past the slot or a request that never saw that list.
+  // (Staff bookings are deliberately exempt: a walk-in for the 16:00 slot is
+  // recorded at 16:10.)
+  if (slotHasStarted(input.date, input.timeSlot)) {
+    throw new ApiError(400, 'That time has already passed. Please pick a later slot.');
+  }
   const { capacity } = await assertTableExists(input.tableId);
 
   // A retry after a failed payment attempt must not be blocked by the wreckage

@@ -6,6 +6,7 @@ import {
   minDurationFor,
   overlaps,
   toMinutes,
+  slotHasStarted,
 } from '../../utils/slots';
 import { getTableFee, TableFee } from '../../utils/pricing';
 
@@ -28,6 +29,12 @@ export interface TableAvailability {
   capacity: number;
   freeSlots: string[];
   takenSlots: string[];
+  /**
+   * Starts that have already passed. Reported separately rather than folded
+   * into takenSlots, so the form can hide them instead of labelling a time
+   * that is simply over as "taken".
+   */
+  pastSlots: string[];
   /**
    * Start time -> the longest booking that still fits there, in minutes. The
    * form uses this to bound its end-time picker, so a customer is never offered
@@ -65,6 +72,10 @@ export async function getAvailability(
     [date]
   );
 
+  // One clock reading for the whole response, so every table agrees on what
+  // "now" is even if building the list straddles a slot boundary.
+  const now = Date.now();
+
   const byTable = new Map<number, { start: string; duration: number }[]>();
   for (const b of booked) {
     if (!byTable.has(b.table_id)) byTable.set(b.table_id, []);
@@ -75,9 +86,14 @@ export async function getAvailability(
     const existing = byTable.get(t.id) ?? [];
     const freeSlots: string[] = [];
     const takenSlots: string[] = [];
+    const pastSlots: string[] = [];
     const maxDuration: Record<string, number> = {};
 
     for (const s of START_TIMES) {
+      if (slotHasStarted(date, s, now)) {
+        pastSlots.push(s);
+        continue;
+      }
       const shortest = minDurationFor(s);
       if (existing.some((b) => overlaps(s, shortest, b.start, b.duration))) {
         takenSlots.push(s);
@@ -104,6 +120,7 @@ export async function getAvailability(
       capacity: t.capacity,
       freeSlots,
       takenSlots,
+      pastSlots,
       maxDuration,
     };
   });
