@@ -14,7 +14,7 @@ import {
   recordPaymentObservation,
 } from '../../payment/ledger';
 import { mailer, formatReceiptEmail, formatStaffBookingAlert } from '../../notifications/mailer';
-import { staffEmails } from '../../notifications/staffRecipients';
+import { bookingAlertRecipients } from '../../notifications/staffRecipients';
 import { CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
 
 // Legacy line items are still surfaced for pre-overhaul bookings; new bookings
@@ -267,7 +267,7 @@ function alertStaff(view: BookingView) {
     view,
     env.publicUrl ? `${env.publicUrl}/staff/dashboard` : undefined,
   );
-  staffEmails()
+  bookingAlertRecipients()
     .then((recipients) =>
       Promise.all(
         recipients.map((to) =>

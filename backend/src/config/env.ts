@@ -32,6 +32,10 @@ export const env = {
   smtpUrl: optional('SMTP_URL', ''),
   mailFrom: optional('MAIL_FROM', 'Cozy Den <no-reply@cozyden.local>'),
 
+  // One shared inbox for new-booking alerts. Unset => every staff account gets
+  // its own copy, which multiplies mail per booking by the size of the team.
+  staffAlertEmail: optional('STAFF_ALERT_EMAIL', '').trim().toLowerCase(),
+
   // Absolute site URL used in notification emails (links back to a thread).
   publicUrl: optional('PUBLIC_URL', '').replace(/\/$/, ''),
 

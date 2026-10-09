@@ -1,4 +1,5 @@
 import { query } from '../db/pool';
+import { env } from '../config/env';
 
 /**
  * Staff recipients = everyone currently flagged as staff. Read per send so a
@@ -15,4 +16,13 @@ export async function staffEmails(): Promise<string[]> {
     console.error('[mailer] could not load staff recipients', err);
     return [];
   }
+}
+
+/**
+ * Who hears about a new booking: the shared STAFF_ALERT_EMAIL inbox when one is
+ * configured — one email per booking, however large the team — otherwise every
+ * staff account, so alerts are never silently dropped before it is set.
+ */
+export async function bookingAlertRecipients(): Promise<string[]> {
+  return env.staffAlertEmail ? [env.staffAlertEmail] : staffEmails();
 }

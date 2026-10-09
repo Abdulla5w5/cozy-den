@@ -50,3 +50,27 @@ test('the dashboard link appears only when the site URL is known', () => {
   const withLink = formatStaffBookingAlert(booking, 'https://cozyden.com.kw/staff/dashboard');
   assert.match(withLink.text, /Open the dashboard: https:\/\/cozyden\.com\.kw\/staff\/dashboard$/);
 });
+
+// Recipient choice runs in a fresh process: env is read once at load time.
+const { execFileSync } = require('node:child_process');
+const path = require('node:path');
+function recipientsWith(alertEmail) {
+  const script = `
+    const pool = require('./dist/src/db/pool.js');
+    pool.query = async () => ({ rows: [{ email: 'a@staff' }, { email: 'b@staff' }] });
+    require('./dist/src/notifications/staffRecipients.js').bookingAlertRecipients()
+      .then((r) => { process.stdout.write(JSON.stringify(r)); process.exit(0); });`;
+  const out = execFileSync(process.execPath, ['-e', script], {
+    cwd: path.join(__dirname, '..'),
+    env: { ...process.env, STAFF_ALERT_EMAIL: alertEmail, DATABASE_URL: '' },
+  });
+  return JSON.parse(out.toString());
+}
+
+test('a configured alert inbox receives the one and only copy', () => {
+  assert.deepStrictEqual(recipientsWith(' Bookings@CozyDen.com.kw '), ['bookings@cozyden.com.kw']);
+});
+
+test('without one, every staff account is alerted rather than nobody', () => {
+  assert.deepStrictEqual(recipientsWith(''), ['a@staff', 'b@staff']);
+});

@@ -66,6 +66,9 @@ services:
         value: Cozy Den <cozyden.noreply@gmail.com>
         scope: RUN_TIME
         type: GENERAL
+      # STAFF_ALERT_EMAIL: the one inbox that receives an email for every paid
+      # booking. Until it is set, each staff account gets its own copy, and
+      # every copy counts against Gmail's daily sending cap.
       # SMTP_URL is NOT declared here — it carries credentials. Add it in the
       # control panel as a SECRET runtime variable on this service. Until it is
       # set, every email (booking receipts, verification links, complaint
