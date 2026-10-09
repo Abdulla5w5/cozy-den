@@ -1,6 +1,6 @@
 import { mailer } from '../../notifications/mailer';
 import { env } from '../../config/env';
-import { query } from '../../db/pool';
+import { staffEmails } from '../../notifications/staffRecipients';
 
 /**
  * Support notifications. Every function here is called with `void` — a mail
@@ -13,17 +13,6 @@ async function safeSend(to: string, subject: string, text: string) {
     await mailer.send({ to, subject, text });
   } catch (err) {
     console.error('[support] notification failed', { to, subject, err });
-  }
-}
-
-/** Staff recipients = everyone currently flagged as staff. */
-async function staffEmails(): Promise<string[]> {
-  try {
-    const { rows } = await query<{ email: string }>('SELECT email FROM users WHERE is_staff');
-    return rows.map((r) => r.email);
-  } catch (err) {
-    console.error('[support] could not load staff recipients', err);
-    return [];
   }
 }
 

@@ -132,3 +132,42 @@ export function formatReceiptEmail(booking: {
     ].join('\n'),
   };
 }
+
+/**
+ * The staff copy of a confirmed booking. Leads with when and where, since that
+ * is what the counter plans around. The verification code is deliberately left
+ * out: it is the customer's claim to the table, and staff already see it on the
+ * dashboard, so it has no reason to sit in every staff inbox as well.
+ */
+export function formatStaffBookingAlert(
+  booking: {
+    guestName: string;
+    guestEmail: string;
+    date: string;
+    timeSlot: string;
+    tableLabel: string;
+    totalCents: number;
+    durationMin: number;
+    partySize: number;
+  },
+  dashboardUrl?: string,
+): { subject: string; text: string } {
+  const money = (c: number) => `KD ${(c / 100).toFixed(2)}`;
+  const session = `${booking.timeSlot}–${endTime(booking.timeSlot, booking.durationMin)} (${hoursLabel(booking.durationMin)} session)`;
+  const party = `${booking.partySize} ${booking.partySize === 1 ? 'guest' : 'guests'}`;
+
+  return {
+    subject: `[Cozy Den] New booking: ${booking.tableLabel}, ${booking.date} ${booking.timeSlot} (${party})`,
+    text: [
+      'A booking has just been confirmed and paid.',
+      '',
+      `Date:  ${booking.date}`,
+      `Time:  ${session}`,
+      `Table: ${booking.tableLabel}`,
+      `Party: ${party}`,
+      `Guest: ${booking.guestName} <${booking.guestEmail}>`,
+      `Paid:  ${money(booking.totalCents)}`,
+      ...(dashboardUrl ? ['', `Open the dashboard: ${dashboardUrl}`] : []),
+    ].join('\n'),
+  };
+}

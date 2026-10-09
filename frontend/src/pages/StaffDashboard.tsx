@@ -355,6 +355,12 @@ function minutesLabel(min: number) {
   return `${String(h).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 }
 
+/** Time left as h:mm — "1:05", "0:45". Reads the same in English and Arabic. */
+function remainingLabel(min: number) {
+  const left = Math.max(0, min);
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+}
+
 /**
  * The service date the clock currently sits in, and how far into it we are.
  * At 01:00 the café is still serving *yesterday's* date — closing is 03:00 —
@@ -424,9 +430,19 @@ function TableFloorView({
       .catch(() => setLoadFailed(true));
   }, [retry]);
 
+  // Tick on the minute boundary rather than a minute after the page opened, so
+  // a table's countdown and its colour change land when the session does.
   useEffect(() => {
-    const id = window.setInterval(() => setClock(serviceNow()), 60_000);
-    return () => window.clearInterval(id);
+    let interval: number | undefined;
+    const tick = () => setClock(serviceNow());
+    const first = window.setTimeout(() => {
+      tick();
+      interval = window.setInterval(tick, 60_000);
+    }, 60_000 - (Date.now() % 60_000));
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(interval);
+    };
   }, []);
 
   const isToday = clock.date === date;
@@ -444,6 +460,11 @@ function TableFloorView({
 
   function endOf(b: StaffBooking) {
     return minutesLabel(slotMinutes(b.timeSlot) + (b.durationMin ?? FLOOR_SESSION_MIN));
+  }
+
+  /** Minutes until an in-progress booking ends, as "1:05". */
+  function timeLeft(b: StaffBooking) {
+    return remainingLabel(slotMinutes(b.timeSlot) + (b.durationMin ?? FLOOR_SESSION_MIN) - clock.minutes);
   }
 
   const byTable = new Map<number, StaffBooking[]>();
@@ -482,21 +503,31 @@ function TableFloorView({
           onRetry={() => setRetry((n) => n + 1)}
           decorate={(tb) => {
             const list = byTable.get(tb.tableId) ?? [];
+            // Colour means the table's state right now: counting down while
+            // someone sits there, blue while a booking is still to come, and
+            // green once nothing else is due today — finished sessions do not
+            // keep a table looking taken.
             const live = list.find((b) => phaseOf(b) === 'now');
             const next = list.find((b) => phaseOf(b) === 'upcoming');
-            const className = live ? 'live' : list.length ? 'booked' : '';
+            const left = live ? timeLeft(live) : '';
+            const className = live ? 'live' : next ? 'booked' : '';
             const summary = live
-              ? t('staff.seatedUntil', { name: live.guestName, time: endOf(live) })
+              ? `${t('staff.seatedUntil', { name: live.guestName, time: endOf(live) })} · ${t('staff.timeLeft', { time: left })}`
               : next
                 ? t('staff.nextAt', { time: next.timeSlot, name: next.guestName })
                 : list.length
                   ? t('staff.allDone')
                   : t('staff.freeAllDay');
+            const stillDue = list.filter((b) => phaseOf(b) !== 'earlier').length;
             return {
               className,
-              accent: live ? '#f47700' : list.length ? '#1177ee' : '#2d7055',
+              accent: live ? '#f47700' : next ? '#1177ee' : '#2d7055',
               ariaLabel: `${tb.label}: ${t('staff.bookingsCount', { n: list.length })}. ${summary}`,
-              badge: list.length ? <b className="table-count">{list.length}</b> : undefined,
+              badge: live ? (
+                <b className="table-count table-countdown">{left}</b>
+              ) : stillDue ? (
+                <b className="table-count">{stillDue}</b>
+              ) : undefined,
               tooltip: (
                 <>
                   <strong>{tb.label}</strong>
@@ -547,7 +578,10 @@ function TableFloorView({
                       <div key={b.id} className="table-day-row">
                         <div className="table-day-time">
                           <strong>{b.timeSlot}</strong>
-                          <small>→ {endOf(b)}</small>
+                          <small>
+                            → {endOf(b)}
+                            {phase === 'now' && ` · ${t('staff.timeLeft', { time: timeLeft(b) })}`}
+                          </small>
                         </div>
                         <div className="table-day-who">
                           <strong>{b.guestName}</strong>

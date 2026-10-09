@@ -13,7 +13,8 @@ import {
   PaymentObservationSource,
   recordPaymentObservation,
 } from '../../payment/ledger';
-import { mailer, formatReceiptEmail } from '../../notifications/mailer';
+import { mailer, formatReceiptEmail, formatStaffBookingAlert } from '../../notifications/mailer';
+import { staffEmails } from '../../notifications/staffRecipients';
 import { CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
 
 // Legacy line items are still surfaced for pre-overhaul bookings; new bookings
@@ -246,7 +247,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
 
   const view = await getBookingById(bookingId);
   if (!view) throw new ApiError(500, 'Booking vanished after creation.');
-  sendReceipt(view);
+  announceConfirmed(view);
   return view;
 }
 
@@ -256,6 +257,33 @@ function sendReceipt(view: BookingView) {
   mailer
     .send({ to: view.guestEmail, subject: email.subject, text: email.text })
     .catch((e) => console.error('[mailer] failed to send receipt', e));
+}
+
+// Fire-and-forget, like the receipt: tells every staff account a customer has
+// just booked and paid. Staff-entered bookings never come through here — the
+// person who typed it in already knows.
+function alertStaff(view: BookingView) {
+  const email = formatStaffBookingAlert(
+    view,
+    env.publicUrl ? `${env.publicUrl}/staff/dashboard` : undefined,
+  );
+  staffEmails()
+    .then((recipients) =>
+      Promise.all(
+        recipients.map((to) =>
+          mailer
+            .send({ to, subject: email.subject, text: email.text })
+            .catch((e) => console.error('[mailer] failed to send staff booking alert', { to, e })),
+        ),
+      ),
+    )
+    .catch((e) => console.error('[mailer] staff booking alert failed', e));
+}
+
+/** Everything that happens once a customer booking is confirmed and paid. */
+function announceConfirmed(view: BookingView) {
+  sendReceipt(view);
+  alertStaff(view);
 }
 
 export interface CheckoutStart {
@@ -438,7 +466,7 @@ export async function finalizeCharge(
     );
     if (upd.rows.length > 0) {
       const view = await getBookingById(payment.bookingId);
-      if (view) sendReceipt(view);
+      if (view) announceConfirmed(view);
       return { outcome: 'paid', code: payment.verificationCode };
     }
 

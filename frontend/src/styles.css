@@ -5434,6 +5434,12 @@ button.link {
   font-weight: 900;
   line-height: 1;
 }
+/* The countdown changes every minute; fixed-width digits keep the pill from
+   jittering as "1:09" becomes "1:08". */
+.floor-table .table-countdown {
+  background: #fff;
+  font-variant-numeric: tabular-nums;
+}
 .table-day {
   overflow-y: auto;
   padding: 0.9rem 1rem 1.1rem;
