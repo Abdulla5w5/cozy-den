@@ -1125,6 +1125,37 @@ table.data code {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* The landing page's shelf of six: three across, two rows — and still two
+   across on a phone, where six full-width cards would be a whole screen of
+   scrolling before the next section. */
+.game-grid-home {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 899px) {
+  .game-grid-home {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 599px) {
+  .game-grid-home {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+  .game-grid-home .gcard-art {
+    height: 8.5rem;
+  }
+  .game-grid-home .gcard-body {
+    padding: 0.85rem;
+  }
+  .game-grid-home .gcard-body h3 {
+    font-size: 1rem;
+  }
+  /* Two cards share a phone's width, which fits a category but not a category
+     and a player count; the landing page keeps the category. */
+  .game-grid-home .tag-row .tag:nth-child(n + 2) {
+    display: none;
+  }
+}
 .gcard {
   position: relative;
   overflow: hidden;
@@ -1168,6 +1199,16 @@ table.data code {
 .gcard .tag-row {
   flex-wrap: nowrap;
   overflow: hidden;
+}
+/* A tag is one line, always. Left to shrink it wrapped mid-phrase ("TAKE /
+   THAT") and made its card taller than its neighbours; now a tag too long
+   for the card ends in an ellipsis instead. */
+.gcard .tag {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .badge {
   align-self: flex-start;

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { EventItem, Game, MenuItem } from '../types';
+import { GameCard } from '../components/GameCard';
 
 const HOME_ARABIC_CONTENT: Record<string, string> = {
   Abstract: 'تجريدية',
@@ -35,6 +36,23 @@ const HOME_ARABIC_CONTENT: Record<string, string> = {
 
 function homeContent(text: string, lang: 'en' | 'ar') {
   return lang === 'ar' ? HOME_ARABIC_CONTENT[text] || text : text;
+}
+
+// The six titles the landing page leads with. The library has no popularity
+// data to rank by, so this is a curated shelf of well-known games, chosen by
+// hand: edit the names to change it. A title staff have since renamed or
+// removed is skipped, and the row is topped up from whatever games have a box
+// photo, so the section is never short or empty.
+const SHOWCASE = ['Catan', 'Pandemic', 'Splendor', 'Ticket To Ride', 'Codenames', 'Dixit'];
+const SHOWCASE_SIZE = 6;
+
+function showcase(games: Game[]): Game[] {
+  const byTitle = new Map(games.map((g) => [g.title, g]));
+  const picked = SHOWCASE.map((t) => byTitle.get(t)).filter((g): g is Game => !!g);
+  if (picked.length >= SHOWCASE_SIZE) return picked.slice(0, SHOWCASE_SIZE);
+  const taken = new Set(picked.map((g) => g.id));
+  const fill = games.filter((g) => g.image_url && !taken.has(g.id));
+  return [...picked, ...fill].slice(0, SHOWCASE_SIZE);
 }
 
 export function Home() {
@@ -169,15 +187,9 @@ export function Home() {
             {t('home.seeAll')}
           </Link>
         </div>
-        <div className="feature-grid">
-          {games.slice(0, 6).map((g) => (
-            <div className="feature-card" key={g.id}>
-              <span className="pill">{homeContent(g.category, lang)}</span>
-              <h3>{g.title}</h3>
-              <p className="muted">
-                {g.min_players}–{g.max_players} {t('players')}
-              </p>
-            </div>
+        <div className="game-grid game-grid-home">
+          {showcase(games).map((g) => (
+            <GameCard key={g.id} g={g} />
           ))}
         </div>
       </section>
