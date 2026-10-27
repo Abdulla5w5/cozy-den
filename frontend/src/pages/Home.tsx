@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { EventItem, Game, MenuItem } from '../types';
-import { GameCard } from '../components/GameCard';
+import { GameCard, tileFor } from '../components/GameCard';
 
 const HOME_ARABIC_CONTENT: Record<string, string> = {
   Abstract: 'تجريدية',
@@ -201,20 +201,49 @@ export function Home() {
             {t('home.fullMenu')}
           </Link>
         </div>
-        <div className="feature-grid">
-          {menu.slice(0, 4).map((m) => (
-            <div className="feature-card" key={m.id}>
-              <span className="pill">{t(`menu.${m.category}`)}</span>
-              <h3>{homeContent(m.name, lang)}</h3>
-              <p className="muted">{homeContent(m.description, lang)}</p>
-              {/* Zero is not "free" — it is how staff mark an item whose
-                            price they have chosen not to publish. Show nothing
-                            rather than "KD 0.000", and never label it free. */}
-                        {m.price_cents > 0 && (
-                          <span className="price">{money(m.price_cents)}</span>
-                        )}
-            </div>
-          ))}
+        <div className="game-grid game-grid-home game-grid-menu">
+          {menu.slice(0, 4).map((m) => {
+            // Same rule as the Menu page: the Arabic name and description when
+            // the item has them, falling back to the page's own translations.
+            const name = lang === 'ar' && m.name_ar ? m.name_ar : homeContent(m.name, lang);
+            const desc =
+              lang === 'ar' && m.description_ar
+                ? m.description_ar
+                : homeContent(m.description, lang);
+            return (
+              <div className="gcard mitem" key={m.id}>
+                {/* The item's photo fills the top of the card, as on the Menu
+                    page. One without a photo gets the brand tile and its name
+                    on a sticker, the way a game without a box does. */}
+                <div className={`gcard-art brand-tile ${tileFor(m.name)}`}>
+                  {m.image_url ? (
+                    <img
+                      className="gcard-img"
+                      src={m.image_url}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      width={480}
+                      height={480}
+                    />
+                  ) : (
+                    <span className="tile-label" dir="auto">
+                      {name}
+                    </span>
+                  )}
+                </div>
+                <div className="gcard-body">
+                  <span className="pill">{t(`menu.${m.category}`)}</span>
+                  <h3>{name}</h3>
+                  <p className="muted mitem-desc">{desc}</p>
+                  {/* Zero is not "free" — it is how staff mark an item whose
+                      price they have chosen not to publish. Show nothing
+                      rather than "KD 0.000", and never label it free. */}
+                  {m.price_cents > 0 && <span className="price mitem-price">{money(m.price_cents)}</span>}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

@@ -5,7 +5,7 @@ import { Game } from '../types';
 // from its title, not its position — so a card does not change colour when a
 // filter reshuffles the list.
 const TILES = ['gtile-orange', 'gtile-blue', 'gtile-red', 'gtile-yellow'];
-function tileFor(title: string) {
+export function tileFor(title: string) {
   let h = 0;
   for (const ch of title) h = (h * 31 + ch.codePointAt(0)!) >>> 0;
   return TILES[h % TILES.length];
