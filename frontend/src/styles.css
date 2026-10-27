@@ -1056,6 +1056,33 @@ table.data code {
   padding: 1rem 0;
   margin-bottom: 0.5rem;
 }
+/* Games library: a single Book button floating clear of the page, so it is
+   reachable from any scroll depth without a sticky bar eating the top of a
+   phone screen. Bottom-corner rather than top: it stays out of the site
+   header's way, and sits where a thumb already is. */
+.cta.button.games-book-float {
+  position: fixed;
+  right: max(1.1rem, env(safe-area-inset-right));
+  bottom: max(1.1rem, env(safe-area-inset-bottom));
+  z-index: 40;
+  box-shadow: var(--shadow-sm);
+}
+[dir='rtl'] .cta.button.games-book-float {
+  right: auto;
+  left: max(1.1rem, env(safe-area-inset-right));
+}
+/* So the last row of cards and the count under them are never parked
+   permanently beneath the button. */
+.games-page-pad {
+  padding-bottom: 5rem;
+}
+@media (max-width: 720px) {
+  .cta.button.games-book-float {
+    font-size: 0.85rem;
+    padding-inline: 1rem;
+  }
+}
+
 .sec-primary {
   color: var(--primary);
 }
@@ -1221,11 +1248,6 @@ table.data code {
 .gcard.amber .game-pop {
   border-color: rgba(254, 170, 0, 0.3);
   box-shadow: 0 0 18px rgba(254, 170, 0, 0.2);
-}
-.game-pop-emoji {
-  display: block;
-  font-size: 1.8rem;
-  margin-bottom: 0.35rem;
 }
 .game-pop-meta {
   font-family: 'Space Mono', monospace;
@@ -1718,7 +1740,7 @@ table.data code {
 [data-theme='dark'] .theme-toggle-thumb {
   border-color: #0d0f14;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   transform: translateX(22px);
 }
 [data-theme='dark'] .hero::before {
@@ -2717,10 +2739,61 @@ table.data code {
 }
 
 /* ============ Game library extras ============ */
+/* ============ Game card art: the brand tile ============
+   Every card's art panel is a flat brand colour carrying a tone-on-tone
+   pattern of game pieces — the device the brand book uses on its packaging.
+   A box photo sits on it whole (contain, never cropped: a cropped box loses
+   its title); a game without a photo shows its name as a white sticker label
+   in the brand face. Colours are the palette's four, nothing else. */
+.brand-tile {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--tile);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22 viewBox=%220 0 120 120%22%3E%3Cg fill=%22%23ffffff%22 fill-opacity=%220.16%22%3E%3Cg transform=%22translate(14 12) rotate(-14)%22%3E%3Crect width=%2230%22 height=%2230%22 rx=%227%22/%3E%3C/g%3E%3Cg transform=%22translate(78 64) rotate(18)%22%3E%3Crect width=%2222%22 height=%2240%22 rx=%226%22/%3E%3C/g%3E%3Cg transform=%22translate(70 6) rotate(10)%22%3E%3Crect width=%2224%22 height=%2232%22 rx=%224%22/%3E%3C/g%3E%3Cg transform=%22translate(10 70) rotate(-8)%22%3E%3Crect width=%2230%22 height=%2230%22 rx=%227%22/%3E%3C/g%3E%3C/g%3E%3Cg fill=%22%23ffffff%22 fill-opacity=%220.35%22%3E%3Ccircle cx=%2224%22 cy=%2222%22 r=%222.6%22/%3E%3Ccircle cx=%2234%22 cy=%2230%22 r=%222.6%22/%3E%3Ccircle cx=%2220%22 cy=%2280%22 r=%222.6%22/%3E%3Ccircle cx=%2232%22 cy=%2292%22 r=%222.6%22/%3E%3Ccircle cx=%2226%22 cy=%2286%22 r=%222.6%22/%3E%3Ccircle cx=%2286%22 cy=%2276%22 r=%222.4%22/%3E%3Ccircle cx=%2282%22 cy=%2294%22 r=%222.4%22/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+.gtile-orange { --tile: var(--orange); }
+.gtile-blue { --tile: var(--blue); }
+.gtile-red { --tile: var(--red); }
+.gtile-yellow {
+  --tile: var(--yellow);
+  /* White pieces vanish on yellow; ink ones read, as on the yellow panels. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22 viewBox=%220 0 120 120%22%3E%3Cg fill=%22%23242424%22 fill-opacity=%220.1%22%3E%3Cg transform=%22translate(14 12) rotate(-14)%22%3E%3Crect width=%2230%22 height=%2230%22 rx=%227%22/%3E%3C/g%3E%3Cg transform=%22translate(78 64) rotate(18)%22%3E%3Crect width=%2222%22 height=%2240%22 rx=%226%22/%3E%3C/g%3E%3Cg transform=%22translate(70 6) rotate(10)%22%3E%3Crect width=%2224%22 height=%2232%22 rx=%224%22/%3E%3C/g%3E%3Cg transform=%22translate(10 70) rotate(-8)%22%3E%3Crect width=%2230%22 height=%2230%22 rx=%227%22/%3E%3C/g%3E%3C/g%3E%3Cg fill=%22%23242424%22 fill-opacity=%220.22%22%3E%3Ccircle cx=%2224%22 cy=%2222%22 r=%222.6%22/%3E%3Ccircle cx=%2234%22 cy=%2230%22 r=%222.6%22/%3E%3Ccircle cx=%2220%22 cy=%2280%22 r=%222.6%22/%3E%3Ccircle cx=%2232%22 cy=%2292%22 r=%222.6%22/%3E%3Ccircle cx=%2226%22 cy=%2286%22 r=%222.6%22/%3E%3Ccircle cx=%2286%22 cy=%2276%22 r=%222.4%22/%3E%3Ccircle cx=%2282%22 cy=%2294%22 r=%222.4%22/%3E%3C/g%3E%3C/svg%3E");
+}
 .gcard-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  padding: 0.9rem;
+  object-fit: contain;
+  /* Lifted off the panel the way a sticker sits on a cup. */
+  filter: drop-shadow(4px 5px 0 rgba(36, 36, 36, 0.55));
+}
+.tile-label {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 82%;
+  padding: 0.55rem 1rem 0.45rem;
+  border: 2.5px solid #242424;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #242424;
+  box-shadow: 4px 4px 0 #242424;
+  font-family: 'Blokhaus', 'Baloo 2 Local', sans-serif;
+  font-size: clamp(1rem, 1.6vw + 0.4rem, 1.45rem);
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: anywhere;
+  transform: rotate(-2deg);
+}
+/* Arabic titles: Blokhaus has no Arabic glyphs, so the brand's Arabic face. */
+.tile-label:dir(rtl) {
+  font-family: 'Baloo Bhaijaan 2 Local', 'Baloo 2 Local', sans-serif;
+  transform: rotate(2deg);
+}
+.bento-feature .tile-label {
+  font-size: clamp(1.4rem, 2.4vw + 0.4rem, 2.2rem);
 }
 .gcard-desc {
   display: -webkit-box;
@@ -2834,26 +2907,35 @@ table.data code {
 }
 
 /* ============ Partner store banner (Games page) ============ */
+/* A one-pixel tint on a page of bright cards read as decoration, and the
+   "visit store" line as a caption; customers were not seeing that the games
+   are buyable. Given the same weight as the rest of the page's furniture, it
+   reads as the link it is. */
 .store-banner {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin: 0 0 1.5rem;
-  padding: 1rem 1.25rem;
-  border-radius: 16px;
+  margin: 0 0 1.75rem;
+  padding: 1.1rem 1.35rem;
+  border-radius: 18px;
   text-decoration: none;
   color: var(--ink);
-  background: linear-gradient(135deg, rgba(254, 170, 0, 0.12), rgba(148, 211, 193, 0.06));
-  border: 1px solid rgba(254, 170, 0, 0.25);
-  transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+  /* The brand's own device: a flat panel with a heavy ink outline, like the
+     sticker the logo is drawn as. No tinted gradient — the identity is solid
+     colour blocks, and a washed one reads as muddy gold against it. */
+  background: var(--surface-container);
+  /* The ink outline and hard shadow the rest of the page's cards wear, so this
+     reads as part of the furniture rather than a faint tint behind it. */
+  border: 2px solid var(--ink);
+  box-shadow: 5px 5px 0 var(--ink);
+  transition: transform 0.15s, box-shadow 0.2s;
 }
 .store-banner:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  box-shadow: 0 0 20px rgba(254, 170, 0, 0.15);
+  transform: translate(-2px, -3px);
+  box-shadow: 7px 9px 0 var(--ink);
 }
 .store-banner-icon {
-  font-size: 1.6rem;
+  font-size: 2rem;
   line-height: 1;
 }
 .store-banner-copy {
@@ -2872,20 +2954,31 @@ table.data code {
 .store-banner-cta {
   margin-left: auto;
   flex: none;
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
   font-family: 'Space Mono', monospace;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: var(--accent);
+  white-space: nowrap;
+}
+[dir='rtl'] .store-banner-cta {
+  margin-left: 0;
+  margin-right: auto;
 }
 @media (max-width: 560px) {
   .store-banner {
     flex-wrap: wrap;
     gap: 0.75rem;
   }
-  .store-banner-cta {
+  .store-banner-cta,
+  [dir='rtl'] .store-banner-cta {
     margin-left: 0;
+    margin-right: 0;
     width: 100%;
+    text-align: center;
   }
 }
 

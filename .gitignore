@@ -26,3 +26,6 @@ docker-compose.override.yml
 
 # Claude Code local worktrees and launch config
 .claude/
+
+# Raw Q8 catalogue scrape — source material for match-q8-images.mjs, never shipped.
+q8-archive/

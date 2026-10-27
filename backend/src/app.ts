@@ -145,8 +145,15 @@ export function createApp() {
           // item), but they change only when the Foodics import is rerun. A day
           // of browser caching turns a repeat visit to the menu into no image
           // requests at all, and a stale photo for at most a day is harmless.
-          // Brand marks change about as often as the menu photos do.
-          if (relative.startsWith(`menu${path.sep}`) || relative.startsWith(`brand${path.sep}`)) {
+          // Brand marks change about as often as the menu photos do, and the
+          // game box photos only when an image import is rerun — 290 of them,
+          // which uncached would be ~6 MB re-fetched from this process on
+          // every visit to the library.
+          if (
+            relative.startsWith(`menu${path.sep}`) ||
+            relative.startsWith(`brand${path.sep}`) ||
+            relative.startsWith(`games${path.sep}`)
+          ) {
             res.setHeader('Cache-Control', 'public, max-age=86400');
             return;
           }
