@@ -1324,6 +1324,11 @@ table.data code {
 }
 .mcard {
   display: flex;
+  /* One height for the whole menu. Cards used to grow with their description —
+     sixteen different heights across 185 items — and the photo tile stretched
+     with them, so one square photo was cropped into everything from a wide
+     sliver to a tall strip. Now the card is fixed and the photo is a square. */
+  height: 9rem;
   overflow: hidden;
   border-radius: 14px;
   background: var(--surface-container);
@@ -1334,8 +1339,10 @@ table.data code {
   border-color: rgba(148, 211, 193, 0.5);
 }
 .mcard-art {
-  width: 33%;
-  min-width: 96px;
+  flex: 0 0 auto;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
   display: grid;
   place-items: center;
   font-size: 2.5rem;
@@ -1351,24 +1358,47 @@ table.data code {
   display: block;
 }
 .mcard-body {
-  padding: 1.25rem;
+  padding: 0.85rem 1rem;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.3rem;
+}
+/* A description takes at most two lines, then an ellipsis: the card is a
+   fixed size, and the full text is not what a menu card is for. */
+.mcard-body > p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
 }
 .mcard-top {
+  /* Name over price rather than side by side. With the price beside it the
+     name got half the card's width and wrapped early ("Ice / Americano"), and
+     on a fixed-height card that meant cut-off names. Stacked, the name has the
+     whole line. */
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: 0.15rem;
 }
 .mcard-top h3 {
   /* min-width lets the name be the thing that wraps. Without it a flex item
      refuses to shrink below its content, so the price was squeezed instead. */
   min-width: 0;
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  /* Two lines of name at most; a longer one ends in an ellipsis. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .mcard .price {
   /* The real menu has names like "English Breakfast - Black Tea", which broke
@@ -1377,6 +1407,15 @@ table.data code {
   margin-right: 0;
   font-size: 1rem;
   white-space: nowrap;
+}
+/* Arabic in the brand face is taller than its line box: its dots and marks sit
+   well above and below the baseline, and on a fixed-height card with clipped
+   text a Latin-sized line height shaved them off. Give it the room it needs. */
+[dir='rtl'] .mcard-top h3 {
+  line-height: 1.55;
+}
+[dir='rtl'] .mcard-body > p {
+  line-height: 1.7;
 }
 /* "Add to Den" = the design's primary-container button asset */
 .add-den {
