@@ -19,20 +19,20 @@ function tileFor(title: string) {
 // list starts at one page and grows only when asked.
 const PAGE_SIZE = 50;
 
-type Variant = 'feature' | 'side' | 'small';
-
 /** "2–6", or null when the range is not recorded yet — the library was imported
  *  from a sheet carrying titles and categories only. */
 function playerRange(g: Game): string | null {
   return g.min_players && g.max_players ? `${g.min_players}–${g.max_players}` : null;
 }
 
-function GameCard({ g, variant }: { g: Game; variant: Variant }) {
+// Every card is the same size. The library used to open with an oversized
+// "Featured" card and a tall "Trending" one, but in an A–Z list those labels
+// only ever fell on whichever titles happened to sort first.
+function GameCard({ g }: { g: Game }) {
   const { t } = useI18n();
-  const amber = variant === 'side';
   const range = playerRange(g);
   return (
-    <div className={`gcard bento-${variant} ${amber ? 'amber' : ''}`}>
+    <div className="gcard">
       {/* The brand's own device for every card: a flat colour panel with its
           game-piece pattern. A game with a photo sits on it whole, like the
           product shots in the brand book; one without gets its title as a
@@ -55,13 +55,11 @@ function GameCard({ g, variant }: { g: Game; variant: Variant }) {
           {range ? `${range} ${t('players')} · ` : ''}
           {g.category}
         </span>
+        {/* Only a handful of games have a description; shown on the card face
+            they made their whole row taller than the rest of the library. */}
+        {g.description && <p className="game-pop-desc">{g.description}</p>}
       </div>
       <div className="gcard-body">
-        {variant !== 'small' && (
-          <span className={`badge ${amber ? 'amber' : 'primary'}`}>
-            {t(variant === 'feature' ? 'games.featured' : 'games.trending')}
-          </span>
-        )}
         <h3>{g.title}</h3>
         <div className="tag-row">
           <span className="tag">{g.category}</span>
@@ -71,17 +69,6 @@ function GameCard({ g, variant }: { g: Game; variant: Variant }) {
             </span>
           )}
         </div>
-        {g.description && <p className="muted gcard-desc">{g.description}</p>}
-        {g.purchase_url && (
-          <a
-            className="add-den buy-btn"
-            href={g.purchase_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {t('gl.buy')}
-          </a>
-        )}
       </div>
     </div>
   );
@@ -192,13 +179,9 @@ export function GamesPage() {
         ))}
       </div>
 
-      <div className="bento" ref={listRef}>
-        {shown.map((g, i) => (
-          <GameCard
-            key={g.id}
-            g={g}
-            variant={i === 0 ? 'feature' : i === 1 ? 'side' : 'small'}
-          />
+      <div className="game-grid" ref={listRef}>
+        {shown.map((g) => (
+          <GameCard key={g.id} g={g} />
         ))}
       </div>
 

@@ -112,8 +112,6 @@ const dict: Record<string, { en: string; ar: string }> = {
     ar: 'من الاستراتيجية الثقيلة لفوضى السهرة. اختر لعبتك وخل السوالف تبدأ.',
   },
   'games.all': { en: 'All', ar: 'الكل' },
-  'games.featured': { en: 'Featured', ar: 'مميّزة' },
-  'games.trending': { en: 'Trending', ar: 'رايجة' },
   'games.book': { en: 'Book →', ar: 'احجز ←' },
   'games.showing': { en: 'Showing {n} of {total} games', ar: 'عارض {n} من {total} لعبة' },
 
@@ -712,7 +710,6 @@ const dict: Record<string, { en: string; ar: string }> = {
 
   // ---- game library ----
   'gl.loadMore': { en: 'Show {n} more', ar: 'اعرض {n} أكثر' },
-  'gl.buy': { en: 'Buy on Board Games Panda', ar: 'اشترها من بورد جيمز باندا' },
   'gl.storeTitle': { en: 'Loved a game? Take it home.', ar: 'عجبتك لعبة؟ خذها بيتك.' },
   'gl.storeSub': {
     en: 'Shop the same titles at Board Games Q8 — delivered across Kuwait.',

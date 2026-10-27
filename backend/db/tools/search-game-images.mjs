@@ -20,14 +20,15 @@
  *
  *        node backend/db/tools/search-game-images.mjs --apply "Catan=2|Uno=0"
  *
- *      Writes frontend/public/games/web/*.webp and
- *      backend/db/migrations/033_game_images_web.sql.
+ *      Writes frontend/public/games/web/*.webp and a migration. A migration
+ *      that is already committed is never rewritten (it may already have run
+ *      in production); games beyond it go to a new one, e.g. 034_….
  *
  * The key is read from the environment and never written anywhere. Requires
  * cwebp (brew install webp), as the other image imports do.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -38,7 +39,8 @@ const STATE = path.join(WORK, 'candidates.json');
 const REVIEW = path.join(WORK, 'review.html');
 const OUT_DIR = path.resolve('frontend/public/games/web');
 const Q8_MIGRATION = path.resolve('backend/db/migrations/032_game_images.sql');
-const MIGRATION = path.resolve('backend/db/migrations/033_game_images_web.sql');
+const MIGRATIONS_DIR = path.resolve('backend/db/migrations');
+const WEB_MIGRATION = /^(\d+)_game_images_web.*\.sql$/;
 const GAMES_URL = 'https://cozyden.com.kw/api/games';
 
 const KEEP = 3; // candidates per game
@@ -219,6 +221,37 @@ function apply() {
     }
   }
 
+  // A migration runs once per database, so one that is already committed (and
+  // so possibly already deployed) is never rewritten — a change to it would
+  // silently never reach production. Games it covers are left to it; anything
+  // new goes to a fresh migration, which is rewritten freely until committed.
+  const committed = new Set(
+    execFileSync('git', ['ls-files', MIGRATIONS_DIR], { encoding: 'utf8' })
+      .split('\n')
+      .map((f) => path.basename(f)),
+  );
+  const all = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
+  const covered = new Set();
+  for (const f of all.filter((f) => WEB_MIGRATION.test(f) && committed.has(f))) {
+    const sql = readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8');
+    for (const m of sql.matchAll(/\(\s*'((?:[^']|'')*)'\s*,/g)) covered.add(m[1].replace(/''/g, "'"));
+  }
+  const pending = all.find((f) => WEB_MIGRATION.test(f) && !committed.has(f));
+  const next = String(Math.max(...all.map((f) => parseInt(f, 10) || 0)) + 1).padStart(3, '0');
+  const fileName = pending || (covered.size ? `${next}_game_images_web_more.sql` : `${next}_game_images_web.sql`);
+  const MIGRATION = path.join(MIGRATIONS_DIR, fileName);
+  const fresh = rows.filter((r) => {
+    const t = r.match(/^\s*\('((?:[^']|'')*)'/)[1].replace(/''/g, "'");
+    return !covered.has(t);
+  });
+  if (!fresh.length) {
+    console.log(`${rows.length} photo(s) encoded to ${OUT_DIR}`);
+    console.log('no games beyond those already in committed migrations — nothing to write');
+    return;
+  }
+  rows.length = 0;
+  rows.push(...fresh);
+
   writeFileSync(
     MIGRATION,
     `-- Box photographs for the games the Q8 archive did not carry, found through
@@ -241,8 +274,8 @@ ${rows.join(',\n')}
 COMMIT;
 `,
   );
-  console.log(`${rows.length} photo(s) encoded to ${OUT_DIR}`);
-  console.log(`migration written to ${MIGRATION}`);
+  console.log(`photos encoded to ${OUT_DIR}`);
+  console.log(`${rows.length} game(s) written to ${MIGRATION}`);
 }
 
 if (process.argv.includes('--apply')) apply();
