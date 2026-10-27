@@ -1378,13 +1378,19 @@ table.data code {
   line-height: 1.4;
 }
 .mcard-top {
-  /* Name over price rather than side by side. With the price beside it the
-     name got half the card's width and wrapped early ("Ice / Americano"), and
-     on a fixed-height card that meant cut-off names. Stacked, the name has the
-     whole line. */
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: flex-start;
+  gap: 0.5rem;
+}
+/* Menu cards only (`.mcard-top` is also the header row on My Bookings, the
+   Wanted Board and the staff pages, which keep it side by side): name over
+   price rather than beside it. With the price beside it the name got half the
+   card's width and wrapped early ("Ice / Americano"), and on a fixed-height
+   card that meant cut-off names. Stacked, the name has the whole line. */
+.mcard .mcard-top {
+  flex-direction: column;
+  justify-content: flex-start;
   gap: 0.15rem;
 }
 .mcard-top h3 {
@@ -1392,6 +1398,9 @@ table.data code {
      refuses to shrink below its content, so the price was squeezed instead. */
   min-width: 0;
   margin: 0;
+  font-size: 1.15rem;
+}
+.mcard .mcard-top h3 {
   font-size: 1.05rem;
   line-height: 1.2;
   /* Two lines of name at most; a longer one ends in an ellipsis. */
@@ -1411,7 +1420,7 @@ table.data code {
 /* Arabic in the brand face is taller than its line box: its dots and marks sit
    well above and below the baseline, and on a fixed-height card with clipped
    text a Latin-sized line height shaved them off. Give it the room it needs. */
-[dir='rtl'] .mcard-top h3 {
+[dir='rtl'] .mcard .mcard-top h3 {
   line-height: 1.55;
 }
 [dir='rtl'] .mcard-body > p {
