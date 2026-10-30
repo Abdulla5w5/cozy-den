@@ -38,19 +38,6 @@ export function GameCard({ g }: { g: Game }) {
           </span>
         )}
       </div>
-      {/* The hover panel carries the game's own face and its details. It used
-          to open with a line of flavour text keyed off the category, which the
-          imported library turned into the same sentence on nearly every card —
-          three hundred games all called a cozy-night favourite. */}
-      <div className="game-pop" aria-hidden="true">
-        <span className="game-pop-meta">
-          {range ? `${range} ${t('players')} · ` : ''}
-          {g.category}
-        </span>
-        {/* Only a handful of games have a description; shown on the card face
-            they made their whole row taller than the rest of the library. */}
-        {g.description && <p className="game-pop-desc">{g.description}</p>}
-      </div>
       <div className="gcard-body">
         <h3>{g.title}</h3>
         <div className="tag-row">

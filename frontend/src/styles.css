@@ -1284,38 +1284,6 @@ table.data code {
   color: var(--muted);
 }
 
-/* Cute hover popup over the art (pointer-events off so Book stays clickable) */
-.game-pop {
-  position: absolute;
-  top: 0.75rem;
-  left: 0.75rem;
-  right: 0.75rem;
-  z-index: 5;
-  padding: 0.9rem 1rem;
-  text-align: center;
-  border-radius: 12px;
-  background: rgba(19, 19, 19, 0.85);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(148, 211, 193, 0.25);
-  box-shadow: 0 0 18px rgba(148, 211, 193, 0.2);
-  opacity: 0;
-  transform: translateY(-6px) scale(0.96);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  pointer-events: none;
-}
-.gcard:hover .game-pop {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-.game-pop-meta {
-  font-family: 'Space Mono', monospace;
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-
 /* ============ Menu — image + content cards ============ */
 .menu-grid2 {
   display: grid;
@@ -2899,18 +2867,6 @@ table.data code {
   font-family: 'Baloo Bhaijaan 2 Local', 'Baloo 2 Local', sans-serif;
   transform: rotate(2deg);
 }
-.game-pop-desc {
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin: 0.5rem 0 0;
-  font-size: 0.8rem;
-  line-height: 1.35;
-  /* The hover panel is dark in both themes, so its text is the palette's
-     cream rather than the page ink, which would vanish against it. */
-  color: #fffaf1;
-}
 .check-row {
   display: inline-flex;
   align-items: center;
@@ -4189,8 +4145,14 @@ button.link {
 }
 .gcard {
   border-radius: 22px;
+  transition: transform 180ms ease, box-shadow 180ms ease;
 }
-.gcard:hover,
+/* The same lift as the menu and event cards: up, with a deeper ink shadow. */
+.gcard:hover {
+  border-color: var(--ink);
+  transform: translateY(-4px);
+  box-shadow: 6px 8px 0 var(--ink);
+}
 .art-emerald {
   background: radial-gradient(circle at 50% 40%, rgba(255, 210, 28, 0.75), transparent 68%), #fff3c4;
 }
