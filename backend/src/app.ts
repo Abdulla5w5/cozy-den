@@ -152,7 +152,8 @@ export function createApp() {
           if (
             relative.startsWith(`menu${path.sep}`) ||
             relative.startsWith(`brand${path.sep}`) ||
-            relative.startsWith(`games${path.sep}`)
+            relative.startsWith(`games${path.sep}`) ||
+            relative.startsWith(`tables${path.sep}`)
           ) {
             res.setHeader('Cache-Control', 'public, max-age=86400');
             return;

@@ -8,7 +8,8 @@ import { useI18n } from '../i18n';
 
 // square: a small four-top. wide: a long rectangle. hex: the six-sided table.
 // round: a circle. hall: the long room-filling table behind the D&D door.
-type FloorShape = 'square' | 'round' | 'wide' | 'hex' | 'hall';
+// corner: the PlayStation corner, drawn as armchairs and a TV, not a table top.
+type FloorShape = 'square' | 'round' | 'wide' | 'hex' | 'hall' | 'corner';
 
 interface FloorPlacement {
   x: number;
@@ -17,6 +18,8 @@ interface FloorPlacement {
   /** The table top's colour. Shape and colour are set per table, not tied. */
   color: string;
   angle?: number;
+  /** A photograph of this table, shown when a customer picks it to book. */
+  photo?: string;
 }
 
 const GREEN = '#2d8b57';
@@ -24,6 +27,7 @@ const RED = '#e03a1f';
 const BLUE = '#1177ee';
 const BROWN = '#a86a34';
 const BLACK = '#3a3a3a';
+const ORANGE = '#f47700';
 
 // These coordinates describe the physical cafe sketch, not booking data. The
 // API remains the source of truth for which tables exist and which slots are
@@ -31,15 +35,25 @@ const BLACK = '#3a3a3a';
 // Keyed by the table's current name, so a rename in the database must be
 // mirrored here for the table to stay where it physically is.
 const FLOOR_PLACEMENTS: Record<string, FloorPlacement> = {
-  'Small Table 1': { x: 80, y: 50, shape: 'square', color: GREEN, angle: 1 },
-  'Small Table 2': { x: 52, y: 39, shape: 'square', color: GREEN, angle: 0 },
-  'Small Table 3': { x: 65, y: 18, shape: 'square', color: RED, angle: -1 },
-  'Big Table 1': { x: 72, y: 82, shape: 'wide', color: GREEN, angle: 0 },
-  'Big Table 2': { x: 53, y: 65, shape: 'hex', color: BLUE, angle: 0 },
-  'Big Table 3': { x: 38, y: 18, shape: 'wide', color: RED, angle: 0 },
-  'Big Table 4 (D&D)': { x: 20, y: 80, shape: 'hall', color: BLACK, angle: 0 },
-  'Floor Table': { x: 85, y: 19, shape: 'round', color: BROWN, angle: 0 },
+  // The two green squares are the same kind of table and share one photograph.
+  'Small Table 1': { x: 80, y: 50, shape: 'square', color: GREEN, angle: 1, photo: '/tables/green-square.webp' },
+  'Small Table 2': { x: 52, y: 39, shape: 'square', color: GREEN, angle: 0, photo: '/tables/green-square.webp' },
+  'Small Table 3': { x: 65, y: 18, shape: 'square', color: RED, angle: -1, photo: '/tables/red-square.webp' },
+  'Big Table 1': { x: 72, y: 82, shape: 'wide', color: GREEN, angle: 0, photo: '/tables/green-rectangle.webp' },
+  'Big Table 2': { x: 53, y: 65, shape: 'hex', color: BLUE, angle: 0, photo: '/tables/blue-hexagon.webp' },
+  'Big Table 3': { x: 38, y: 18, shape: 'wide', color: RED, angle: 0, photo: '/tables/red-rectangle.webp' },
+  'Big Table 4 (D&D)': { x: 20, y: 80, shape: 'hall', color: BLACK, angle: 0, photo: '/tables/dnd-table.webp' },
+  'Floor Table': { x: 85, y: 19, shape: 'round', color: BROWN, angle: 0, photo: '/tables/floor-table.webp' },
+  'PlayStation Corner': { x: 92, y: 67.5, shape: 'corner', color: ORANGE, angle: 0, photo: '/tables/playstation-corner.webp' },
 };
+
+const CORNER_LABEL = 'PlayStation Corner';
+
+/** The photograph of a table, or null for one that has none (a new table, or a
+ *  renamed one not yet added above — the panel then simply shows no picture). */
+export function tablePhoto(label: string): string | null {
+  return FLOOR_PLACEMENTS[label]?.photo ?? null;
+}
 
 const FALLBACK_PLACEMENTS: FloorPlacement[] = [
   { x: 16, y: 20, shape: 'square', color: GREEN },
@@ -137,6 +151,61 @@ interface Props {
   decorate: (table: FloorTable) => TableDecoration;
 }
 
+/** A controller seen from above: the body and its two grips, in one outline. */
+const PAD_PATH =
+  'M9 2h24c4 0 6.5 3 7.5 7l1.4 11c.6 4.4-3.6 6.6-6.4 3.6L30.5 19h-19l-5 4.6C3.7 26.6-.5 24.4.1 20L1.5 9C2.5 5 5 2 9 2z';
+
+/**
+ * The PlayStation corner, drawn from above like everything else on the floor:
+ * two armchairs (a controller left on one) facing the TV on its stand against
+ * the right-hand wall. It is booked like a table, so it uses the tables'
+ * button (position, hover card, selected halo) with this picture in place of
+ * a table top and chairs.
+ */
+function CornerArt() {
+  const { t } = useI18n();
+  return (
+    <>
+      <span className="corner-art" aria-hidden="true">
+        <i className="corner-chair corner-chair-a" />
+        <i className="corner-chair corner-chair-b" />
+        <svg className="corner-pad" viewBox="-2 -1 46 30">
+          <path d={PAD_PATH} fill="#242424" transform="translate(1.4 1.8)" />
+          <path d={PAD_PATH} fill="#fffaf1" stroke="#242424" strokeWidth="2.4" strokeLinejoin="round" />
+          <path d="M8.4 7.4h3v-3h2.4v3h3v2.4h-3v3h-2.4v-3h-3z" fill="#242424" />
+          <circle cx="16" cy="15" r="2.3" fill="#242424" />
+          <circle cx="26" cy="15" r="2.3" fill="#242424" />
+          <circle cx="31" cy="5.6" r="1.5" fill="#1177ee" />
+          <circle cx="34.2" cy="8.8" r="1.5" fill="#f13619" />
+          <circle cx="27.8" cy="8.8" r="1.5" fill="#ffd21c" />
+          <circle cx="31" cy="12" r="1.5" fill="#f47700" />
+        </svg>
+        <i className="corner-stand">
+          <b className="corner-tv" />
+        </i>
+      </span>
+      <span className="corner-label">{t('bk.psShort')}</span>
+    </>
+  );
+}
+
+/** The corner as scenery, for when the table list has no corner (it is part
+ *  of the room whether or not it can be booked). */
+function StaticCorner() {
+  const p = FLOOR_PLACEMENTS[CORNER_LABEL];
+  const style = {
+    '--table-x': `${p.x}%`,
+    '--table-y': `${p.y}%`,
+    '--table-angle': '0deg',
+    '--table-accent': p.color,
+  } as CSSProperties;
+  return (
+    <div className="floor-table floor-table-corner is-static" style={style} aria-hidden="true">
+      <CornerArt />
+    </div>
+  );
+}
+
 export function CafeFloorPlan({
   tables,
   selectedId,
@@ -226,6 +295,10 @@ export function CafeFloorPlan({
                 onClick={() => onSelect(tb.tableId)}
               >
                 <span className="table-shape-halo" aria-hidden="true" />
+                {placement.shape === 'corner' ? (
+                  <CornerArt />
+                ) : (
+                  <>
                 <span className="table-seats" aria-hidden="true">
                   {chairs.map((chair, chairIndex) => (
                     <i
@@ -243,12 +316,16 @@ export function CafeFloorPlan({
                   <small>{t('bk.seatsShort', { n: tb.capacity })}</small>
                   {deco.badge}
                 </span>
+                  </>
+                )}
                 <span className="floor-table-tooltip" aria-hidden="true">
                   {deco.tooltip}
                 </span>
               </button>
             );
           })}
+
+        {!loading && !loadError && !tables.some((tb) => tb.label === CORNER_LABEL) && <StaticCorner />}
       </div>
     </div>
   );

@@ -4923,7 +4923,8 @@ button.link {
 .floor-brand-mark {
   position: absolute;
   z-index: 1;
-  left: 5.5%;
+  /* Nudged right to make room for the game wall along the left-hand wall. */
+  left: 9.5%;
   top: 8.5%;
   width: 15.5%;
   height: auto;
@@ -5076,14 +5077,17 @@ button.link {
 .floor-counter i:nth-of-type(1) { left: 43%; }
 .floor-counter i:nth-of-type(2) { left: 63%; }
 .floor-counter i:nth-of-type(3) { left: 83%; }
+/* The game wall rests against the left-hand wall, directly above the counter,
+   lying along the wall (not sticking out from it). It is the same upright shelf
+   it was on the right-hand wall, so the lettering runs down it. */
 .floor-shelf {
   position: absolute;
   z-index: 2;
-  right: 2.5%;
-  bottom: 17%;
+  top: 8.5%;
+  left: 2.6%;
   display: flex;
-  width: 8%;
-  height: 31%;
+  width: 4.6%;
+  height: 20.5%;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
@@ -5775,6 +5779,161 @@ button.link {
   background:
     radial-gradient(circle at 95% 5%, rgba(255, 210, 28, 0.3), transparent 8rem),
     var(--surface-low);
+}
+/* The table's photograph, framed like the rest of the page's stickers (ink
+   outline, hard shadow) with the Cozy Den mark pinned to its corner. The
+   source photos are square; the frame is wider than tall so it stays small,
+   and the crop sits low in the picture where the table is. */
+.table-photo {
+  position: relative;
+  margin: 0 0.35rem 1.1rem 0;
+  aspect-ratio: 16 / 9;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  background: var(--surface-container);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.table-photo > img:first-child {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 62%;
+  border-radius: 12px;
+}
+.table-photo .table-photo-logo {
+  position: absolute;
+  top: -0.7rem;
+  inset-inline-start: -0.5rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0.28rem;
+  object-fit: contain;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+/* ============ PlayStation corner (floor map) ============
+   Against the right-hand wall, in the same vocabulary as the tables: two
+   armchairs (table surfaces, with a darker back) and a small side table,
+   facing the TV on the wall. Sized in the room's units so it scales with the
+   plan. */
+.floor-table-corner {
+  width: 10.9cqw;
+  aspect-ratio: 10.9 / 14;
+}
+/* Near the right edge, so the hover card is pinned to the corner's right edge
+   rather than centred on it (the floor clips anything that leaves it). */
+.floor-table-corner .floor-table-tooltip {
+  right: 0;
+  left: auto;
+  transform: translate(0, -5px);
+}
+.floor-table-corner.tip-above .floor-table-tooltip {
+  transform: translate(0, 5px);
+}
+.floor-table-corner:focus-visible .floor-table-tooltip,
+.floor-table-corner.tip-above:focus-visible .floor-table-tooltip {
+  transform: translate(0, 0);
+}
+@media (hover: hover) and (pointer: fine) {
+  .floor-table-corner:hover .floor-table-tooltip,
+  .floor-table-corner.tip-above:hover .floor-table-tooltip {
+    transform: translate(0, 0);
+  }
+}
+.floor-table.is-static {
+  pointer-events: none;
+}
+.corner-art {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: block;
+}
+.corner-art > i {
+  position: absolute;
+  display: block;
+}
+.corner-chair {
+  left: 1.4cqw;
+  width: 4.4cqw;
+  height: 4.4cqw;
+  border: 3px solid #242424;
+  border-radius: 1.1cqw;
+  /* The darker strip on the left is the chair's back; they face the TV. */
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 48%),
+    var(--table-accent);
+  box-shadow:
+    0 0.75cqw 0 #242424,
+    inset 1.1cqw 0 0 rgba(117, 52, 8, 0.35);
+}
+.corner-chair-a {
+  top: 1.6cqw;
+}
+.corner-chair-b {
+  bottom: 2.4cqw;
+}
+/* The TV stand is wood, like the counter and the game wall, with the screen
+   standing on it edge-on as seen from above. */
+.corner-stand {
+  top: 0.8cqw;
+  right: 0.6cqw;
+  bottom: 1.6cqw;
+  width: 2.6cqw;
+  border: 3px solid #242424;
+  border-radius: 0.6cqw;
+  background: #c16d31;
+  box-shadow: 0 0.75cqw 0 #242424;
+}
+.corner-tv {
+  position: absolute;
+  top: 1.2cqw;
+  bottom: 1.2cqw;
+  left: 50%;
+  width: 1.1cqw;
+  border: 2px solid #242424;
+  border-radius: 0.35cqw;
+  background: var(--blue);
+  transform: translateX(-50%);
+}
+/* A controller left on the first armchair, dropped at a slight angle. It is a
+   small SVG (props this size lose their shape as bordered boxes); cream like
+   the playing card, with the same hard shadow as the other props. */
+.corner-pad {
+  position: absolute;
+  z-index: 1;
+  top: 2.8cqw;
+  left: 2.4cqw;
+  width: 3cqw;
+  height: auto;
+  overflow: visible;
+  transform: rotate(-16deg);
+}
+.corner-label {
+  position: absolute;
+  z-index: 3;
+  top: -0.9cqw;
+  left: 50%;
+  padding: 0.2cqw 0.9cqw;
+  border: 0.25cqw solid #242424;
+  border-radius: 999px;
+  background: #fff;
+  color: #242424;
+  font-size: clamp(0.5rem, 1.55cqw, 0.7rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+}
+/* No table top to grey out, so a fully booked corner fades its picture. */
+.floor-table-corner.sold-out .corner-art {
+  opacity: 0.7;
+  filter: grayscale(0.45);
 }
 .slot-panel-head h2 {
   margin: 0.2rem 0 0.65rem;

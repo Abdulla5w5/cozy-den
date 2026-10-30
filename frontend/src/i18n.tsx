@@ -261,6 +261,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'bk.taken': { en: 'Taken', ar: 'محجوز' },
   'bk.selection': { en: 'Your selection', ar: 'اختياركم' },
   'bk.chooseTime': { en: 'Choose an open time', ar: 'اختاروا وقت متاح' },
+  'bk.psShort': { en: 'PlayStation', ar: 'بلايستيشن' },
   'bk.selectPrompt': { en: 'Choose a table on the map', ar: 'اختاروا طاولة من الخريطة' },
   'bk.selectPromptSub': {
     en: 'Its open times will appear here, ready to book.',

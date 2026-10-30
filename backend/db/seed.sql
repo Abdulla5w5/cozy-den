@@ -8,7 +8,8 @@ INSERT INTO tables (label, capacity, is_active) VALUES
   ('Big Table 2',       6,  TRUE),
   ('Big Table 3',       12, TRUE),
   ('Big Table 4 (D&D)', 7,  TRUE),
-  ('Floor Table',       6,  TRUE)
+  ('Floor Table',       6,  TRUE),
+  ('PlayStation Corner', 2, TRUE)
 ON CONFLICT (label) DO UPDATE SET
   capacity = EXCLUDED.capacity,
   is_active = TRUE;

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { Booking, TableAvailability } from '../types';
-import { CafeFloorPlan } from '../components/CafeFloorPlan';
+import { CafeFloorPlan, tablePhoto } from '../components/CafeFloorPlan';
 
 // POST /bookings returns one of two shapes: the finished booking (direct/mock
 // provider) or a gateway redirect URL (Tap). One handler covers both.
@@ -444,6 +444,25 @@ export function BookingFlow() {
               {selectedTable ? (
                 <>
                   <div className="slot-panel-head">
+                    {/* A small framed photograph of the table just picked, with
+                        the logo on its corner. Keyed by table so choosing
+                        another swaps the picture rather than reusing the old
+                        one while the new one loads; hidden if it fails. */}
+                    {tablePhoto(selectedTable.label) && (
+                      <figure className="table-photo" key={selectedTable.tableId}>
+                        <img
+                          src={tablePhoto(selectedTable.label)!}
+                          alt={selectedTable.label}
+                          width={640}
+                          height={400}
+                          decoding="async"
+                          onError={(e) => {
+                            e.currentTarget.parentElement!.hidden = true;
+                          }}
+                        />
+                        <img className="table-photo-logo" src="/brand/cd-mark.png" alt="" aria-hidden="true" />
+                      </figure>
+                    )}
                     <span className="slot-panel-kicker">{t('bk.yourTable')}</span>
                     <h2>{selectedTable.label}</h2>
                     <div className="slot-panel-meta">
