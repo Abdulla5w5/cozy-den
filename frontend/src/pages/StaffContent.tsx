@@ -62,9 +62,8 @@ const blank = {
   type: 'internal' as 'internal' | 'external',
   imageUrl: '',
   isFeatured: false,
-  // An event may hold a table for a window. Blank table = holds nothing.
+  // An event may hold a table, from its start time. Blank table = holds nothing.
   tableId: '' as string,
-  startTime: '',
   durationMin: '' as string,
   capacity: '' as string,
   seatPriceKd: '0.00',
@@ -111,7 +110,6 @@ export function EventsTab() {
       imageUrl: e.image_url ?? '',
       isFeatured: e.is_featured,
       tableId: e.table_id ? String(e.table_id) : '',
-      startTime: e.start_time ?? '',
       durationMin: e.duration_min ? String(e.duration_min) : '',
       capacity: e.capacity ? String(e.capacity) : '',
       seatPriceKd: kd(e.seat_price_cents ?? 0),
@@ -130,7 +128,9 @@ export function EventsTab() {
         time: form.time || null,
         imageUrl: form.imageUrl || null,
         tableId: form.tableId ? Number(form.tableId) : null,
-        startTime: form.startTime || null,
+        // A table is held from the event's own start time; there is no
+        // separate one to set (the café's list, Oct 2026).
+        startTime: form.tableId ? form.time || null : null,
         durationMin: form.durationMin ? Number(form.durationMin) : null,
         capacity: form.capacity ? Number(form.capacity) : null,
         seatPriceCents: kdToCents(form.seatPriceKd),
@@ -228,8 +228,9 @@ export function EventsTab() {
               <ImagePreview url={form.imageUrl} />
             </label>
           </div>
-          {/* Assigning a table blocks it from regular bookings for this window.
-              The API rejects a table without a start time and length. */}
+          {/* Assigning a table blocks it from regular bookings from the event's
+              start time, for the length chosen. The API rejects a table
+              without a start time (like 19:00) and a length. */}
           <div className="row">
             <label className="field inline">
               {t('cat.evTable')}
@@ -244,14 +245,6 @@ export function EventsTab() {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="field inline">
-              {t('cat.evStart')}
-              <input
-                placeholder="18:00"
-                value={form.startTime}
-                onChange={(e) => setForm({ ...form, startTime: e.target.value })}
-              />
             </label>
             <label className="field inline">
               {t('cat.evLength')}

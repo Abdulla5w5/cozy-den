@@ -2,7 +2,7 @@ import { query } from '../../db/pool';
 import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
-import { billableSeats, minSeatsFor, quoteBooking } from '../../utils/pricing';
+import { billableSeats, MAX_PARTY, minSeatsFor, quoteBooking } from '../../utils/pricing';
 import { isValidDuration, minDurationFor, slotHasStarted } from '../../utils/slots';
 import { paymentProvider } from '../../payment';
 import { TAP_CHARGE_EXPIRY_MINUTES } from '../../payment/constants';
@@ -83,6 +83,7 @@ function resolveSitting(
   { capacity, minParty }: { capacity: number; minParty: number | null },
   durationMin?: number,
   partySize?: number,
+  { maxParty = Infinity }: { maxParty?: number } = {},
 ): { durationMin: number; partySize: number; billedSeats: number } {
   const duration = durationMin ?? minDurationFor(timeSlot);
   if (!isValidDuration(timeSlot, duration)) {
@@ -91,6 +92,12 @@ function resolveSitting(
   const party = partySize ?? minSeatsFor(capacity, minParty);
   if (party > capacity) {
     throw new ApiError(400, `That table seats ${capacity}.`);
+  }
+  if (party > maxParty) {
+    throw new ApiError(
+      400,
+      `Online bookings are for up to ${maxParty} people. Contact us for a bigger group.`,
+    );
   }
   // A big table is not worth taking out of service for a pair, so each size
   // carries a minimum party. Enforced here rather than only in the form, since
@@ -205,7 +212,9 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
   }
   const table = await assertTableExists(input.tableId);
 
-  const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize);
+  const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
+    maxParty: MAX_PARTY,
+  });
   const feeCents = (
     await quoteBooking(input.date, input.timeSlot, sitting.durationMin, sitting.billedSeats)
   ).totalCents;
@@ -346,7 +355,9 @@ export async function startBookingCheckout(
   });
   if (alreadyPaid) return { code: alreadyPaid.verificationCode, booking: alreadyPaid };
 
-  const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize);
+  const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
+    maxParty: MAX_PARTY,
+  });
   const feeCents = (
     await quoteBooking(input.date, input.timeSlot, sitting.durationMin, sitting.billedSeats)
   ).totalCents;

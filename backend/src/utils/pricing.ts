@@ -45,6 +45,11 @@ const MIN_SEATS_LADDER: readonly (readonly [capacity: number, minSeats: number])
   [4, 2],
 ];
 
+/** The most people one online booking may be for, whatever the table seats
+ *  (the café's list, Oct 2026). Staff entering a booking by hand are not held
+ *  to it: a bigger group arranged by phone still fits a 12-seat table. */
+export const MAX_PARTY = 8;
+
 /**
  * The smallest party this table accepts — and so the fewest seats it bills.
  * A table's own `min_party` (set by migration, e.g. the Floor Table's 2) wins
@@ -78,7 +83,8 @@ export interface BookingQuote extends TableFee {
   perSeatCents: number;
   /** Seats charged for — the party, or the table's minimum, whichever is more. */
   seats: number;
-  /** 2-hour blocks charged; 0 for a late seating, which is a flat rate. */
+  /** 2-hour blocks charged (2.5 for five hours); 0 for a late seating, which
+   *  is a flat rate. */
   blocks: number;
   late: boolean;
 }
@@ -168,8 +174,9 @@ export async function getTableFee(date: string): Promise<TableFee> {
 /**
  * Price a specific booking.
  *
- * One seat is charged per 2-hour block, rounded up: a 4-hour booking is two
- * blocks, and an odd 2.5 hours still pays for two. Late seatings — starts after
+ * One seat is charged the block rate for every two hours: a 4-hour booking is
+ * two blocks, and five hours — the one length that is not whole blocks — is
+ * two and a half (pro rata until the hourly pricing replaces blocks). Late seatings — starts after
  * 01:00, which run to the 03:00 close and so cannot fill a block — pay the flat
  * late rate once. That per-seat figure is then multiplied by the party, floored
  * at the table's minimum seats.
@@ -197,8 +204,8 @@ export async function quoteBooking(
       late: true,
     };
   }
-  const blocks = Math.max(1, Math.ceil(durationMin / SESSION_MIN));
-  const perSeatCents = fee.cents * blocks;
+  const blocks = Math.max(1, durationMin / SESSION_MIN);
+  const perSeatCents = Math.round(fee.cents * blocks);
   return {
     ...fee,
     perSeatCents,

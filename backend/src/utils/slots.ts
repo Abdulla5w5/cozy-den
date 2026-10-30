@@ -17,13 +17,11 @@ export const MAX_SESSION_MIN = 360; // six hours, the longest a customer may hol
 export const STEP_MIN = 30; // start-time granularity
 
 /**
- * The only lengths a normal booking may be: two, four or six hours.
- *
- * Sittings are sold in whole 2-hour blocks, so there is no half-block to offer
- * and nothing between them to choose. A late seating is the one exception — it
- * runs to closing, whatever that leaves.
+ * The only lengths a normal booking may be: two, four, five or six hours (the
+ * café's list, Oct 2026 — five was added between the 2-hour blocks). A late
+ * seating is the one exception — it runs to closing, whatever that leaves.
  */
-export const BLOCK_DURATIONS: readonly number[] = [SESSION_MIN, SESSION_MIN * 2, SESSION_MIN * 3];
+export const BOOKING_LENGTHS: readonly number[] = [120, 240, 300, 360];
 
 function fmt(min: number): string {
   const h = Math.floor(min / 60) % 24;
@@ -107,12 +105,12 @@ export function minDurationFor(start: string): number {
  * The lengths actually offered from this start.
  *
  * A late seating has exactly one: the remainder to closing. Everything else
- * gets whichever whole blocks still fit before the café shuts.
+ * gets whichever of the booking lengths still fit before the café shuts.
  */
 export function allowedDurations(start: string): number[] {
   if (isLateStart(start)) return [maxDurationFor(start)];
   const ceiling = maxDurationFor(start);
-  return BLOCK_DURATIONS.filter((d) => d <= ceiling);
+  return BOOKING_LENGTHS.filter((d) => d <= ceiling);
 }
 
 /** Whether a customer-supplied length is legal for this start. */

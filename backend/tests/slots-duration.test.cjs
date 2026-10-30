@@ -47,9 +47,10 @@ test('normal seatings default to two hours and cap at six', () => {
   assert.strictEqual(maxDurationFor('01:00'), 120, 'closing bites before the ceiling');
 });
 
-test('only whole 2/4/6-hour blocks are offered', () => {
-  assert.deepStrictEqual(allowedDurations('14:00'), [120, 240, 360]);
-  assert.deepStrictEqual(allowedDurations('23:00'), [120, 240], 'closing trims the six');
+test('only 2, 4, 5 and 6 hours are offered', () => {
+  assert.deepStrictEqual(allowedDurations('14:00'), [120, 240, 300, 360]);
+  assert.deepStrictEqual(allowedDurations('22:00'), [120, 240, 300], 'closing trims the six');
+  assert.deepStrictEqual(allowedDurations('23:00'), [120, 240], 'closing trims five and six');
   assert.deepStrictEqual(allowedDurations('01:00'), [120], 'only one block fits');
   assert.deepStrictEqual(allowedDurations('01:30'), [90], 'late seating: to closing');
   assert.deepStrictEqual(allowedDurations('02:00'), [60]);
@@ -58,8 +59,9 @@ test('only whole 2/4/6-hour blocks are offered', () => {
 test('part-hours and over-long sittings are rejected', () => {
   assert.ok(isValidDuration('14:00', 120));
   assert.ok(isValidDuration('14:00', 240));
+  assert.ok(isValidDuration('14:00', 300), 'five hours');
   assert.ok(isValidDuration('14:00', 360));
-  assert.ok(!isValidDuration('14:00', 180), 'three hours is not a whole block');
+  assert.ok(!isValidDuration('14:00', 180), 'three hours is not offered');
   assert.ok(!isValidDuration('14:00', 150), 'no part-hours');
   assert.ok(!isValidDuration('14:00', 420), 'past the six-hour ceiling');
   assert.ok(!isValidDuration('14:00', 90), 'below the 2-hour minimum');

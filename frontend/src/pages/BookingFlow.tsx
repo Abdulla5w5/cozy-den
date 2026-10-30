@@ -20,9 +20,12 @@ const SESSION_MIN = 120;
 const MAX_SESSION_MIN = 360; // six hours
 const CLOSE_MIN = 27 * 60; // 03:00
 const OPEN_MIN = 14 * 60;
-// Sittings are sold in whole 2-hour blocks: two, four or six hours, and nothing
-// in between. A late seating is the exception and runs to closing instead.
-const BLOCK_DURATIONS = [SESSION_MIN, SESSION_MIN * 2, SESSION_MIN * 3];
+// Mirrors BOOKING_LENGTHS in backend/src/utils/slots.ts: two, four, five or six
+// hours. A late seating is the exception and runs to closing instead.
+const BOOKING_LENGTHS = [120, 240, 300, 360];
+// Mirrors MAX_PARTY in backend/src/utils/pricing.ts: an online booking is for
+// up to eight people, whatever the table seats.
+const MAX_PARTY = 8;
 
 // Mirrors MIN_SEATS_LADDER in backend/src/utils/pricing.ts: a big table is not
 // worth taking out of service for a pair, so each size takes a minimum party.
@@ -241,14 +244,14 @@ export function BookingFlow() {
   const roomMin = timeSlot
     ? Math.min(selectedTable?.maxDuration?.[timeSlot] ?? floorMin, maxDurationFor(timeSlot))
     : floorMin;
-  const durationChoices = late ? [floorMin] : BLOCK_DURATIONS.filter((d) => d <= roomMin);
+  const durationChoices = late ? [floorMin] : BOOKING_LENGTHS.filter((d) => d <= roomMin);
 
-  // Charged per SEAT: one seat's fare (per 2-hour block, rounded up; a late
-  // seating is one flat rate) times the party. The big tables carry a minimum
+  // Charged per SEAT: one seat's fare (the block rate per two hours, so five
+  // hours is two and a half; a late seating is one flat rate) times the party. The big tables carry a minimum
   // party, so they never bill fewer seats than that. The server recomputes all
   // of this at checkout — what follows is the customer-facing preview.
-  const blocks = Math.max(1, Math.ceil(durationMin / SESSION_MIN));
-  const perSeatCents = late ? fee.lateCents : fee.cents * blocks;
+  const blocks = Math.max(1, durationMin / SESSION_MIN);
+  const perSeatCents = late ? fee.lateCents : Math.round(fee.cents * blocks);
   const minParty = selectedTable ? minSeatsFor(selectedTable) : 1;
   // Too small a party for this table: the server would refuse the booking, so
   // the panel blocks it here and names the tables that would take them.
@@ -268,11 +271,13 @@ export function BookingFlow() {
   }, [timeSlot, tableId, floorMin, roomMin]);
 
   useEffect(() => {
-    // The headcount cannot exceed the table actually chosen. A headcount BELOW
+    // The headcount cannot exceed the table actually chosen, nor the online cap
+    // of eight. A headcount BELOW
     // the table's minimum is left alone on purpose: quietly raising it would
     // charge for seats nobody asked for, so the panel says so instead and
     // offers the tables that do fit.
-    if (selectedTable && partySize > selectedTable.capacity) setPartySize(selectedTable.capacity);
+    const most = selectedTable ? Math.min(selectedTable.capacity, MAX_PARTY) : MAX_PARTY;
+    if (partySize > most) setPartySize(most);
   }, [selectedTable, partySize]);
 
   useEffect(() => {
@@ -555,7 +560,10 @@ export function BookingFlow() {
                           value={partySize}
                           onChange={(e) => setPartySize(Number(e.target.value))}
                         >
-                          {Array.from({ length: selectedTable.capacity }, (_, i) => i + 1).map(
+                          {Array.from(
+                            { length: Math.min(selectedTable.capacity, MAX_PARTY) },
+                            (_, i) => i + 1,
+                          ).map(
                             (n) => (
                               <option key={n} value={n}>
                                 {n === 1 ? t('bk.onePerson') : t('bk.people', { n })}
@@ -634,11 +642,7 @@ export function BookingFlow() {
             </p>
             <ul>
               <li>
-                {late
-                  ? t('bk.lateSeating')
-                  : blocks === 1
-                    ? t('bk.blocks', { n: blocks })
-                    : t('bk.blocksPlural', { n: blocks })}{' '}
+                {late ? t('bk.lateSeating') : t('bk.sessionHours', { n: formatHours(durationMin) })}{' '}
                 — {t('bk.seatMath', {
                   seats: String(seats),
                   each: money(perSeatCents),

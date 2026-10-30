@@ -42,7 +42,10 @@ export async function assertEventTableExists(tableId: number): Promise<void> {
 export function assertWindowValid(w: EventWindow): void {
   if (w.tableId === null) return;
   if (!w.startTime || !isValidStart(w.startTime)) {
-    throw new ApiError(400, 'Pick a start time for the event before assigning a table.');
+    throw new ApiError(
+      400,
+      "Give the event a start time on the half hour (like 19:00) before assigning a table — the table is held from it.",
+    );
   }
   if (
     w.durationMin === null ||
