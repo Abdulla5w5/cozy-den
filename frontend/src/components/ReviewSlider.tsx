@@ -9,6 +9,9 @@ import { GUEST_REVIEWS } from './reviews';
 // every card stays about the same size.
 
 const ACCENTS = ['yellow', 'orange', 'blue', 'red'] as const;
+// An arrow press slides one card in this long. The browser's own smooth
+// scroll takes about twice that and felt sluggish.
+const SLIDE_MS = 260;
 // Past this length the card shows a "Read more" (the text is clamped by CSS).
 const LONG_REVIEW = 230;
 // The café on Google Maps (the same link as the footer's), where the rest of
@@ -50,8 +53,26 @@ export function ReviewSlider() {
     const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
     // "Forward" is leftward in Arabic.
     const step = (card.offsetWidth + gap) * dir * (rtl ? -1 : 1);
-    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    track.scrollBy({ left: step, behavior: smooth ? 'smooth' : 'auto' });
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      track.scrollBy({ left: step });
+      return;
+    }
+    // Animated by hand, with snapping paused so it does not fight each frame.
+    const from = track.scrollLeft;
+    const to = Math.max(
+      rtl ? -(track.scrollWidth - track.clientWidth) : 0,
+      Math.min(rtl ? 0 : track.scrollWidth - track.clientWidth, from + step),
+    );
+    const start = performance.now();
+    track.style.scrollSnapType = 'none';
+    const frame = (now: number) => {
+      const p = Math.min(1, (now - start) / SLIDE_MS);
+      const eased = 1 - (1 - p) ** 3; // ease-out
+      track.scrollLeft = from + (to - from) * eased;
+      if (p < 1) requestAnimationFrame(frame);
+      else track.style.scrollSnapType = '';
+    };
+    requestAnimationFrame(frame);
   };
 
   return (

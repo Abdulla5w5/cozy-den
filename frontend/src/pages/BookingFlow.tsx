@@ -5,6 +5,7 @@ import { useI18n } from '../i18n';
 import { Booking, TableAvailability } from '../types';
 import { CafeFloorPlan, tablePhoto } from '../components/CafeFloorPlan';
 import { isKuwaitPhone } from '../phone';
+import { TermsBody, termsTitle } from './TermsPage';
 
 // POST /bookings returns one of two shapes: the finished booking (direct/mock
 // provider) or a gateway redirect URL (Tap). One handler covers both.
@@ -123,7 +124,7 @@ function readDraftOnReturn(): BookingDraft | null {
 export function BookingFlow() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { t, money } = useI18n();
+  const { t, money, lang } = useI18n();
   const bookingCardRef = useRef<HTMLDivElement | null>(null);
   const slotPanelRef = useRef<HTMLElement | null>(null);
   const slotListRef = useRef<HTMLDivElement | null>(null);
@@ -155,6 +156,9 @@ export function BookingFlow() {
   // receives the receipt. A booking without an account goes by phone alone.
   const [accountEmail, setAccountEmail] = useState<string | undefined>(undefined);
   const phoneOk = isKuwaitPhone(guestPhone);
+  // Not kept in the draft: agreeing is asked for again on every checkout.
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Priced by date on the server (Thu/Fri/Sat and Kuwait national holidays cost
@@ -324,6 +328,7 @@ export function BookingFlow() {
         guestName,
         guestPhone,
         guestEmail: accountEmail,
+        acceptedTerms,
         durationMin,
         partySize,
       });
@@ -678,6 +683,41 @@ export function BookingFlow() {
             </div>
           )}
 
+          {/* The café's refund and no-show rules hang on this, so payment
+              waits for it. The terms open in a pop-up over the form — a new
+              tab or page left no way back to the booking on a phone. */}
+          <label className="terms-check">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+            />
+            <span>
+              {t('bk.terms1')}{' '}
+              <a
+                href="/terms"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setTermsOpen(true);
+                }}
+              >
+                {t('bk.terms2')}
+              </a>{' '}
+              {t('bk.terms3')}
+            </span>
+          </label>
+
+          {termsOpen && (
+            <TermsDialog
+              title={termsTitle(lang)}
+              onClose={() => setTermsOpen(false)}
+              onAgree={() => {
+                setAcceptedTerms(true);
+                setTermsOpen(false);
+              }}
+            />
+          )}
+
           <div className="pay-note">
             <span aria-hidden="true">🔒</span>
             <p className="muted">{t('bk.paySecure')}</p>
@@ -687,7 +727,7 @@ export function BookingFlow() {
             <button onClick={() => setStep(1)}>{t('bk.back')}</button>
             <button
               className="primary"
-              disabled={submitting || !guestName || !phoneOk || !tableId || !timeSlot}
+              disabled={submitting || !guestName || !phoneOk || !acceptedTerms || !tableId || !timeSlot}
               onClick={submit}
             >
               {submitting ? t('bk.processing') : t('bk.pay', { amount: money(totalCents) })}
@@ -695,6 +735,61 @@ export function BookingFlow() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+/** The terms over the booking form: read, then close or agree. */
+function TermsDialog({
+  title,
+  onClose,
+  onAgree,
+}: {
+  title: string;
+  onClose: () => void;
+  onAgree: () => void;
+}) {
+  const { t } = useI18n();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    // The page behind stays put while the terms scroll.
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [onClose]);
+  return (
+    <div className="terms-backdrop" onClick={onClose}>
+      <div
+        className="terms-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="terms-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="terms-dialog-head">
+          <h2 id="terms-dialog-title">{title}</h2>
+          <button type="button" className="terms-dialog-x" onClick={onClose} aria-label={t('bk.termsClose')}>
+            ✕
+          </button>
+        </div>
+        <div className="terms-dialog-body">
+          <TermsBody />
+        </div>
+        <div className="terms-dialog-actions">
+          <button type="button" onClick={onClose}>
+            {t('bk.termsClose')}
+          </button>
+          <button type="button" className="primary" onClick={onAgree} autoFocus>
+            {t('bk.termsAgree')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

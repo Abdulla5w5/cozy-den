@@ -120,6 +120,8 @@ interface InsertParams {
   totalCents: number;
   durationMin: number;
   partySize: number;
+  /** Customer bookings only; staff-entered ones never see the terms. */
+  termsAccepted?: boolean;
 }
 
 const ALREADY_BOOKED = 'That table is already booked for an overlapping session.';
@@ -154,10 +156,11 @@ async function insertBooking(p: InsertParams): Promise<number> {
         `INSERT INTO bookings
            (table_id, booking_date, time_slot, guest_name, guest_email, guest_phone,
             verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
-            duration_min, party_size)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13)
+            duration_min, party_size, terms_accepted_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,
+                 CASE WHEN $14 THEN now() END)
          RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize]
+        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true]
       );
       return rows[0].id;
     } catch (err) {
@@ -217,6 +220,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
     partySize: sitting.partySize,
     status: 'pending_payment',
     source: 'online',
+    termsAccepted: input.acceptedTerms,
     feeCents,
     totalCents: feeCents,
   });
@@ -357,6 +361,7 @@ export async function startBookingCheckout(
     partySize: sitting.partySize,
     status: 'pending_payment',
     source: 'online',
+    termsAccepted: input.acceptedTerms,
     feeCents,
     totalCents: feeCents,
   });

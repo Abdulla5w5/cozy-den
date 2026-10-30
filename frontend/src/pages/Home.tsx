@@ -118,7 +118,7 @@ export function Home() {
           <div className="game-tile tile-blue" aria-hidden="true">
             <span>6</span><b>● ●<br />● ●<br />● ●</b>
           </div>
-          <div className="game-tile tile-yellow" aria-hidden="true">
+          <div className="game-tile tile-green" aria-hidden="true">
             <span>A</span><b>♟</b>
           </div>
           <div className="hero-sticker" aria-hidden="true">400+<small>{t('home.sticker.games')}</small></div>

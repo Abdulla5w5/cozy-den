@@ -30,6 +30,10 @@ export const createBookingSchema = z.object({
   // one. The email only comes from a signed-in account (history, receipt).
   guestPhone: kuwaitPhoneSchema,
   guestEmail: z.string().trim().email().max(200).optional(),
+  // The customer ticked "I agree to the terms" — no booking without it.
+  acceptedTerms: z.literal(true, {
+    errorMap: () => ({ message: 'Please agree to the terms and conditions to book.' }),
+  }),
   durationMin: durationMin.optional(),
   partySize: partySize.optional(),
   // Only the direct (mock) provider uses a client token. The redirect gateway

@@ -1918,9 +1918,9 @@ table.data code {
 [data-theme='dark'] button:hover:not(:disabled),
 [data-theme='dark'] .chip:hover,
 [data-theme='dark'] .chip.active {
-  border-color: var(--tertiary);
+  border-color: var(--green);
   background: #242934;
-  color: var(--tertiary);
+  color: color-mix(in srgb, var(--green) 55%, #fff);
 }
 [data-theme='dark'] .cta.button,
 [data-theme='dark'] button.cta,
@@ -1968,7 +1968,7 @@ table.data code {
 }
 [data-theme='dark'] .code-box {
   border-color: #08090b;
-  background: linear-gradient(135deg, #ffe163, var(--yellow));
+  background: var(--green);
   color: #17120d;
   box-shadow: 5px 5px 0 #050608, 0 0 38px rgba(255, 210, 28, 0.14);
 }
@@ -2077,8 +2077,8 @@ table.data code {
 .add-den {
   border: 2px solid var(--ink);
   border-radius: 11px;
-  background: var(--yellow);
-  color: var(--ink);
+  background: var(--green);
+  color: #fff;
   box-shadow: 3px 3px 0 var(--ink);
 }
 .auth-page {
@@ -2113,8 +2113,8 @@ table.data code {
 }
 .auth-note {
   border: 2px solid var(--ink);
-  background: var(--yellow);
-  color: var(--ink);
+  background: var(--green);
+  color: #fff;
 }
 .promo-backdrop {
   padding: 1.25rem;
@@ -2138,7 +2138,7 @@ table.data code {
   width: 86px;
   height: 86px;
   border: 3px solid var(--ink);
-  background: var(--yellow);
+  background: var(--green);
   clip-path: polygon(50% 0, 62% 20%, 83% 8%, 82% 31%, 100% 39%, 80% 51%, 94% 72%, 70% 70%, 64% 96%, 48% 76%, 27% 94%, 29% 69%, 4% 67%, 23% 49%, 2% 33%, 29% 29%);
 }
 .promo-x {
@@ -2174,11 +2174,9 @@ table.data code {
   padding: 0.25rem 0.65rem;
   border: 2px solid #242424;
   border-radius: 999px;
-  background: var(--yellow);
-  /* Fixed dark ink, not the theme's --ink: in dark mode --ink is a pale cream
-     which reads as low-contrast on the bright yellow badge background. This
-     badge is always yellow regardless of theme, so its text stays fixed too. */
-  color: #242424;
+  background: var(--green);
+  /* White in both themes: the badge is always green. */
+  color: #fff;
   font-family: 'Baloo 2 Local', sans-serif;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -2427,9 +2425,9 @@ table.data code {
 [data-theme='dark'] button:hover:not(:disabled),
 [data-theme='dark'] .chip:hover,
 [data-theme='dark'] .chip.active {
-  border-color: var(--tertiary);
+  border-color: var(--green);
   background: #242934;
-  color: var(--tertiary);
+  color: color-mix(in srgb, var(--green) 55%, #fff);
 }
 [data-theme='dark'] .cta.button,
 [data-theme='dark'] button.cta,
@@ -2483,7 +2481,7 @@ table.data code {
 }
 [data-theme='dark'] .code-box {
   border-color: #08090b;
-  background: linear-gradient(135deg, #ffe163, var(--yellow));
+  background: var(--green);
   color: #17120d;
   box-shadow: 5px 5px 0 #050608, 0 0 38px rgba(255, 210, 28, 0.14);
 }
@@ -3463,6 +3461,11 @@ textarea:focus {
   --blue: #1177ee;
   --yellow: #ffd21c;
   --orange: #f47700;
+  /* The interface accent (client request, Oct 2026): the floor map's table
+     green. Yellow stays for decoration — game tiles, dice, the hero shapes.
+     Text on solid green is white; ink on it is too faint at small sizes. */
+  --green: #2d8b57;
+  --green-tint: #d7ece0;
   --shadow: 7px 7px 0 #242424;
   --shadow-sm: 4px 4px 0 #242424;
 }
@@ -3607,8 +3610,8 @@ textarea {
 .pill,
 .badge,
 .status {
-  background: var(--yellow);
-  color: var(--ink);
+  background: var(--green);
+  color: #fff;
   border: 1.5px solid var(--ink);
   font-family: 'Baloo 2 Local', sans-serif;
   font-weight: 800;
@@ -3674,7 +3677,7 @@ button {
 }
 button:hover:not(:disabled) {
   border-color: var(--ink);
-  background: var(--yellow);
+  background: var(--green-tint);
 }
 input,
 select,
@@ -3735,8 +3738,8 @@ textarea:focus {
   padding: 0.32rem 0.85rem;
   border: 2px solid var(--ink);
   border-radius: 999px;
-  background: var(--yellow);
-  color: var(--ink);
+  background: var(--green);
+  color: #fff;
   box-shadow: 3px 3px 0 var(--ink);
   font-family: 'Baloo 2 Local', sans-serif;
   font-size: 0.72rem;
@@ -3808,6 +3811,7 @@ textarea:focus {
   color: #fff;
 }
 .hero-stage {
+  --hero-frame: 34px;
   position: relative;
   align-self: center;
   min-height: 510px;
@@ -3822,9 +3826,18 @@ textarea:focus {
   border-radius: 50%;
 }
 .hero-stage::before {
-  inset: 8% 4% 4% 5%;
+  /* The logo card's own rounded-square outline, scaled up behind it and
+     turned the other way, so the blue frames the card instead of being a
+     differently shaped oval (client request, scope item 7). */
+  /* Placed from the card's own box (top 16%, left 15%, min(72%, 360px)
+     wide) with an even band of blue all round it. */
+  top: calc(16% - var(--hero-frame));
+  left: calc(15% - var(--hero-frame));
+  width: calc(min(72%, 360px) + 2 * var(--hero-frame));
+  aspect-ratio: 1;
+  border-radius: 40% 46% 42% 38%;
   background: var(--blue);
-  transform: rotate(-5deg);
+  transform: rotate(5deg);
 }
 .hero-stage::after {
   right: 0;
@@ -3905,13 +3918,14 @@ textarea:focus {
   color: #fff;
   transform: rotate(13deg);
 }
-.tile-yellow {
+.tile-green {
   bottom: 1%;
   left: 0;
-  background: var(--yellow);
+  background: var(--green);
+  color: #fff;
   transform: rotate(-12deg);
 }
-.tile-yellow b {
+.tile-green b {
   font-size: 3rem;
 }
 .hero-sticker {
@@ -4051,7 +4065,7 @@ textarea:focus {
   border-radius: 22px;
   transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
-.feature-card:nth-child(4n + 1) .pill { background: var(--yellow); }
+.feature-card:nth-child(4n + 1) .pill { background: var(--yellow); color: #242424; }
 .feature-card:nth-child(4n + 2) .pill { background: var(--orange); color: #fff; }
 .feature-card:nth-child(4n + 3) .pill { background: var(--blue); color: #fff; }
 .feature-card:nth-child(4n) .pill { background: var(--red); color: #fff; }
@@ -4096,8 +4110,8 @@ button.link {
   box-shadow: none;
 }
 .stepper li.done {
-  background: var(--yellow);
-  color: var(--ink);
+  background: var(--green);
+  color: #fff;
 }
 .table-grid,
 .game-grid {
@@ -4161,11 +4175,15 @@ button.link {
   font-family: 'Baloo 2 Local', sans-serif;
   box-shadow: 2px 2px 0 var(--ink);
 }
-.chip:hover,
+.chip:hover {
+  border-color: var(--ink);
+  background: var(--green-tint);
+  color: var(--ink);
+}
 .chip.active {
   border-color: var(--ink);
-  background: var(--yellow);
-  color: var(--ink);
+  background: var(--green);
+  color: #fff;
 }
 .gcard {
   border-radius: 22px;
@@ -4206,11 +4224,14 @@ button.link {
 }
 .code-box {
   border-color: var(--ink);
-  background: var(--yellow);
+  background: var(--green);
   box-shadow: var(--shadow-sm);
 }
+.code-box span {
+  color: rgba(255, 255, 255, 0.85);
+}
 .code-box strong {
-  color: var(--ink);
+  color: #fff;
   text-shadow: none;
 }
 
@@ -4263,8 +4284,8 @@ button.link {
 }
 .cta-band .button {
   z-index: 1;
-  background: var(--yellow);
-  color: var(--ink);
+  background: var(--green);
+  color: #fff;
 }
 .cta-die {
   position: absolute;
@@ -4302,7 +4323,8 @@ button.link {
   color: #cfc7bb;
 }
 .footer-cols h4 {
-  color: var(--yellow);
+  /* The accent green, lightened to read on the dark footer. */
+  color: color-mix(in srgb, var(--green) 55%, #fff);
   font-family: 'Baloo 2 Local', sans-serif;
 }
 .footer-cols a:hover {
@@ -4521,6 +4543,13 @@ button.link {
   .hero-logo-card {
     left: 17%;
     width: 68%;
+  }
+  .hero-stage {
+    --hero-frame: 24px;
+  }
+  .hero-stage::before {
+    left: calc(17% - var(--hero-frame));
+    width: calc(68% + 2 * var(--hero-frame));
   }
   .hero-burst {
     width: 82px;
@@ -4741,7 +4770,8 @@ button.link {
   padding: 0.85rem 1rem 0.85rem 1.15rem;
   border: 2px solid var(--ink);
   border-radius: 18px;
-  background: var(--yellow);
+  background: var(--green);
+  color: #fff;
   box-shadow: 4px 4px 0 var(--ink);
 }
 .booking-date-copy {
@@ -5721,9 +5751,9 @@ button.link {
   margin-bottom: 1rem;
   border: 3px solid var(--ink);
   border-radius: 50% 50% 50% 12px;
-  background: var(--yellow);
+  background: var(--green);
   box-shadow: 5px 5px 0 var(--ink);
-  color: var(--blue);
+  color: #fff;
   font-size: 2.4rem;
   transform: rotate(-45deg);
 }
@@ -6062,7 +6092,8 @@ button.link {
   gap: 0.75rem;
   padding: 1rem 1.1rem 1.15rem;
   border-top: 2px solid var(--ink);
-  background: var(--yellow);
+  background: var(--green);
+  color: #fff;
 }
 .slot-panel-action > div {
   display: grid;
@@ -6364,7 +6395,7 @@ button.link {
   text-decoration: none;
 }
 .menu-jump a:hover {
-  background: var(--yellow);
+  background: var(--green-tint);
   box-shadow: 2px 2px 0 var(--ink);
 }
 .section[id^='menu-'] {
@@ -6619,4 +6650,126 @@ button.link {
 }
 .field .field-hint.is-error {
   color: var(--red);
+}
+
+/* "I agree to the terms" on the checkout step. */
+.terms-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0.5rem 0 1rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.terms-check input {
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+  min-height: 0;
+  margin: 0.12rem 0 0;
+  padding: 0;
+  accent-color: var(--green);
+}
+.terms-check a {
+  color: var(--green);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ============ Terms and conditions page ============ */
+.terms-card {
+  max-width: 760px;
+}
+.terms-section + .terms-section {
+  margin-top: 1.6rem;
+  padding-top: 1.4rem;
+  border-top: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent);
+}
+.terms-section h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.25rem;
+}
+.terms-section p {
+  margin: 0;
+  line-height: 1.65;
+}
+.terms-section ul {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding-inline-start: 1.2rem;
+}
+.terms-section li strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+.terms-closing {
+  margin: 1.8rem 0 0;
+  padding: 0.9rem 1rem;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  background: var(--green);
+  color: #fff;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+/* The terms over the booking form. */
+.terms-backdrop {
+  position: fixed;
+  z-index: 200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(36, 36, 36, 0.55);
+}
+.terms-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 680px);
+  max-height: min(88vh, 820px);
+  border: 2px solid var(--ink);
+  border-radius: 24px;
+  background: var(--surface, #fffaf1);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+.terms-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.3rem 0.9rem;
+  border-bottom: 2px solid var(--ink);
+}
+.terms-dialog-head h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.terms-dialog-x {
+  display: grid;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  min-height: 0;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+}
+.terms-dialog-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.2rem 1.3rem;
+}
+.terms-dialog-body .terms-section h2 {
+  font-size: 1.05rem;
+}
+.terms-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.9rem 1.3rem 1.1rem;
+  border-top: 2px solid var(--ink);
 }

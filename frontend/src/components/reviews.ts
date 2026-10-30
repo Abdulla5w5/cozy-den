@@ -56,4 +56,20 @@ export const GUEST_REVIEWS: GuestReview[] = [
       'The atmosphere is so nice and there are alot of board games it was really enjoyable! We didn’t book in advance and still found a seating on Saturday evening (some days are very busy so make sure to book)',
     scores: { food: 5, service: 5, atmosphere: 5 },
   },
+  {
+    author: 'Hamad Al-Ghanim',
+    localGuide: true,
+    text: 'Amazing atmosphere very friendly with beginners. Would definitely go again',
+    scores: { food: 5, service: 5, atmosphere: 5 },
+  },
+  {
+    author: 'Khaled Alraees',
+    text: 'Its the best place to have quality time with your friends and family totally worth the hype',
+    scores: { food: 5, service: 5, atmosphere: 5 },
+  },
+  {
+    author: 'Fatima Saleh',
+    text: 'Friendly staff, yummy food and drinks, fun games, great vibes, loved everything! 🫶🏻',
+    scores: { food: 5, service: 5, atmosphere: 5 },
+  },
 ];

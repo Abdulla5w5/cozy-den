@@ -297,6 +297,15 @@ const dict: Record<string, { en: string; ar: string }> = {
   'bk.total': { en: 'Total:', ar: 'الإجمالي:' },
   'bk.name': { en: 'Name', ar: 'الاسم' },
   'bk.email': { en: 'Email', ar: 'الإيميل' },
+  'bk.terms1': { en: 'I agree to the', ar: 'أوافق على' },
+  'bk.terms2': { en: 'terms and conditions', ar: 'الشروط والأحكام' },
+  'bk.terms3': {
+    en: '(rescheduling, cancellation and refunds).',
+    ar: '(إعادة الجدولة والإلغاء والاسترداد).',
+  },
+  'bk.termsClose': { en: 'Back to booking', ar: 'رجوع للحجز' },
+  'bk.termsAgree': { en: 'I agree', ar: 'أوافق' },
+  'footer.terms': { en: 'Terms & conditions', ar: 'الشروط والأحكام' },
   'bk.phone': { en: 'Phone number', ar: 'رقم الهاتف' },
   'bk.phoneHint': {
     en: 'An 8-digit Kuwait number. Staff use it to reach you about your booking.',

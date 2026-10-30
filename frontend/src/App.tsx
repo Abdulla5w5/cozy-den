@@ -22,6 +22,7 @@ const SupportThreadPage = lazy(() => import('./pages/SupportPage').then((m) => (
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail').then((m) => ({ default: m.VerifyEmail })));
 const WantedBoard = lazy(() => import('./pages/WantedBoard').then((m) => ({ default: m.WantedBoard })));
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })));
+const TermsPage = lazy(() => import('./pages/TermsPage').then((m) => ({ default: m.TermsPage })));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then((m) => ({ default: m.ForgotPassword })));
 const ResetPassword = lazy(() => import('./pages/ForgotPassword').then((m) => ({ default: m.ResetPassword })));
 
@@ -175,6 +176,7 @@ export function App() {
             <Route path="/events" element={<EventsPage />} />
             <Route path="/wanted" element={<WantedBoard />} />
             <Route path="/about" element={<AboutPage />} />
+            <Route path="/terms" element={<TermsPage />} />
             <Route path="/support" element={<SupportPage />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/support/:id" element={<SupportThreadPage />} />
@@ -241,6 +243,7 @@ export function App() {
                 {t('footer.location')}
               </a>
               <Link to="/support">{t('footer.contact')}</Link>
+              <Link to="/terms">{t('footer.terms')}</Link>
             </div>
             {user?.isStaff && (
               <div>
