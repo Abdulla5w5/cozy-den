@@ -56,6 +56,25 @@ function showcase(games: Game[]): Game[] {
   return [...picked, ...fill].slice(0, SHOWCASE_SIZE);
 }
 
+// The roadmap's track in a 1000 x 170 box, stretched to the board's width: it
+// enters on the left, passes through the four dice (alternately high and low,
+// at the centres of four equal columns) and leaves on the right.
+const ROADMAP_PATH =
+  'M -20 85 C 40 85, 70 48, 125 48 S 300 122, 375 122 S 550 48, 625 48 S 800 122, 875 122 S 980 85, 1020 85';
+
+// Pip positions on a 3 x 3 grid, cells numbered 1-9 left to right, top down.
+const PIPS: Record<number, number[]> = { 1: [5], 2: [3, 7], 3: [3, 5, 7], 4: [1, 3, 7, 9] };
+
+function Die({ value }: { value: number }) {
+  return (
+    <span className="roadmap-die" role="img" aria-label={String(value)}>
+      {Array.from({ length: 9 }, (_, cell) => (
+        <i key={cell} className={PIPS[value].includes(cell + 1) ? 'on' : ''} />
+      ))}
+    </span>
+  );
+}
+
 export function Home() {
   const { t, money, lang } = useI18n();
   const [games, setGames] = useState<Game[]>([]);
@@ -78,7 +97,8 @@ export function Home() {
     ['home.step4', 'home.step4b'],
   ];
 
-  const stepMarks = ['◆', '●', '✦', '★'];
+  // One colour per stop along the roadmap, from the brand palette.
+  const stopColors = ['orange', 'blue', 'green', 'red'];
 
   return (
     <div className="home">
@@ -140,15 +160,27 @@ export function Home() {
           </div>
           <p className="muted">{t('home.howSub')}</p>
         </div>
-        <div className="steps">
-          {steps.map(([title, body], i) => (
-            <div className="step" key={title}>
-              <span className={`step-num step-color-${i + 1}`}>{stepMarks[i]}</span>
-              <span className="step-index">0{i + 1}</span>
-              <h3>{t(title)}</h3>
-              <p className="muted">{t(body)}</p>
-            </div>
-          ))}
+        {/* A game board: a tiled track winds from Start to Game on!, and each
+            step is a die on it showing the step's number in pips. */}
+        <div className="roadmap">
+          <svg className="roadmap-track" viewBox="0 0 1000 170" preserveAspectRatio="none" aria-hidden="true">
+            <path className="roadmap-track-edge" d={ROADMAP_PATH} />
+            <path className="roadmap-track-fill" d={ROADMAP_PATH} />
+            <path className="roadmap-track-tiles" d={ROADMAP_PATH} />
+          </svg>
+          <span className="roadmap-start" aria-hidden="true">{t('home.start')}</span>
+          <ol className="roadmap-stops">
+            {steps.map(([title, body], i) => (
+              <li className={`roadmap-stop stop-${stopColors[i]}`} key={title}>
+                <Die value={i + 1} />
+                <div className="roadmap-card">
+                  <h3>{t(title)}</h3>
+                  <p className="muted">{t(body)}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <span className="roadmap-finish" aria-hidden="true">{t('home.finish')}</span>
         </div>
       </section>
 

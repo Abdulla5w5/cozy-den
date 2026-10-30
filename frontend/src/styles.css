@@ -6773,3 +6773,240 @@ button.link {
   padding: 0.9rem 1.3rem 1.1rem;
   border-top: 2px solid var(--ink);
 }
+
+/* ============ How it works: the roadmap (landing page) ============
+   A game board: a tiled track winds across it from Start to Game on!, and
+   each step is a die standing on the track, its pips the step's number, with
+   the step's card beneath. The track is an SVG stretched to the board's width
+   (strokes keep their thickness); the dice sit at the centres of four equal
+   columns, alternately high and low, where the track passes. On a phone the
+   track turns vertical and runs down the side. */
+.roadmap {
+  --board-pad: clamp(1rem, 2.5vw, 1.75rem);
+  --band: 170px;
+  position: relative;
+  padding: var(--board-pad);
+  border: 3px solid var(--ink);
+  border-radius: 28px;
+  background-color: #fffaf1;
+  background-image:
+    linear-gradient(rgba(36, 36, 36, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(36, 36, 36, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  box-shadow: var(--shadow);
+}
+.roadmap-track {
+  position: absolute;
+  top: var(--board-pad);
+  left: var(--board-pad);
+  width: calc(100% - 2 * var(--board-pad));
+  height: var(--band);
+  overflow: visible;
+  pointer-events: none;
+}
+.roadmap-track path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.roadmap-track-edge {
+  stroke: #242424;
+  stroke-width: 32;
+}
+.roadmap-track-fill {
+  stroke: #fff;
+  stroke-width: 25;
+}
+/* Thin ink cuts across the track: its squares, like a board's. */
+.roadmap-track-tiles {
+  stroke: #242424;
+  stroke-width: 25;
+  stroke-dasharray: 2.5 28;
+}
+[dir='rtl'] .roadmap-track {
+  transform: scaleX(-1);
+}
+.roadmap-start,
+.roadmap-finish {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--board-pad) + 85px);
+  padding: 0.2rem 0.7rem;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 3px 3px 0 var(--ink);
+  font-family: 'Baloo 2 Local', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.roadmap-start {
+  inset-inline-start: 0.5rem;
+  background: #fff;
+  color: #242424;
+  transform: translateY(-50%) rotate(-6deg);
+}
+.roadmap-finish {
+  inset-inline-end: 0.5rem;
+  background: var(--yellow);
+  color: #242424;
+  transform: translateY(-50%) rotate(6deg);
+}
+.roadmap-stops {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.roadmap-stop {
+  position: relative;
+  display: grid;
+  grid-template-rows: var(--band) auto;
+  padding-inline: 0.55rem;
+}
+.stop-orange { --stop: var(--orange); }
+.stop-blue { --stop: var(--blue); }
+.stop-green { --stop: var(--green); }
+.stop-red { --stop: var(--red); }
+/* Centred on the track: 48 and 122 are its high and low points. */
+.roadmap-die {
+  position: absolute;
+  z-index: 2;
+  top: calc(48px - 39px);
+  left: 50%;
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  width: 78px;
+  height: 78px;
+  padding: 11px;
+  border: 3px solid var(--ink);
+  border-radius: 20px;
+  background: var(--stop);
+  box-shadow: 5px 5px 0 var(--ink);
+  transform: translateX(-50%) rotate(-7deg);
+}
+[dir='rtl'] .roadmap-die {
+  transform: translateX(50%) rotate(-7deg);
+  left: auto;
+  right: 50%;
+}
+.roadmap-stop:nth-child(even) .roadmap-die {
+  top: calc(122px - 39px);
+  transform: translateX(-50%) rotate(6deg);
+}
+[dir='rtl'] .roadmap-stop:nth-child(even) .roadmap-die {
+  transform: translateX(50%) rotate(6deg);
+}
+.roadmap-die i {
+  width: 13px;
+  height: 13px;
+  margin: auto;
+  border-radius: 50%;
+}
+.roadmap-die i.on {
+  background: #fff;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.18);
+}
+.roadmap-card {
+  grid-row: 2;
+  height: 100%;
+  padding: 1rem 1.05rem 1.1rem;
+  border: 2px solid var(--ink);
+  border-top: 7px solid var(--stop);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.roadmap-card h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
+}
+.roadmap-card p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+@media (max-width: 960px) and (min-width: 761px) {
+  /* Too narrow for the tags beside the first and last dice. */
+  .roadmap-start,
+  .roadmap-finish {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .roadmap-track {
+    display: none;
+  }
+  .roadmap-start,
+  .roadmap-finish {
+    position: relative;
+    top: auto;
+    display: inline-block;
+    margin-inline-start: 1.1rem;
+    transform: rotate(-4deg);
+  }
+  .roadmap-start {
+    margin-bottom: 1rem;
+  }
+  .roadmap-finish {
+    inset-inline-end: auto;
+    margin-top: 1rem;
+  }
+  .roadmap-stops {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.1rem;
+  }
+  /* The track, now down the side, behind the dice. */
+  .roadmap-stops::before {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    top: -1rem;
+    bottom: -1rem;
+    inset-inline-start: calc(39px - 13px);
+    width: 26px;
+    border: 3px solid var(--ink);
+    background: repeating-linear-gradient(to bottom, #fff 0 26px, #242424 26px 28.5px);
+  }
+  .roadmap-stop {
+    grid-template-columns: 78px minmax(0, 1fr);
+    grid-template-rows: auto;
+    align-items: center;
+    gap: 0.9rem;
+    padding-inline: 0;
+  }
+  .roadmap-die,
+  .roadmap-stop:nth-child(even) .roadmap-die,
+  [dir='rtl'] .roadmap-die,
+  [dir='rtl'] .roadmap-stop:nth-child(even) .roadmap-die {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    transform: rotate(-6deg);
+  }
+  .roadmap-stop:nth-child(even) .roadmap-die {
+    transform: rotate(6deg);
+  }
+  .roadmap-card {
+    grid-row: auto;
+    position: relative;
+    z-index: 1;
+  }
+}
+[data-theme='dark'] .roadmap {
+  border-color: rgba(246, 239, 227, 0.72);
+  background-color: var(--surface-container);
+  background-image:
+    linear-gradient(rgba(246, 239, 227, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(246, 239, 227, 0.05) 1px, transparent 1px);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.76);
+}
+[data-theme='dark'] .roadmap-card {
+  border-color: rgba(246, 239, 227, 0.72);
+  border-top-color: var(--stop);
+  background: var(--surface-container);
+}
