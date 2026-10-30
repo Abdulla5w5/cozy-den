@@ -16,6 +16,7 @@ import {
 import { mailer, formatReceiptEmail, formatStaffBookingAlert } from '../../notifications/mailer';
 import { bookingAlertRecipients } from '../../notifications/staffRecipients';
 import { CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
+import { normalizeKuwaitiPhone } from '../../utils/phone';
 
 // Legacy line items are still surfaced for pre-overhaul bookings; new bookings
 // have none (menu ordering was removed from checkout).
@@ -34,7 +35,9 @@ export interface BookingView {
   date: string;
   timeSlot: string;
   guestName: string;
-  guestEmail: string;
+  /** Absent on a booking made without an account. */
+  guestEmail: string | null;
+  guestPhone: string | null;
   verificationCode: string;
   status: string;
   source: string;
@@ -50,13 +53,15 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function assertTableExists(tableId: number): Promise<{ capacity: number }> {
-  const { rows } = await query<{ id: number; capacity: number }>(
-    'SELECT id, capacity FROM tables WHERE id = $1',
+async function assertTableExists(
+  tableId: number,
+): Promise<{ capacity: number; minParty: number | null }> {
+  const { rows } = await query<{ id: number; capacity: number; min_party: number | null }>(
+    'SELECT id, capacity, min_party FROM tables WHERE id = $1',
     [tableId],
   );
   if (!rows[0]) throw new ApiError(404, 'Table not found.');
-  return { capacity: rows[0].capacity };
+  return { capacity: rows[0].capacity, minParty: rows[0].min_party };
 }
 
 /**
@@ -75,7 +80,7 @@ async function assertTableExists(tableId: number): Promise<{ capacity: number }>
  */
 function resolveSitting(
   timeSlot: string,
-  capacity: number,
+  { capacity, minParty }: { capacity: number; minParty: number | null },
   durationMin?: number,
   partySize?: number,
 ): { durationMin: number; partySize: number; billedSeats: number } {
@@ -83,7 +88,7 @@ function resolveSitting(
   if (!isValidDuration(timeSlot, duration)) {
     throw new ApiError(400, 'That length is not available for the start time you picked.');
   }
-  const party = partySize ?? minSeatsFor(capacity);
+  const party = partySize ?? minSeatsFor(capacity, minParty);
   if (party > capacity) {
     throw new ApiError(400, `That table seats ${capacity}.`);
   }
@@ -91,7 +96,7 @@ function resolveSitting(
   // carries a minimum party. Enforced here rather than only in the form, since
   // seats are what is charged for. The message names the shortfall and points
   // at the way out, because "no" on its own leaves the customer stuck.
-  const floor = minSeatsFor(capacity);
+  const floor = minSeatsFor(capacity, minParty);
   if (party < floor) {
     throw new ApiError(
       400,
@@ -99,7 +104,7 @@ function resolveSitting(
         `Pick a smaller table for ${party}.`,
     );
   }
-  return { durationMin: duration, partySize: party, billedSeats: billableSeats(capacity, party) };
+  return { durationMin: duration, partySize: party, billedSeats: billableSeats(capacity, party, minParty) };
 }
 
 interface InsertParams {
@@ -107,7 +112,8 @@ interface InsertParams {
   date: string;
   timeSlot: string;
   guestName: string;
-  guestEmail: string;
+  guestEmail: string | null;
+  guestPhone: string | null;
   status: 'pending_payment' | 'pending';
   source: 'online' | 'staff_manual';
   feeCents: number;
@@ -146,12 +152,12 @@ async function insertBooking(p: InsertParams): Promise<number> {
     try {
       const { rows } = await query<{ id: number }>(
         `INSERT INTO bookings
-           (table_id, booking_date, time_slot, guest_name, guest_email,
+           (table_id, booking_date, time_slot, guest_name, guest_email, guest_phone,
             verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
             duration_min, party_size)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13)
          RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize]
+        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize]
       );
       return rows[0].id;
     } catch (err) {
@@ -194,9 +200,9 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
   if (slotHasStarted(input.date, input.timeSlot)) {
     throw new ApiError(400, 'That time has already passed. Please pick a later slot.');
   }
-  const { capacity } = await assertTableExists(input.tableId);
+  const table = await assertTableExists(input.tableId);
 
-  const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
+  const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize);
   const feeCents = (
     await quoteBooking(input.date, input.timeSlot, sitting.durationMin, sitting.billedSeats)
   ).totalCents;
@@ -205,7 +211,8 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
     date: input.date,
     timeSlot: input.timeSlot,
     guestName: input.guestName,
-    guestEmail: input.guestEmail,
+    guestEmail: input.guestEmail ?? null,
+    guestPhone: input.guestPhone,
     durationMin: sitting.durationMin,
     partySize: sitting.partySize,
     status: 'pending_payment',
@@ -251,8 +258,11 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
   return view;
 }
 
-// Fire-and-forget receipt; a mail failure must never fail a paid booking.
+// Fire-and-forget receipt; a mail failure must never fail a paid booking. A
+// booking made without an account has no email, and so no receipt: its code is
+// on the confirmation page.
 function sendReceipt(view: BookingView) {
+  if (!view.guestEmail) return;
   const email = formatReceiptEmail(view);
   mailer
     .send({ to: view.guestEmail, subject: email.subject, text: email.text })
@@ -320,7 +330,7 @@ export async function startBookingCheckout(
   if (slotHasStarted(input.date, input.timeSlot)) {
     throw new ApiError(400, 'That time has already passed. Please pick a later slot.');
   }
-  const { capacity } = await assertTableExists(input.tableId);
+  const table = await assertTableExists(input.tableId);
 
   // A retry after a failed payment attempt must not be blocked by the wreckage
   // of that attempt. Runs before the insert, so the window is already free.
@@ -328,11 +338,11 @@ export async function startBookingCheckout(
     tableId: input.tableId,
     date: input.date,
     timeSlot: input.timeSlot,
-    guestEmail: input.guestEmail,
+    guestPhone: input.guestPhone,
   });
   if (alreadyPaid) return { code: alreadyPaid.verificationCode, booking: alreadyPaid };
 
-  const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
+  const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize);
   const feeCents = (
     await quoteBooking(input.date, input.timeSlot, sitting.durationMin, sitting.billedSeats)
   ).totalCents;
@@ -341,7 +351,8 @@ export async function startBookingCheckout(
     date: input.date,
     timeSlot: input.timeSlot,
     guestName: input.guestName,
-    guestEmail: input.guestEmail,
+    guestEmail: input.guestEmail ?? null,
+    guestPhone: input.guestPhone,
     durationMin: sitting.durationMin,
     partySize: sitting.partySize,
     status: 'pending_payment',
@@ -363,7 +374,7 @@ export async function startBookingCheckout(
       description: `Cozy Den table-holding fee, booking #${bookingId}`,
       redirectUrl: base.returnUrl,
       webhookUrl: base.webhookUrl,
-      customer: { name: input.guestName, email: input.guestEmail },
+      customer: { name: input.guestName, email: input.guestEmail, phone: input.guestPhone },
       metadata: { bookingId: String(bookingId), code },
       expiryMinutes: TAP_CHARGE_EXPIRY_MINUTES,
     });
@@ -552,7 +563,7 @@ export async function expireHold(bookingId: number): Promise<boolean> {
  *  - Otherwise the hold is expired, freeing the window immediately so the retry
  *    can proceed.
  *
- * Only ever touches a row with the SAME guest email, so it can never be used to
+ * Only ever touches a row with the SAME guest phone, so it can never be used to
  * knock somebody else off a table. A charge that settles after this is not lost
  * either: finalizeCharge flags a capture against a cancelled booking for staff
  * review rather than swallowing it.
@@ -561,14 +572,14 @@ async function resolveOwnStaleHold(input: {
   tableId: number;
   date: string;
   timeSlot: string;
-  guestEmail: string;
+  guestPhone: string;
 }): Promise<BookingView | null> {
   const { rows } = await query<{ id: number; payment_ref: string | null }>(
     `SELECT id, payment_ref FROM bookings
       WHERE status = 'pending_payment' AND source = 'online'
         AND table_id = $1 AND booking_date = $2 AND time_slot = $3
-        AND lower(guest_email) = lower($4)`,
-    [input.tableId, input.date, input.timeSlot, input.guestEmail],
+        AND guest_phone = $4`,
+    [input.tableId, input.date, input.timeSlot, input.guestPhone],
   );
 
   for (const row of rows) {
@@ -596,15 +607,19 @@ async function resolveOwnStaleHold(input: {
  */
 export async function createStaffBooking(input: StaffCreateBookingInput): Promise<BookingView> {
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
-  const { capacity } = await assertTableExists(input.tableId);
-  const sitting = resolveSitting(input.timeSlot, capacity, input.durationMin, input.partySize);
+  const table = await assertTableExists(input.tableId);
+  const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize);
+  // Staff type whatever the customer gave them. A Kuwait number goes in the
+  // phone column, like an online booking's; anything else stays as before.
+  const phone = normalizeKuwaitiPhone(input.contact);
 
   const bookingId = await insertBooking({
     tableId: input.tableId,
     date: input.date,
     timeSlot: input.timeSlot,
     guestName: input.guestName,
-    guestEmail: input.contact,
+    guestEmail: phone ? null : input.contact,
+    guestPhone: phone,
     status: 'pending',
     source: 'staff_manual',
     feeCents: 0,
@@ -621,7 +636,7 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
 const BOOKING_SELECT = `
   SELECT b.id, b.table_id, t.label AS table_label,
          to_char(b.booking_date, 'YYYY-MM-DD') AS booking_date,
-         b.time_slot, b.guest_name, b.guest_email, b.verification_code, b.status,
+         b.time_slot, b.guest_name, b.guest_email, b.guest_phone, b.verification_code, b.status,
          b.source, b.table_fee_cents, b.total_cents, b.created_at,
          b.duration_min, b.party_size
     FROM bookings b
@@ -634,7 +649,8 @@ interface BookingRow {
   booking_date: string;
   time_slot: string;
   guest_name: string;
-  guest_email: string;
+  guest_email: string | null;
+  guest_phone: string | null;
   verification_code: string;
   status: string;
   source: string;
@@ -696,6 +712,7 @@ function hydrate(row: BookingRow, items: BookingItemView[]): BookingView {
     timeSlot: row.time_slot,
     guestName: row.guest_name,
     guestEmail: row.guest_email,
+    guestPhone: row.guest_phone,
     verificationCode: row.verification_code,
     status: row.status,
     source: row.source,

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isValidStart, MAX_SESSION_MIN, SESSION_MIN, STEP_MIN } from '../../utils/slots';
 import { isoDate } from '../../utils/dates';
+import { kuwaitPhoneSchema } from '../../utils/phone';
 
 // Length is validated against the specific start time in the service layer,
 // where closing time and the table's other bookings are known. Here we only
@@ -25,7 +26,10 @@ export const createBookingSchema = z.object({
     .string()
     .refine(isValidStart, 'timeSlot must be a valid 30-minute start time within opening hours'),
   guestName: z.string().trim().min(1).max(120),
-  guestEmail: z.string().trim().email().max(200),
+  // The phone is how staff reach the customer, so every online booking has
+  // one. The email only comes from a signed-in account (history, receipt).
+  guestPhone: kuwaitPhoneSchema,
+  guestEmail: z.string().trim().email().max(200).optional(),
   durationMin: durationMin.optional(),
   partySize: partySize.optional(),
   // Only the direct (mock) provider uses a client token. The redirect gateway

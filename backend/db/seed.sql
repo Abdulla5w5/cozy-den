@@ -1,14 +1,14 @@
 -- Sample data for local development. Safe to re-run (idempotent-ish via ON CONFLICT / guards).
 
 INSERT INTO tables (label, capacity, is_active) VALUES
-  ('Small Table 1',     4,  TRUE),
-  ('Small Table 2',     5,  TRUE),
+  ('Small Table 1',     5,  TRUE),
+  ('Small Table 2',     4,  TRUE),
   ('Small Table 3',     4,  TRUE),
   ('Big Table 1',       12, TRUE),
   ('Big Table 2',       6,  TRUE),
   ('Big Table 3',       12, TRUE),
   ('Big Table 4 (D&D)', 7,  TRUE),
-  ('Floor Table',       6,  TRUE),
+  ('Floor Table',       7,  TRUE),
   ('PlayStation Corner', 2, TRUE)
 ON CONFLICT (label) DO UPDATE SET
   capacity = EXCLUDED.capacity,

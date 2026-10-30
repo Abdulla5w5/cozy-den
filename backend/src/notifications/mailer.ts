@@ -142,7 +142,8 @@ export function formatReceiptEmail(booking: {
 export function formatStaffBookingAlert(
   booking: {
     guestName: string;
-    guestEmail: string;
+    guestEmail: string | null;
+    guestPhone: string | null;
     date: string;
     timeSlot: string;
     tableLabel: string;
@@ -165,7 +166,9 @@ export function formatStaffBookingAlert(
       `Time:  ${session}`,
       `Table: ${booking.tableLabel}`,
       `Party: ${party}`,
-      `Guest: ${booking.guestName} <${booking.guestEmail}>`,
+      `Guest: ${booking.guestName}`,
+      ...(booking.guestPhone ? [`Phone: ${booking.guestPhone}`] : []),
+      ...(booking.guestEmail ? [`Email: ${booking.guestEmail}`] : []),
       `Paid:  ${money(booking.totalCents)}`,
       ...(dashboardUrl ? ['', `Open the dashboard: ${dashboardUrl}`] : []),
     ].join('\n'),

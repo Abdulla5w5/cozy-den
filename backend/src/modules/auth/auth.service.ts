@@ -38,15 +38,21 @@ function getGoogleClient(): OAuth2Client {
  */
 export async function getAccountFlags(
   userId: number,
-): Promise<{ isStaff: boolean; isAdmin: boolean; emailVerified: boolean }> {
-  const { rows } = await query<{ is_staff: boolean; is_admin: boolean; email_verified: boolean }>(
-    'SELECT is_staff, is_admin, email_verified FROM users WHERE id = $1',
+): Promise<{ isStaff: boolean; isAdmin: boolean; emailVerified: boolean; phone: string | null }> {
+  const { rows } = await query<{
+    is_staff: boolean;
+    is_admin: boolean;
+    email_verified: boolean;
+    phone: string | null;
+  }>(
+    'SELECT is_staff, is_admin, email_verified, phone FROM users WHERE id = $1',
     [userId],
   );
   return {
     isStaff: rows[0]?.is_staff === true,
     isAdmin: rows[0]?.is_admin === true,
     emailVerified: rows[0]?.email_verified === true,
+    phone: rows[0]?.phone ?? null,
   };
 }
 

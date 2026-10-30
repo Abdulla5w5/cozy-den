@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { Booking, TableAvailability } from '../types';
 import { CafeFloorPlan, tablePhoto } from '../components/CafeFloorPlan';
+import { isKuwaitPhone } from '../phone';
 
 // POST /bookings returns one of two shapes: the finished booking (direct/mock
 // provider) or a gateway redirect URL (Tap). One handler covers both.
@@ -25,15 +26,16 @@ const BLOCK_DURATIONS = [SESSION_MIN, SESSION_MIN * 2, SESSION_MIN * 3];
 // Mirrors MIN_SEATS_LADDER in backend/src/utils/pricing.ts: a big table is not
 // worth taking out of service for a pair, so each size takes a minimum party.
 // The server enforces it — this exists so the form can say so before the
-// customer fills in their details and gets refused at the last step.
+// customer fills in their details and gets refused at the last step. A table
+// with its own minimum (the server's `minParty`) uses that instead.
 const MIN_SEATS_LADDER: [number, number][] = [
   [12, 5],
   [8, 4],
   [6, 3],
   [4, 2],
 ];
-const minSeatsFor = (capacity: number) =>
-  MIN_SEATS_LADDER.find(([seats]) => capacity >= seats)?.[1] ?? 1;
+const minSeatsFor = (tb: TableAvailability) =>
+  tb.minParty ?? MIN_SEATS_LADDER.find(([seats]) => tb.capacity >= seats)?.[1] ?? 1;
 
 function slotToMinutes(hhmm: string) {
   const [h, m] = hhmm.split(':').map(Number);
@@ -95,7 +97,7 @@ interface BookingDraft {
   date: string;
   timeSlot: string;
   guestName: string;
-  guestEmail: string;
+  guestPhone: string;
   durationMin: number;
   partySize: number;
 }
@@ -148,7 +150,11 @@ export function BookingFlow() {
   const [partySize, setPartySize] = useState<number>(draft?.partySize ?? 2);
 
   const [guestName, setGuestName] = useState(draft?.guestName ?? '');
-  const [guestEmail, setGuestEmail] = useState(draft?.guestEmail ?? '');
+  const [guestPhone, setGuestPhone] = useState(draft?.guestPhone ?? '');
+  // Only a signed-in customer's: it links the booking to their history and
+  // receives the receipt. A booking without an account goes by phone alone.
+  const [accountEmail, setAccountEmail] = useState<string | undefined>(undefined);
+  const phoneOk = isKuwaitPhone(guestPhone);
   const [submitting, setSubmitting] = useState(false);
 
   // Priced by date on the server (Thu/Fri/Sat and Kuwait national holidays cost
@@ -195,10 +201,11 @@ export function BookingFlow() {
   useEffect(() => {
     // Prefill from the signed-in account so bookings link to their history.
     api
-      .get<{ user: { name: string; email: string } }>('/auth/me')
+      .get<{ user: { name: string; email: string; phone: string | null } }>('/auth/me')
       .then((r) => {
         setGuestName(r.user.name);
-        setGuestEmail(r.user.email);
+        setAccountEmail(r.user.email);
+        if (r.user.phone) setGuestPhone((typed) => typed || r.user.phone!);
       })
       .catch(() => {});
   }, []);
@@ -238,12 +245,12 @@ export function BookingFlow() {
   // of this at checkout — what follows is the customer-facing preview.
   const blocks = Math.max(1, Math.ceil(durationMin / SESSION_MIN));
   const perSeatCents = late ? fee.lateCents : fee.cents * blocks;
-  const minParty = selectedTable ? minSeatsFor(selectedTable.capacity) : 1;
+  const minParty = selectedTable ? minSeatsFor(selectedTable) : 1;
   // Too small a party for this table: the server would refuse the booking, so
   // the panel blocks it here and names the tables that would take them.
   const partyTooSmall = partySize < minParty;
   const fittingTables = availability
-    .filter((tb) => partySize <= tb.capacity && partySize >= minSeatsFor(tb.capacity))
+    .filter((tb) => partySize <= tb.capacity && partySize >= minSeatsFor(tb))
     .map((tb) => tb.label);
   const seats = Math.max(minParty, partySize);
   const totalCents = perSeatCents * seats;
@@ -315,7 +322,8 @@ export function BookingFlow() {
         date,
         timeSlot,
         guestName,
-        guestEmail,
+        guestPhone,
+        guestEmail: accountEmail,
         durationMin,
         partySize,
       });
@@ -324,7 +332,7 @@ export function BookingFlow() {
         // A full navigation, not a route change, so we leave our SPA entirely.
         // Save the selection first so a failed/abandoned payment returns to a
         // ready-to-retry checkout rather than a blank form.
-        saveDraft({ tableId, date, timeSlot, guestName, guestEmail, durationMin, partySize });
+        saveDraft({ tableId, date, timeSlot, guestName, guestPhone, durationMin, partySize });
         window.location.assign(res.redirectUrl);
         return; // keep the spinner up while the browser navigates away
       }
@@ -648,8 +656,20 @@ export function BookingFlow() {
             <input value={guestName} onChange={(e) => setGuestName(e.target.value)} />
           </label>
           <label className="field">
-            {t('bk.email')}
-            <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} />
+            {t('bk.phone')}
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              dir="ltr"
+              placeholder={t('auth.phonePh')}
+              value={guestPhone}
+              onChange={(e) => setGuestPhone(e.target.value)}
+              aria-invalid={guestPhone !== '' && !phoneOk}
+            />
+            <small className={`muted field-hint ${guestPhone !== '' && !phoneOk ? 'is-error' : ''}`}>
+              {guestPhone !== '' && !phoneOk ? t('bk.phoneInvalid') : t('bk.phoneHint')}
+            </small>
           </label>
 
           {payError && (
@@ -667,7 +687,7 @@ export function BookingFlow() {
             <button onClick={() => setStep(1)}>{t('bk.back')}</button>
             <button
               className="primary"
-              disabled={submitting || !guestName || !guestEmail || !tableId || !timeSlot}
+              disabled={submitting || !guestName || !phoneOk || !tableId || !timeSlot}
               onClick={submit}
             >
               {submitting ? t('bk.processing') : t('bk.pay', { amount: money(totalCents) })}

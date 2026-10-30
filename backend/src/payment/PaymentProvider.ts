@@ -39,7 +39,8 @@ export interface RedirectChargeRequest {
   redirectUrl: string;
   /** Server-to-server notification URL (the reliable confirmation path). */
   webhookUrl: string;
-  customer: { name: string; email: string };
+  /** At least one of email and phone (E.164); Tap needs one or the other. */
+  customer: { name: string; email?: string; phone?: string };
   metadata?: Record<string, string>;
   /** Hosted-payment lifetime. Kept shorter than the local table hold. */
   expiryMinutes?: number;

@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { EventItem, Game, MenuItem } from '../types';
 import { GameCard, tileFor } from '../components/GameCard';
+import { ReviewSlider } from '../components/ReviewSlider';
 
 const HOME_ARABIC_CONTENT: Record<string, string> = {
   Abstract: 'تجريدية',
@@ -128,6 +129,8 @@ export function Home() {
           <div className="stat"><strong>{t('home.stat.hours')}</strong><span>{t('home.stat.hoursSub')}</span></div>
         </div>
       </section>
+
+      <ReviewSlider />
 
       <section className="section how-section">
         <div className="section-head">

@@ -8,6 +8,8 @@ export interface TableAvailability {
   tableId: number;
   label: string;
   capacity: number;
+  /** This table's own minimum party; absent or null means the size-based one. */
+  minParty?: number | null;
   freeSlots: string[];
   takenSlots: string[];
   /** Starts already over, per the server's clock. Hidden, not shown as taken. */
@@ -114,7 +116,9 @@ export interface Booking {
   date: string;
   timeSlot: string;
   guestName: string;
-  guestEmail: string;
+  /** Absent on a booking made without an account. */
+  guestEmail: string | null;
+  guestPhone: string | null;
   verificationCode: string;
   status: string;
   source: string;

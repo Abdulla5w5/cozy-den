@@ -13,6 +13,7 @@ const { formatStaffBookingAlert } = require('../dist/src/notifications/mailer.js
 const booking = {
   guestName: 'Fatma Ali',
   guestEmail: 'fatma@example.com',
+  guestPhone: '+96550001234',
   verificationCode: 'CD-7Q4K9',
   date: '2026-10-09',
   timeSlot: '23:00',
@@ -30,8 +31,14 @@ test('the subject says which table, when, and how many', () => {
 test('the body states the paid session, wrapping past midnight', () => {
   const { text } = formatStaffBookingAlert(booking);
   assert.match(text, /Time: {2}23:00–03:00 \(4-hour session\)/);
-  assert.match(text, /Guest: Fatma Ali <fatma@example\.com>/);
+  assert.match(text, /Guest: Fatma Ali\nPhone: \+96550001234\nEmail: fatma@example\.com/);
   assert.match(text, /Paid: {2}KD 13\.50/);
+});
+
+test('a booking made without an account shows the phone and no email line', () => {
+  const { text } = formatStaffBookingAlert({ ...booking, guestEmail: null });
+  assert.match(text, /Phone: \+96550001234/);
+  assert.ok(!text.includes('Email:'));
 });
 
 test('the verification code is never included', () => {

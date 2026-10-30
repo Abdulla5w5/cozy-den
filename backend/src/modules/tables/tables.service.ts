@@ -14,11 +14,12 @@ export interface TableRow {
   id: number;
   label: string;
   capacity: number;
+  min_party: number | null;
 }
 
 export async function getTables(): Promise<TableRow[]> {
   const { rows } = await query<TableRow>(
-    'SELECT id, label, capacity FROM tables WHERE is_active ORDER BY capacity, id'
+    'SELECT id, label, capacity, min_party FROM tables WHERE is_active ORDER BY capacity, id'
   );
   return rows;
 }
@@ -27,6 +28,8 @@ export interface TableAvailability {
   tableId: number;
   label: string;
   capacity: number;
+  /** This table's own minimum party, or null for the size-based one. */
+  minParty: number | null;
   freeSlots: string[];
   takenSlots: string[];
   /**
@@ -118,6 +121,7 @@ export async function getAvailability(
       tableId: t.id,
       label: t.label,
       capacity: t.capacity,
+      minParty: t.min_party,
       freeSlots,
       takenSlots,
       pastSlots,

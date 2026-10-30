@@ -114,6 +114,10 @@ export class TapPaymentProvider implements PaymentProvider {
           first_name: first || 'Guest',
           last_name: restName.join(' ') || undefined,
           email: req.customer.email,
+          // E.164 +965XXXXXXXX -> Tap's split country code and number.
+          phone: req.customer.phone?.startsWith('+965')
+            ? { country_code: '965', number: req.customer.phone.slice(4) }
+            : undefined,
         },
         // src_all presents every method enabled on the account (KNET, cards,
         // Apple Pay, Benefit…) on Tap's hosted page.

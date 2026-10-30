@@ -45,14 +45,18 @@ const MIN_SEATS_LADDER: readonly (readonly [capacity: number, minSeats: number])
   [4, 2],
 ];
 
-/** The smallest party this table accepts — and so the fewest seats it bills. */
-export function minSeatsFor(capacity: number): number {
-  return MIN_SEATS_LADDER.find(([seats]) => capacity >= seats)?.[1] ?? 1;
+/**
+ * The smallest party this table accepts — and so the fewest seats it bills.
+ * A table's own `min_party` (set by migration, e.g. the Floor Table's 2) wins
+ * over the ladder.
+ */
+export function minSeatsFor(capacity: number, minParty?: number | null): number {
+  return minParty ?? MIN_SEATS_LADDER.find(([seats]) => capacity >= seats)?.[1] ?? 1;
 }
 
 /** Seats a booking is billed for: what was asked, or the table's floor. */
-export function billableSeats(capacity: number, partySize: number): number {
-  return Math.max(minSeatsFor(capacity), partySize);
+export function billableSeats(capacity: number, partySize: number, minParty?: number | null): number {
+  return Math.max(minSeatsFor(capacity, minParty), partySize);
 }
 
 export interface TableFee {

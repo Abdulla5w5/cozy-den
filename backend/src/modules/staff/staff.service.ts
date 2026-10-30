@@ -23,7 +23,8 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     verification_code: string;
     time_slot: string;
     guest_name: string;
-    guest_email: string;
+    guest_email: string | null;
+    guest_phone: string | null;
     table_id: number;
     table_label: string;
     status: string;
@@ -32,7 +33,7 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     duration_min: number;
     party_size: number;
   }>(
-    `SELECT b.id, b.verification_code, b.time_slot, b.guest_name, b.guest_email,
+    `SELECT b.id, b.verification_code, b.time_slot, b.guest_name, b.guest_email, b.guest_phone,
             b.table_id, t.label AS table_label, b.status, b.source, b.total_cents,
             b.duration_min, b.party_size
        FROM bookings b
@@ -76,7 +77,8 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     verificationCode: r.verification_code,
     timeSlot: r.time_slot,
     guestName: r.guest_name,
-    guestContact: r.guest_email,
+    // The phone first: it is how the counter reaches a customer.
+    guestContact: r.guest_phone ?? r.guest_email ?? '',
     tableId: r.table_id,
     tableLabel: r.table_label,
     status: r.status,

@@ -25,7 +25,11 @@ export function Confirmation() {
     <div className="card confirmation">
       <div className="check">✅</div>
       <h2>{t('conf.title')}</h2>
-      <p>{t('conf.emailed', { email: booking.guestEmail })}</p>
+      <p>
+        {booking.guestEmail
+          ? t('conf.emailed', { email: booking.guestEmail })
+          : t('conf.phone', { phone: booking.guestPhone ?? '' })}
+      </p>
 
       <div className="code-box">
         <span>{t('conf.show')}</span>

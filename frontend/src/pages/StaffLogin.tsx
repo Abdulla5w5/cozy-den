@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api, ApiError, notifyAuthChanged } from '../api/client';
+import { isKuwaitPhone } from '../phone';
 import { useI18n } from '../i18n';
 
 type Mode = 'login' | 'signup';
@@ -26,13 +27,6 @@ const GOOGLE_CLIENT_ID =
 
 let gisPromise: Promise<void> | null = null;
 
-function isKuwaitPhone(value: string) {
-  const western = value.replace(/[٠-٩۰-۹]/g, (digit) =>
-    String('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'.indexOf(digit) % 10),
-  );
-  const digits = western.replace(/\D/g, '').replace(/^(?:00965|965)/, '');
-  return /^(?:[2569]\d{7}|41\d{6})$/.test(digits);
-}
 /**
  * `locale` on renderButton is ignored — GIS takes its language from the `hl`
  * query param on the script itself, and without it Google falls back to the

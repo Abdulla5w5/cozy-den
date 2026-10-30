@@ -301,7 +301,16 @@ function TodayTab() {
                 <code>{b.verificationCode}</code>
               </td>
               <td>{b.guestName}</td>
-              <td>{b.guestContact}</td>
+              <td>
+                {/* A phone (the usual case for an online booking) dials on tap. */}
+                {b.guestContact.startsWith('+') ? (
+                  <a href={`tel:${b.guestContact}`} className="card-link" dir="ltr">
+                    {b.guestContact}
+                  </a>
+                ) : (
+                  b.guestContact
+                )}
+              </td>
               <td>{b.tableLabel}</td>
               <td>
                 <span className="pill">{t(`source.${b.source}`)}</span>
