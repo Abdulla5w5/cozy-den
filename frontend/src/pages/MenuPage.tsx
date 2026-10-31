@@ -32,8 +32,10 @@ export function MenuPage() {
 
   const sections = useMemo(() => {
     const visible = menu.filter((m) => filter === 'All' || m.category === filter);
-    // Preserve the order the API sends (Foodics' own menu order); Map keeps
-    // first-seen insertion order, so no re-sorting is needed.
+    // Sections keep the order the API sends (Foodics' own menu order — coffee
+    // before mocktails before burgers); Map keeps first-seen insertion order.
+    // Within a section the items are A to Z (the café's list, Oct 2026), by the
+    // name the reader actually sees.
     const grouped = new Map<string, { title: string; category: string; items: MenuItem[] }>();
     for (const m of visible) {
       const key = m.section || m.category;
@@ -48,7 +50,9 @@ export function MenuPage() {
       }
       group.items.push(m);
     }
-    return [...grouped.entries()].map(([key, g]) => ({ key, ...g }));
+    const byName = (a: MenuItem, b: MenuItem) =>
+      itemName(a).localeCompare(itemName(b), ar ? 'ar' : 'en', { numeric: true, sensitivity: 'base' });
+    return [...grouped.entries()].map(([key, g]) => ({ key, ...g, items: [...g.items].sort(byName) }));
   }, [menu, filter, ar, t]);
 
   const filterLabel = (c: Filter) =>

@@ -53,24 +53,27 @@ export function PromoModal() {
   // which matters most on iOS Safari, where it bites hardest.
   return createPortal(
     <div className="promo-backdrop" role="dialog" aria-modal="true" onClick={close}>
-      <div className="promo-card" onClick={(e) => e.stopPropagation()}>
+      {/* A landscape rectangle: the artwork whole on one side (it is usually a
+          square poster with its own text, so it is never cropped or written
+          over), the headline and the button on the other. Stacks on a phone. */}
+      <div
+        className={`promo-card ${promo.image_url ? 'has-media' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <button className="promo-x" onClick={close} aria-label={t('promo.close')}>
           ✕
         </button>
-        <div className={`promo-hero ${promo.image_url ? '' : 'plain'}`}>
-          {promo.image_url && <img className="promo-img" src={promo.image_url} alt="" />}
-          <span className="promo-watermark" aria-hidden="true">
-            Cozy Den
-          </span>
-          <div className="promo-hero-copy">
-            <span className="promo-kicker">{t('promo.kicker')}</span>
-            {promo.text && <h2 className="promo-title">{promo.text}</h2>}
+        {promo.image_url && (
+          <div className="promo-media">
+            <img src={promo.image_url} alt="" />
           </div>
-        </div>
-        <div className="promo-body">
+        )}
+        <div className="promo-content">
+          <span className="promo-label">{t('promo.kicker')}</span>
+          {promo.text && <h2 className="promo-heading">{promo.text}</h2>}
           {promo.link_url &&
             (isInternal ? (
-              <Link to={promo.link_url} className="cta button promo-cta" onClick={close}>
+              <Link to={promo.link_url} className="cta button promo-go" onClick={close}>
                 {promo.link_label || t('ev.seeAll')}
               </Link>
             ) : (
@@ -78,7 +81,7 @@ export function PromoModal() {
                 href={promo.link_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="cta button promo-cta"
+                className="cta button promo-go"
                 onClick={close}
               >
                 {promo.link_label || t('ev.seeAll')}
