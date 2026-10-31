@@ -7399,3 +7399,26 @@ button.link {
 .google-finish .auth-note {
   margin-bottom: 0.9rem;
 }
+
+/* ============ Wanted Board: intro + how-it-works guide ============
+   The page's one-line explanation, larger and in ink rather than the muted
+   grey, then the roadmap guide beneath it. */
+.page-header.left .wb-sub {
+  max-width: 46rem;
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.1rem, 2.2vw, 1.35rem);
+  font-weight: 600;
+  line-height: 1.55;
+}
+.wb-roadmap .roadmap-card p {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+.wb-guide {
+  margin-top: 0;
+}
+[data-theme='dark'] .page-header.left .wb-sub,
+[data-theme='dark'] .wb-roadmap .roadmap-card p {
+  color: var(--text, #f6efe3);
+}

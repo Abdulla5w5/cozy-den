@@ -480,6 +480,28 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Post a game you know and will teach, and gather players. Staff get in touch once a post fills to arrange the day and time.',
     ar: 'انشر لعبة تعرفها وبتعلّمها للربع، واجمع لاعبين. الموظفين بيتواصلون معاكم لما يكتمل العدد لتحديد اليوم والوقت.',
   },
+  'wb.guideKicker': { en: 'New here?', ar: 'أول مرة؟' },
+  'wb.guideTitle': { en: 'How the Wanted Board works', ar: 'شلون تشتغل لوحة الطلبات؟' },
+  'wb.step1': { en: 'Post a game', ar: 'انشر لعبة' },
+  'wb.step1b': {
+    en: 'Sign in, pick a game you know and will teach, and choose the date, length and number of players.',
+    ar: 'سجّل دخولك، اختر لعبة تعرفها وتعلّمها، وحدد التاريخ والمدة وعدد اللاعبين.',
+  },
+  'wb.step2': { en: 'Staff review it', ar: 'الموظفين يراجعونه' },
+  'wb.step2b': {
+    en: 'Our team takes a quick look, then your post goes up on the board.',
+    ar: 'فريقنا يراجع المنشور بسرعة، وبعدها يظهر على اللوحة.',
+  },
+  'wb.step3': { en: 'Players take seats', ar: 'اللاعبين يحجزون' },
+  'wb.step3b': {
+    en: 'Other members reserve a seat each. When the seats are gone, the post is full.',
+    ar: 'الأعضاء يحجزون مقعد لكل واحد. ولما تخلص المقاعد يكتمل المنشور.',
+  },
+  'wb.step4': { en: 'We set the time', ar: 'نحدد الوقت' },
+  'wb.step4b': {
+    en: 'Staff contact everyone to arrange the day and time. Then you play.',
+    ar: 'الموظفين يتواصلون معكم لتحديد اليوم والوقت. وبعدها نلعب.',
+  },
   'wb.postOne': { en: 'Post a game', ar: 'انشر لعبة' },
   'wb.close': { en: 'Cancel', ar: 'إلغاء' },
   'wb.signInToPost': {

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
+import { Roadmap } from '../components/Roadmap';
 import { Game } from '../types';
 
 /**
@@ -121,8 +122,26 @@ export function WantedBoard() {
       <header className="page-header left">
         <span className="eyebrow">{t('wb.eyebrow')}</span>
         <h1>{t('wb.title')}</h1>
-        <p className="muted">{t('wb.sub')}</p>
+        <p className="wb-sub">{t('wb.sub')}</p>
       </header>
+
+      <section className="section wb-guide">
+        <div className="section-head">
+          <div>
+            <span className="section-kicker">{t('wb.guideKicker')}</span>
+            <h2>{t('wb.guideTitle')}</h2>
+          </div>
+        </div>
+        <Roadmap
+          className="wb-roadmap"
+          steps={[
+            ['wb.step1', 'wb.step1b'],
+            ['wb.step2', 'wb.step2b'],
+            ['wb.step3', 'wb.step3b'],
+            ['wb.step4', 'wb.step4b'],
+          ]}
+        />
+      </section>
 
       {note && <p className="muted">{note}</p>}
 
