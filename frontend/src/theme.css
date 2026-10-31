@@ -289,21 +289,8 @@
   background: #171920;
 }
 
-[data-theme='dark'] .auth-page {
-  border-color: rgba(246, 239, 227, 0.78);
-  background:
-    radial-gradient(circle at 10% 12%, rgba(255, 210, 28, 0.76) 0 12%, transparent 12.5%),
-    radial-gradient(circle at 90% 86%, rgba(70, 156, 255, 0.58) 0 18%, transparent 18.5%),
-    linear-gradient(145deg, #8f3d05, #321d16 55%, #12151b);
-  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.82), 0 30px 100px rgba(0, 0, 0, 0.34);
-}
-
-[data-theme='dark'] .auth-stat,
-[data-theme='dark'] .auth-card {
-  border-color: rgba(246, 239, 227, 0.7);
-  background: rgba(18, 20, 27, 0.94);
-  color: var(--ink);
-}
+/* The sign-up page's dark theme (the board ground, solid cards) is set at the
+   end of styles.css, with the rest of that page's design. */
 
 /* RTL is composed independently rather than mechanically mirrored. */
 [dir='rtl'] body,

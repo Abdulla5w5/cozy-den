@@ -28,6 +28,25 @@ const GOOGLE_CLIENT_ID =
 let gisPromise: Promise<void> | null = null;
 
 /**
+ * Whether the page is open inside another app's own browser — the Instagram,
+ * Facebook, Snapchat or TikTok in-app browser, or a bare webview. Google refuses
+ * sign-in there ("disallowed_useragent"), and links to the café are mostly
+ * shared through exactly those apps, so the form says so up front rather than
+ * leaving the button to fail without explanation.
+ */
+function inAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  if (/FBAN|FBAV|FB_IAB|Instagram|Snapchat|TikTok|musical_ly|BytedanceWebview|Line\/|Twitter|LinkedInApp/i.test(ua)) {
+    return true;
+  }
+  // Android webviews carry "; wv)"; an iOS webview has no "Safari" in its agent,
+  // where Safari, Chrome (CriOS) and Firefox (FxiOS) all do.
+  if (/; wv\)/.test(ua)) return true;
+  return /iPhone|iPad|iPod/.test(ua) && !/Safari|CriOS|FxiOS/.test(ua);
+}
+
+/**
  * `locale` on renderButton is ignored — GIS takes its language from the `hl`
  * query param on the script itself, and without it Google falls back to the
  * browser's own UI language, which is how an English visitor ended up with an
@@ -71,6 +90,9 @@ export function StaffLogin() {
   const [gsiReady, setGsiReady] = useState(false);
   // A verified Google credential waiting only on a phone number.
   const [pendingCredential, setPendingCredential] = useState<string | null>(null);
+  const [embedded] = useState(inAppBrowser);
+  const finishRef = useRef<HTMLDivElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
 
   function afterAuth(u: AuthUser) {
     notifyAuthChanged();
@@ -126,11 +148,35 @@ export function StaffLogin() {
         return;
       }
       setPendingCredential(null);
-      setError(e instanceof Error ? e.message : 'Google sign-in failed.');
+      // A rejected or expired credential reads as a fault in the site; say what
+      // happened and what to do instead. Anything else (rate limit, server
+      // down) keeps its own message.
+      setError(
+        e instanceof ApiError && e.status === 401
+          ? t('auth.googleFailed')
+          : e instanceof Error
+            ? e.message
+            : t('auth.googleFailed'),
+      );
     } finally {
       setBusy(false);
     }
   }
+
+  // Errors appear at the top of the card, but the buttons that cause them are at
+  // the bottom — on a phone the message would land out of sight. A jump, not an
+  // animation, as everywhere else on the site.
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: 'center', behavior: 'instant' });
+  }, [error]);
+
+  // The phone prompt appears below the fold on a phone — the Google button is
+  // the last thing on the form — so bring it into view when it does.
+  useEffect(() => {
+    if (pendingCredential) {
+      finishRef.current?.scrollIntoView({ block: 'center', behavior: 'instant' });
+    }
+  }, [pendingCredential]);
 
   const handleCredential = async (resp: { credential: string }) => {
     // Send the number only once it is actually a Kuwait one; a half-typed box
@@ -142,6 +188,29 @@ export function StaffLogin() {
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
     let cancelled = false;
+    // Google draws the button at a fixed pixel width (200-400, 40px tall at
+    // most), so it is sized to the form's width and drawn again if that changes.
+    const draw = () => {
+      const frame = gsiRef.current;
+      if (cancelled || !frame) return;
+      // The frame is hidden until the button exists, so measure the form's width
+      // and take off the frame's own padding and border (14px).
+      const room = frame.parentElement?.clientWidth ?? 320;
+      const width = Math.max(200, Math.min(400, Math.floor(room)) - 14);
+      window.google.accounts.id.renderButton(frame, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        shape: 'pill',
+        text: mode === 'signup' ? 'signup_with' : 'signin_with',
+        width,
+      });
+    };
+    let resizeTimer: number | undefined;
+    const onResize = () => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(draw, 200);
+    };
     loadGis(lang)
       .then(() => {
         if (cancelled || !gsiRef.current) return;
@@ -149,19 +218,15 @@ export function StaffLogin() {
           client_id: GOOGLE_CLIENT_ID,
           callback: handleCredential,
         });
-        window.google.accounts.id.renderButton(gsiRef.current, {
-          type: 'standard',
-          theme: 'outline',
-          size: 'large',
-          shape: 'pill',
-          text: mode === 'signup' ? 'signup_with' : 'signin_with',
-          width: 320,
-        });
+        draw();
+        window.addEventListener('resize', onResize);
         setGsiReady(true);
       })
       .catch(() => setGsiReady(false));
     return () => {
       cancelled = true;
+      window.clearTimeout(resizeTimer);
+      window.removeEventListener('resize', onResize);
     };
     // Re-render so the button label tracks sign-in vs sign-up.
   }, [mode, lang]);
@@ -179,23 +244,23 @@ export function StaffLogin() {
 
   return (
     <div className="auth-page">
-      <span className="auth-blob one" />
-      <span className="auth-blob two" />
-
       <div className="auth-editorial">
+        {/* The same stacked, three-colour headline as the home page. */}
         <h1>
-          {t('auth.h1a')} <span className="glow">{t('auth.h1b')}</span> {t('auth.h1c')}
+          <span className="auth-h-ink">{t('auth.h1a')}</span>
+          <span className="auth-h-blue">{t('auth.h1b')}</span>
+          <span className="auth-h-orange">{t('auth.h1c')}</span>
         </h1>
         <p className="hero-sub">{t('auth.sub')}</p>
         <div className="auth-stats">
-          <div className="auth-stat">
+          <div className="auth-stat auth-stat-orange">
             <span className="ico">🎲</span>
             <div>
               <div className="k">{t('auth.stat1k')}</div>
               <div className="v">{t('auth.stat1v')}</div>
             </div>
           </div>
-          <div className="auth-stat">
+          <div className="auth-stat auth-stat-blue">
             <span className="ico">👥</span>
             <div>
               <div className="k">{t('auth.stat2k')}</div>
@@ -203,6 +268,16 @@ export function StaffLogin() {
             </div>
           </div>
         </div>
+        {/* Game pieces, as on the home page: a die and a playing card. */}
+        <span className="auth-die" aria-hidden="true">
+          {Array.from({ length: 9 }, (_, cell) => (
+            <i key={cell} className={[1, 3, 5, 7, 9].includes(cell + 1) ? 'on' : ''} />
+          ))}
+        </span>
+        <span className="auth-card-piece" aria-hidden="true">
+          <b>A</b>
+          <em>♠</em>
+        </span>
       </div>
 
       <div className="auth-card">
@@ -223,8 +298,14 @@ export function StaffLogin() {
           </button>
         </div>
 
-        {error && <div className="alert error">{error}</div>}
-        {note && <div className="auth-note">{note}</div>}
+        {error && (
+          <div className="alert error" ref={errorRef}>
+            {error}
+          </div>
+        )}
+        {/* While a Google sign-up waits on its phone number, the explanation sits
+            with the field it is about (below), not up here out of sight. */}
+        {note && !pendingCredential && <div className="auth-note">{note}</div>}
 
         <form onSubmit={onSubmit}>
           <div className="auth-field">
@@ -319,7 +400,8 @@ export function StaffLogin() {
           </div>
 
           {pendingCredential && (
-            <div className="auth-field google-finish">
+            <div className="auth-field google-finish" ref={finishRef}>
+              <div className="auth-note">{t('auth.googleNeedsPhone')}</div>
               <label>{t('auth.phone')}</label>
               <div className="auth-input">
                 <span className="ico">📱</span>
@@ -355,7 +437,9 @@ export function StaffLogin() {
           )}
 
           <div className="auth-social single">
-            <div ref={gsiRef} />
+            {/* Google's own button, framed to match the form's fields. */}
+            <div ref={gsiRef} className={`auth-google-frame ${gsiReady ? 'ready' : ''}`} />
+            {embedded && <p className="auth-hint">{t('auth.openInBrowser')}</p>}
             {!gsiReady && (
             <button type="button" onClick={() => setNote(t('auth.socialSoon'))} className="google-btn">
               <svg className="google-g" viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">

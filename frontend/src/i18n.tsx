@@ -433,6 +433,14 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Almost there — add your Kuwait phone number to finish creating your account.',
     ar: 'باقي خطوة — أضيفوا رقم هاتفكم الكويتي عشان نكمل إنشاء الحساب.',
   },
+  'auth.googleFailed': {
+    en: "Google sign-in didn't go through. Please try again, or use your email and password.",
+    ar: 'ما تمّ تسجيل الدخول عبر جوجل. حاولوا مرة ثانية أو استخدموا الإيميل وكلمة المرور.',
+  },
+  'auth.openInBrowser': {
+    en: "Google sign-in can't open inside this app's browser. Open this page in Safari or Chrome, or use your email above.",
+    ar: 'تسجيل الدخول عبر جوجل ما يشتغل داخل متصفح هالتطبيق. افتحوا الصفحة في سفاري أو كروم، أو استخدموا الإيميل فوق.',
+  },
   'auth.googleFinish': { en: 'Finish signing up', ar: 'أكملوا التسجيل' },
   'auth.quick': { en: 'Quick Connect', ar: 'دخول سريع' },
   'auth.google': { en: 'Google', ar: 'جوجل' },
