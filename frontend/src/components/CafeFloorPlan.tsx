@@ -36,7 +36,7 @@ const ORANGE = '#f47700';
 // mirrored here for the table to stay where it physically is.
 const FLOOR_PLACEMENTS: Record<string, FloorPlacement> = {
   // The two green squares are the same kind of table and share one photograph.
-  'Small Table 1': { x: 80, y: 50, shape: 'square', color: GREEN, angle: 1, photo: '/tables/green-square.webp' },
+  'Small Table 1': { x: 79, y: 58, shape: 'square', color: GREEN, angle: 1, photo: '/tables/green-square.webp' },
   'Small Table 2': { x: 52, y: 39, shape: 'square', color: GREEN, angle: 0, photo: '/tables/green-square.webp' },
   'Small Table 3': { x: 65, y: 18, shape: 'square', color: RED, angle: -1, photo: '/tables/red-square.webp' },
   'Big Table 1': { x: 72, y: 82, shape: 'wide', color: GREEN, angle: 0, photo: '/tables/green-rectangle.webp' },
@@ -44,7 +44,7 @@ const FLOOR_PLACEMENTS: Record<string, FloorPlacement> = {
   'Big Table 3': { x: 38, y: 18, shape: 'wide', color: RED, angle: 0, photo: '/tables/red-rectangle.webp' },
   'Big Table 4 (D&D)': { x: 20, y: 80, shape: 'hall', color: BLACK, angle: 0, photo: '/tables/dnd-table.webp' },
   'Floor Table': { x: 85, y: 19, shape: 'round', color: BROWN, angle: 0, photo: '/tables/floor-table.webp' },
-  'PlayStation Corner': { x: 92, y: 67.5, shape: 'corner', color: ORANGE, angle: 0, photo: '/tables/playstation-corner.webp' },
+  'PlayStation Corner': { x: 92, y: 43, shape: 'corner', color: ORANGE, angle: 0, photo: '/tables/playstation-corner.webp' },
 };
 
 const CORNER_LABEL = 'PlayStation Corner';

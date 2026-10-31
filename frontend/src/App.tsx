@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { api, notifyAuthChanged, AUTH_CHANGED } from './api/client';
+import { COMMUNITY_URL } from './community';
 import { useI18n } from './i18n';
 import { Home } from './pages/Home';
 import { PromoModal } from './components/PromoModal';
@@ -241,6 +242,13 @@ export function App() {
                 rel="noopener noreferrer"
               >
                 {t('footer.location')}
+              </a>
+              <a
+                href={COMMUNITY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t('footer.community')}
               </a>
               <Link to="/support">{t('footer.contact')}</Link>
               <Link to="/terms">{t('footer.terms')}</Link>

@@ -48,6 +48,12 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Board games, great food, and good company — nightly.',
     ar: 'ألعاب بورد، أكل يونس، وجمعة حلوة — كل ليلة.',
   },
+  'home.community': { en: 'Join our WhatsApp community', ar: 'انضم لمجتمعنا على واتساب' },
+  'home.communitySub': {
+    en: 'Find players, hear about events and get the news first.',
+    ar: 'دوّر لاعبين، وتابع الفعاليات، وكن أول من يعرف الجديد.',
+  },
+  'footer.community': { en: 'WhatsApp community', ar: 'مجتمع واتساب' },
   'footer.visit': { en: 'Visit', ar: 'زورونا' },
   'footer.book': { en: 'Book a table', ar: 'احجز طاولة' },
   'footer.library': { en: 'Game library', ar: 'مكتبة الألعاب' },

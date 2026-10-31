@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { COMMUNITY_URL } from '../community';
 import { useI18n } from '../i18n';
 import { EventItem, Game, MenuItem } from '../types';
 import { GameCard, tileFor } from '../components/GameCard';
@@ -246,9 +247,15 @@ export function Home() {
         <span className="cta-die" aria-hidden="true">●<br />● ●<br />● ●</span>
         <h2>{t('home.ctaLine1')}<br />{t('home.ctaLine2')}</h2>
         <p className="muted">{t('home.ctaSub')}</p>
-        <Link to="/book" className="cta button">
-          {t('home.book')} {lang === 'ar' ? '←' : '→'}
-        </Link>
+        <div className="cta-actions">
+          <Link to="/book" className="cta button">
+            {t('home.book')} {lang === 'ar' ? '←' : '→'}
+          </Link>
+          <a className="ghost button" href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer">
+            {t('home.community')} <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+        <p className="cta-community-note">{t('home.communitySub')}</p>
       </section>
     </div>
   );

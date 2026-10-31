@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
+import { COMMUNITY_URL } from '../community';
 import { useI18n } from '../i18n';
 import { Booking } from '../types';
 
@@ -51,9 +52,14 @@ export function Confirmation() {
         </p>
       </div>
 
-      <Link to="/" className="cta button">
-        {t('conf.another')}
-      </Link>
+      <div className="conf-actions">
+        <Link to="/" className="cta button">
+          {t('conf.another')}
+        </Link>
+        <a className="ghost button" href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer">
+          {t('home.community')} <span aria-hidden="true">↗</span>
+        </a>
+      </div>
     </div>
   );
 }

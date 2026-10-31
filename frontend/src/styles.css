@@ -5058,8 +5058,8 @@ button.link {
   box-shadow: 2px 2px 0 rgba(36, 36, 36, 0.45);
 }
 .floor-domino-prop {
-  right: 14%;
-  top: 65%;
+  right: 8%;
+  top: 70%;
   display: grid;
   width: 3.6cqw;
   aspect-ratio: 24 / 46;
@@ -7421,4 +7421,26 @@ button.link {
 [data-theme='dark'] .page-header.left .wb-sub,
 [data-theme='dark'] .wb-roadmap .roadmap-card p {
   color: var(--text, #f6efe3);
+}
+
+/* Landing page's closing banner: Book plus the WhatsApp community. */
+.cta-band .cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+}
+.cta-band .cta-community-note {
+  margin: 0.9rem 0 0;
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+/* Booking confirmation: back home, plus the WhatsApp community. */
+.confirmation .conf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
 }
