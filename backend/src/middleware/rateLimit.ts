@@ -86,6 +86,20 @@ export const bookingLimiter = failOpen(
   })
 );
 
+// Promo code checks, apart from bookings so a customer comparing dates with a
+// code applied never runs out of checkout attempts. Still tight enough that
+// codes cannot be guessed by the thousand.
+export const promoLimiter = failOpen(
+  rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 40,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: redisStore('rl:promo:'),
+    message: { error: 'Too many code checks, please try again shortly.' },
+  })
+);
+
 // Cap on login/registration to blunt credential-stuffing / brute force.
 // 13 per 15 min: enough headroom for a customer fumbling a password or a typo'd
 // email a few times, still far below what a brute-force run needs.

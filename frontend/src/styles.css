@@ -7561,3 +7561,68 @@ button.link {
   gap: 0.6rem;
   align-items: center;
 }
+
+/* Newcomer code pop-up (item 31) */
+.newcomer-banner {
+  position: fixed;
+  inset-inline-end: 1rem;
+  bottom: 1rem;
+  z-index: 90;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1.1rem 1.2rem 1rem;
+  border-radius: 16px;
+  background: var(--surface-container);
+  color: var(--ink);
+  border: 2px solid var(--accent);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  animation: newcomer-in 0.35s ease-out;
+}
+.newcomer-banner strong {
+  display: block;
+  font-size: 1.15rem;
+  margin-bottom: 0.3rem;
+}
+.newcomer-banner p {
+  margin: 0 0 0.8rem;
+  line-height: 1.45;
+}
+.newcomer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.newcomer-actions code {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 0.3rem 0.6rem;
+  border: 1.5px dashed var(--accent);
+  border-radius: 8px;
+}
+.newcomer-x {
+  position: absolute;
+  top: 0.5rem;
+  inset-inline-end: 0.6rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+@keyframes newcomer-in {
+  from {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .newcomer-banner {
+    animation: none;
+  }
+}
+@media (max-width: 600px) {
+  .newcomer-banner {
+    inset-inline: 1rem;
+    width: auto;
+  }
+}

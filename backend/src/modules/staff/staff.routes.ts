@@ -407,7 +407,7 @@ const codeBody = z.object({
   code: z
     .string()
     .trim()
-    .min(3)
+    .min(6)
     .max(40)
     .regex(/^[A-Za-z0-9_-]+$/, 'Letters, numbers, - and _ only'),
   minParty: z.number().int().min(1).max(100).default(6),

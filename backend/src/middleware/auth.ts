@@ -79,6 +79,18 @@ async function loadSession(req: Request): Promise<Session | null> {
   };
 }
 
+/** Signed in or not: sets req.user when there is a valid session, and lets
+ *  the request through either way. */
+export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const session = await loadSession(req);
+    if (session) req.user = session.claims;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
 /** Any authenticated user. */
 export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
   try {

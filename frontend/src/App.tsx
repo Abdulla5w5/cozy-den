@@ -6,6 +6,7 @@ import { useI18n } from './i18n';
 import { Home } from './pages/Home';
 import { PromoModal } from './components/PromoModal';
 import { VerifyBanner } from './components/VerifyBanner';
+import { NewcomerBanner } from './components/NewcomerBanner';
 
 // The home shell is eager; secondary and staff pages load only when visited.
 // This keeps staff/admin code out of every customer's initial browser heap and
@@ -111,6 +112,7 @@ export function App() {
   return (
     <div className="app">
       <PromoModal />
+      {!user?.isStaff && <NewcomerBanner loggedIn={loggedIn} authKey={authTick} />}
       {loggedIn && user && !user.emailVerified && !user.isStaff && (
         <VerifyBanner email={user.email} />
       )}

@@ -132,6 +132,8 @@ interface InsertParams {
   termsAccepted?: boolean;
   /** The group promo code the price was worked out with, if any. */
   promoCode?: string | null;
+  /** Took a newcomer discount — at most one per customer (migration 045). */
+  newcomerDiscount?: boolean;
 }
 
 const ALREADY_BOOKED = 'That table is already booked for an overlapping session.';
@@ -166,17 +168,20 @@ async function insertBooking(p: InsertParams): Promise<number> {
         `INSERT INTO bookings
            (table_id, booking_date, time_slot, guest_name, guest_email, guest_phone,
             verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
-            duration_min, party_size, terms_accepted_at, promo_code)
+            duration_min, party_size, terms_accepted_at, promo_code, newcomer_discount)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,
-                 CASE WHEN $14 THEN now() END, $15)
+                 CASE WHEN $14 THEN now() END, $15, $16)
          RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null]
+        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true]
       );
       return rows[0].id;
     } catch (err) {
       const e = err as { code?: string; constraint?: string };
       if (e.code === '23P01' && e.constraint === 'bookings_no_overlap') {
         throw new ApiError(409, ALREADY_BOOKED);
+      }
+      if (e.code === '23505' && e.constraint?.startsWith('bookings_newcomer_')) {
+        throw new ApiError(400, 'This code is for your first booking only.');
       }
       if (e.code === '23505') continue; // verification_code collision — retry
       if (e.code === '40P01' || e.code === '40001') {
@@ -203,7 +208,10 @@ async function insertBooking(p: InsertParams): Promise<number> {
  *   3. Success -> 'pending' (awaiting arrival); decline -> 'cancelled' (frees
  *      the window) and 402.
  */
-export async function createBooking(input: CreateBookingInput): Promise<BookingView> {
+export async function createBooking(
+  input: CreateBookingInput,
+  account?: { sub: number; email: string },
+): Promise<BookingView> {
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
   // The date check alone let any slot on today through, hours after it began.
   // The availability list already hides these; this is the rule itself, for a
@@ -218,13 +226,24 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
     maxParty: MAX_PARTY,
   });
-  const promoCode = await resolvePromoCode(input.promoCode, sitting.partySize);
+  const promo = await resolvePromoCode(
+    input.promoCode,
+    sitting.partySize,
+    account,
+    input.guestPhone,
+  );
+  if (promo?.kind === 'newcomer' && account) {
+    await releaseOwnNewcomerHolds(account.email, input.guestPhone);
+  }
   const quote = await quoteBooking(
     input.date,
     input.timeSlot,
     sitting.durationMin,
     sitting.billedSeats,
-    { group: promoCode !== null },
+    {
+      group: promo?.kind === 'group',
+      percentOff: promo?.kind === 'newcomer' ? (promo.percentOff ?? 0) : 0,
+    },
   );
   const feeCents = quote.totalCents;
   const bookingId = await insertBooking({
@@ -232,7 +251,9 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
     date: input.date,
     timeSlot: input.timeSlot,
     guestName: input.guestName,
-    guestEmail: input.guestEmail ?? null,
+    // A newcomer code is tied to the account, so its booking is too — or the
+    // same account could use it again.
+    guestEmail: promo?.kind === 'newcomer' && account ? account.email : (input.guestEmail ?? null),
     guestPhone: input.guestPhone,
     durationMin: sitting.durationMin,
     partySize: sitting.partySize,
@@ -240,7 +261,8 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
     source: 'online',
     termsAccepted: input.acceptedTerms,
     // Only recorded when it actually changed the price.
-    promoCode: quote.group ? promoCode : null,
+    promoCode: quote.group || quote.percentOff > 0 ? promo?.code : null,
+    newcomerDiscount: quote.percentOff > 0,
     feeCents,
     totalCents: feeCents,
   });
@@ -341,6 +363,7 @@ export interface CheckoutStart {
 export async function startBookingCheckout(
   input: CreateBookingInput,
   base: { returnUrl: string; webhookUrl: string },
+  account?: { sub: number; email: string },
 ): Promise<CheckoutStart> {
   if (!paymentProvider.createCharge || !paymentProvider.retrieveCharge) {
     throw new ApiError(500, 'Configured payment provider does not support redirect checkout.');
@@ -369,13 +392,24 @@ export async function startBookingCheckout(
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
     maxParty: MAX_PARTY,
   });
-  const promoCode = await resolvePromoCode(input.promoCode, sitting.partySize);
+  const promo = await resolvePromoCode(
+    input.promoCode,
+    sitting.partySize,
+    account,
+    input.guestPhone,
+  );
+  if (promo?.kind === 'newcomer' && account) {
+    await releaseOwnNewcomerHolds(account.email, input.guestPhone);
+  }
   const quote = await quoteBooking(
     input.date,
     input.timeSlot,
     sitting.durationMin,
     sitting.billedSeats,
-    { group: promoCode !== null },
+    {
+      group: promo?.kind === 'group',
+      percentOff: promo?.kind === 'newcomer' ? (promo.percentOff ?? 0) : 0,
+    },
   );
   const feeCents = quote.totalCents;
   const bookingId = await insertBooking({
@@ -383,7 +417,9 @@ export async function startBookingCheckout(
     date: input.date,
     timeSlot: input.timeSlot,
     guestName: input.guestName,
-    guestEmail: input.guestEmail ?? null,
+    // A newcomer code is tied to the account, so its booking is too — or the
+    // same account could use it again.
+    guestEmail: promo?.kind === 'newcomer' && account ? account.email : (input.guestEmail ?? null),
     guestPhone: input.guestPhone,
     durationMin: sitting.durationMin,
     partySize: sitting.partySize,
@@ -391,7 +427,8 @@ export async function startBookingCheckout(
     source: 'online',
     termsAccepted: input.acceptedTerms,
     // Only recorded when it actually changed the price.
-    promoCode: quote.group ? promoCode : null,
+    promoCode: quote.group || quote.percentOff > 0 ? promo?.code : null,
+    newcomerDiscount: quote.percentOff > 0,
     feeCents,
     totalCents: feeCents,
   });
@@ -633,6 +670,33 @@ async function resolveOwnStaleHold(input: {
     await expireHold(row.id);
   }
   return null;
+}
+
+/**
+ * Before a newcomer checkout: settle this customer's own unfinished newcomer
+ * checkouts — a Tap page they backed out of for another table, say — so the
+ * once-only rule (migration 045) does not refuse the retry until the sweep
+ * gets to it. Paid after all: kept, and the rule then refuses this one.
+ */
+async function releaseOwnNewcomerHolds(email: string, phone: string): Promise<void> {
+  const { rows } = await query<{ id: number; payment_ref: string | null }>(
+    `SELECT id, payment_ref FROM bookings
+      WHERE status = 'pending_payment' AND source = 'online' AND newcomer_discount
+        AND (lower(guest_email) = lower($1) OR guest_phone = $2)`,
+    [email, phone],
+  );
+  for (const row of rows) {
+    if (row.payment_ref?.startsWith('chg_') && paymentProvider.retrieveCharge) {
+      try {
+        const { outcome } = await finalizeCharge(row.payment_ref, 'reconcile');
+        if (outcome === 'paid' || outcome === 'review') continue;
+      } catch (err) {
+        console.error('[checkout] could not re-check an abandoned newcomer charge', err);
+        continue;
+      }
+    }
+    await expireHold(row.id);
+  }
 }
 
 /**

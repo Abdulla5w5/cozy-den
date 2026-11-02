@@ -157,8 +157,15 @@ interface GroupFee {
 }
 interface AppliedPromo {
   code: string;
+  /** group: the group prices for a big party; newcomer: a percentage off a
+   *  signed-in member's first booking. */
+  kind: 'group' | 'newcomer';
   minParty: number;
-  /** Null on a holiday priced by hand: the code does nothing that day. */
+  percentOff: number | null;
+  /** Why the server will not take a newcomer code; null when it will. */
+  refusal: 'sign_in' | 'verify_email' | 'first_only' | null;
+  /** A group code's prices; null on a holiday priced by hand, before staff
+   *  set them, or for a newcomer code. */
   fee: GroupFee | null;
 }
 
@@ -308,13 +315,21 @@ export function BookingFlow() {
   // they never bill fewer seats than that. The server recomputes all of this
   // at checkout — what follows is the customer-facing preview.
   const normalPerSeat = late ? fee.lateCents : perSeatForLength(fee, durationMin);
-  // The group price only for a party big enough for the code, never dearer
-  // than the normal price — the same rule checkout applies.
-  const promoApplies = !!promo?.fee && !late && partySize >= (promo?.minParty ?? Infinity);
+  // The same rules checkout applies. A group code: the group price for a
+  // party big enough, never dearer than the normal one. A newcomer code: a
+  // percentage off, except on the flat six-hour price — offers do not stack.
+  const flatSixHours = !late && durationMin === 360 && fee.sixHourCents !== null;
+  const groupApplies =
+    promo?.kind === 'group' && !!promo.fee && !late && partySize >= promo.minParty;
+  const newcomerApplies =
+    promo?.kind === 'newcomer' && !promo.refusal && !flatSixHours && !!promo.percentOff;
   const perSeatCents =
-    promoApplies && promo?.fee
+    groupApplies && promo?.fee
       ? Math.min(normalPerSeat, groupPerSeat(promo.fee, durationMin))
-      : normalPerSeat;
+      : newcomerApplies && promo?.percentOff
+        ? Math.round((normalPerSeat * (100 - promo.percentOff)) / 100)
+        : normalPerSeat;
+  const promoApplies = perSeatCents < normalPerSeat;
   const minParty = selectedTable ? minSeatsFor(selectedTable) : 1;
   // Too small a party for this table: the server would refuse the booking, so
   // the panel blocks it here and names the tables that would take them.
@@ -386,10 +401,11 @@ export function BookingFlow() {
 
   // Group prices depend on the day, so a code applied for one date is checked
   // again for another.
+  // Signing in changes whether a newcomer code may be used.
   useEffect(() => {
     if (promo) void applyPromo(promo.code);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date]);
+  }, [date, accountEmail]);
 
   async function applyPromo(code: string) {
     setPromoError(null);
@@ -784,7 +800,23 @@ export function BookingFlow() {
               <button type="submit">{t('bk.promoApply')}</button>
             </form>
             {promoError && <p className="field-hint is-error">{promoError}</p>}
-            {promo && (
+            {promo?.kind === 'newcomer' && (
+              <p className={`field-hint ${promo.refusal ? 'is-error' : 'muted'}`}>
+                {promo.refusal === 'sign_in'
+                  ? t('bk.promoSignIn')
+                  : promo.refusal === 'verify_email'
+                    ? t('bk.promoVerify')
+                    : promo.refusal
+                      ? t('bk.promoFirstOnly')
+                      : flatSixHours
+                        ? t('bk.promoNotSixHour')
+                        : t('bk.promoNewcomer', {
+                            code: promo.code,
+                            n: String(promo.percentOff ?? 0),
+                          })}
+              </p>
+            )}
+            {promo?.kind === 'group' && (
               <p className="muted field-hint">
                 {!promo.fee
                   ? t('bk.promoNotToday')
@@ -792,7 +824,7 @@ export function BookingFlow() {
                     ? t('bk.promoTooSmall', { n: String(promo.minParty) })
                     : late
                       ? t('bk.promoNotLate')
-                      : perSeatCents < normalPerSeat
+                      : promoApplies
                         ? t('bk.promoApplied', { code: promo.code })
                         : t('bk.promoSamePrice', { code: promo.code })}
               </p>

@@ -301,7 +301,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'bk.none': { en: 'None', ar: 'بدون' },
   'bk.tableFee': { en: 'Table reservation fee', ar: 'رسوم حجز الطاولة' },
   'bk.total': { en: 'Total:', ar: 'الإجمالي:' },
-  'bk.promo': { en: 'Group promo code', ar: 'كود خصم المجموعات' },
+  'bk.promo': { en: 'Promo code', ar: 'كود الخصم' },
   'bk.promoApply': { en: 'Apply', ar: 'تطبيق' },
   'bk.promoInvalid': { en: 'That code isn’t valid.', ar: 'الكود غير صحيح.' },
   'bk.promoApplied': {
@@ -311,6 +311,26 @@ const dict: Record<string, { en: string; ar: string }> = {
   'bk.promoSamePrice': {
     en: 'Code {code} accepted, but it doesn’t lower the price for this day and length.',
     ar: 'الكود {code} مقبول، بس ما يغيّر السعر لهذا اليوم وهذه المدة.',
+  },
+  'bk.promoNewcomer': {
+    en: 'Code {code} applied — {n}% off your first booking.',
+    ar: 'تم تطبيق الكود {code} — خصم {n}٪ على أول حجز.',
+  },
+  'bk.promoSignIn': {
+    en: 'This code is for new members. Sign in or create an account to use it.',
+    ar: 'هذا الكود للأعضاء الجدد. سجّل دخولك أو أنشئ حساب عشان تستخدمه.',
+  },
+  'bk.promoVerify': {
+    en: 'Verify your email to use this code — check your inbox for the link.',
+    ar: 'أكّد إيميلك عشان تستخدم هذا الكود — شوف الرابط في بريدك.',
+  },
+  'bk.promoFirstOnly': {
+    en: 'This code is for your first booking only.',
+    ar: 'هذا الكود لأول حجز فقط.',
+  },
+  'bk.promoNotSixHour': {
+    en: 'This code doesn’t apply to the 6-hour offer — offers can’t be combined.',
+    ar: 'هذا الكود ما يشمل عرض الست ساعات — العروض ما تنجمع.',
   },
   'bk.promoTooSmall': {
     en: 'This code is for groups of {n} or more.',
@@ -781,14 +801,29 @@ const dict: Record<string, { en: string; ar: string }> = {
   'pr.groupUnset': { en: 'Not set', ar: 'غير محدد' },
   'pr.codesTitle': { en: 'Promo codes', ar: 'أكواد الخصم' },
   'pr.codesHelp': {
-    en: 'Codes customers type at checkout to get the group prices above. Letters, numbers, - and _.',
-    ar: 'أكواد يكتبها العميل عند الدفع عشان يحصل على أسعار المجموعات. حروف وأرقام و - و _.',
+    en: 'Codes customers type at checkout to get the group prices above. At least 6 characters — letters, numbers, - and _ — so they can’t be guessed.',
+    ar: 'أكواد يكتبها العميل عند الدفع عشان يحصل على أسعار المجموعات. ٦ خانات على الأقل — حروف وأرقام و - و _ — عشان ما تنخمّن.',
   },
   'pr.code': { en: 'Code', ar: 'الكود' },
   'pr.addCode': { en: 'Add code', ar: 'أضف كود' },
+  'pr.badNumber': {
+    en: 'Prices must be numbers like 2.75 — nothing was saved.',
+    ar: 'الأسعار لازم تكون أرقام مثل 2.75 — ما انحفظ شي.',
+  },
   'pr.codeMinParty': { en: 'Smallest group', ar: 'أقل عدد للمجموعة' },
   'pr.noCodes': { en: 'No codes yet.', ar: 'ما في أكواد.' },
   'pr.codeFor': { en: 'groups of {n}+', ar: 'مجموعات {n}+' },
+  'pr.codeNewcomer': {
+    en: '{n}% off a new member’s first booking',
+    ar: 'خصم {n}٪ على أول حجز للعضو الجديد',
+  },
+  'nc.title': { en: 'New here?', ar: 'جديد عندنا؟' },
+  'nc.text': {
+    en: 'Use code {code} for {n}% off your first booking — for new members with a Cozy Den account.',
+    ar: 'استخدم الكود {code} وخذ خصم {n}٪ على أول حجز — للأعضاء الجدد اللي عندهم حساب في كوزي دن.',
+  },
+  'nc.signUp': { en: 'Create an account', ar: 'أنشئ حساب' },
+  'nc.book': { en: 'Book a table', ar: 'احجز طاولة' },
   'pr.codeOn': { en: 'On', ar: 'مفعّل' },
   'pr.codeOff': { en: 'Off', ar: 'موقوف' },
   'pr.codeDisable': { en: 'Turn off', ar: 'إيقاف' },

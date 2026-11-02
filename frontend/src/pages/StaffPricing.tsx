@@ -35,7 +35,9 @@ interface GroupRates {
 interface PromoCode {
   id: number;
   code: string;
+  kind: 'group' | 'newcomer';
   minParty: number;
+  percentOff: number | null;
   isActive: boolean;
 }
 interface Override {
@@ -48,6 +50,9 @@ const toKd = kd;
 const toCents = kdToCents;
 const kdOrBlank = (c: number | null) => (c === null ? '' : toKd(c));
 const centsOrNull = (v: string) => (v.trim() === '' ? null : toCents(v));
+// A typo must not save: "5,9" would read as 5 and "x" as switched off.
+const isKd = (v: string) => /^\d+(\.\d{1,3})?$/.test(v.trim());
+const isKdOrBlank = (v: string) => v.trim() === '' || isKd(v);
 
 export function StaffPricing() {
   const { t } = useI18n();
@@ -107,6 +112,12 @@ export function StaffPricing() {
   async function saveRates(e: FormEvent) {
     e.preventDefault();
     setNote(null);
+    if (
+      ![peak, offPeak, latePeak, lateOffPeak].every(isKd) ||
+      ![sixHour, extraPeak, extraOffPeak].every(isKdOrBlank)
+    ) {
+      return setNote(t('pr.badNumber'));
+    }
     try {
       await api.put('/staff/pricing/rates', {
         peakCents: toCents(peak),
@@ -128,6 +139,7 @@ export function StaffPricing() {
     e.preventDefault();
     setNote(null);
     if (!date || !label.trim()) return setNote(t('pr.needDateLabel'));
+    if (!isKd(price)) return setNote(t('pr.badNumber'));
     try {
       await api.put('/staff/pricing/overrides', {
         date,
@@ -147,6 +159,9 @@ export function StaffPricing() {
   async function saveGroupRates(e: FormEvent) {
     e.preventDefault();
     setNote(null);
+    if (![groupOff, groupExtraOff, groupSat, groupExtraSat].every(isKdOrBlank)) {
+      return setNote(t('pr.badNumber'));
+    }
     try {
       await api.put('/staff/pricing/group', {
         offPeakCents: centsOrNull(groupOff),
@@ -327,7 +342,7 @@ export function StaffPricing() {
               inputMode="numeric"
             />
           </label>
-          <button className="primary" disabled={newCode.trim().length < 3}>
+          <button className="primary" disabled={newCode.trim().length < 6}>
             {t('pr.addCode')}
           </button>
         </div>
@@ -338,7 +353,11 @@ export function StaffPricing() {
             {codes.map((c) => (
               <li key={c.id}>
                 <code dir="ltr">{c.code}</code>
-                <span className="muted">{t('pr.codeFor', { n: String(c.minParty) })}</span>
+                <span className="muted">
+                  {c.kind === 'newcomer'
+                    ? t('pr.codeNewcomer', { n: String(c.percentOff ?? 0) })
+                    : t('pr.codeFor', { n: String(c.minParty) })}
+                </span>
                 <span className="tag">{c.isActive ? t('pr.codeOn') : t('pr.codeOff')}</span>
                 <button type="button" className="link" onClick={() => toggleCode(c)}>
                   {c.isActive ? t('pr.codeDisable') : t('pr.codeEnable')}

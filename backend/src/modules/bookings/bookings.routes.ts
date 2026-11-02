@@ -1,12 +1,18 @@
 import { Router } from 'express';
 import { validate } from '../../middleware/validate';
-import { bookingLimiter } from '../../middleware/rateLimit';
+import { bookingLimiter, promoLimiter } from '../../middleware/rateLimit';
 import { ApiError } from '../../middleware/error';
 import { env } from '../../config/env';
 import { paymentProvider } from '../../payment';
 import { z } from 'zod';
 import { createBookingSchema, codeParamSchema } from './bookings.schema';
-import { findActiveCode } from '../promo/codes.service';
+import {
+  activeNewcomerCode,
+  codeRefusal,
+  findActiveCode,
+  hasBookedBefore,
+} from '../promo/codes.service';
+import { optionalAuth } from '../../middleware/auth';
 import { getGroupFee } from '../../utils/pricing';
 import { isoDate } from '../../utils/dates';
 import {
@@ -31,6 +37,7 @@ function publicBase(req: { protocol: string; get(h: string): string | undefined 
 bookingsRouter.post(
   '/',
   bookingLimiter,
+  optionalAuth,
   validate(createBookingSchema, 'body'),
   async (req, res, next) => {
     try {
@@ -39,7 +46,7 @@ bookingsRouter.post(
         const start = await startBookingCheckout(req.body, {
           returnUrl: `${base}/api/bookings/tap/return`,
           webhookUrl: `${base}/api/bookings/tap/webhook`,
-        });
+        }, req.user);
         // A retry can discover that the earlier attempt actually succeeded. Hand
         // back that booking rather than a second payment page.
         if (start.booking) {
@@ -49,7 +56,7 @@ bookingsRouter.post(
         res.status(201).json({ redirectUrl: start.redirectUrl, code: start.code });
         return;
       }
-      const booking = await createBooking(req.body);
+      const booking = await createBooking(req.body, req.user);
       res.status(201).json({ booking });
     } catch (err) {
       next(err);
@@ -97,6 +104,21 @@ const promoCheckQuery = z.object({
   date: isoDate(),
 });
 
+// GET /api/bookings/newcomer-offer — the newcomer code for the site banner;
+// null when staff have switched it off, or for a member who has booked before.
+bookingsRouter.get('/newcomer-offer', optionalAuth, async (req, res, next) => {
+  try {
+    if (req.user && (await hasBookedBefore(req.user.email))) {
+      res.json({ offer: null });
+      return;
+    }
+    const c = await activeNewcomerCode();
+    res.json({ offer: c ? { code: c.code, percentOff: c.percentOff } : null });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/bookings/promo-check?code=&date= — is this group promo code valid,
 // and what are the group prices on that date (null on a holiday priced by
 // hand)? Display only: checkout checks the code again. Rate-limited with
@@ -104,16 +126,25 @@ const promoCheckQuery = z.object({
 // /:code, which would otherwise swallow it.
 bookingsRouter.get(
   '/promo-check',
-  bookingLimiter,
+  promoLimiter,
+  optionalAuth,
   validate(promoCheckQuery, 'query'),
   async (req, res, next) => {
     try {
       const found = await findActiveCode(String(req.query.code));
       if (!found) throw new ApiError(404, 'That promo code is not valid.');
+      // A newcomer code is refused up front (signed out, or booked before).
+      // A group code's size rule is left to the page, since the party can
+      // still change there.
+      const refusal =
+        found.kind === 'newcomer' ? await codeRefusal(found, 1, req.user) : null;
       res.json({
         code: found.code,
+        kind: found.kind,
         minParty: found.minParty,
-        fee: await getGroupFee(String(req.query.date)),
+        percentOff: found.percentOff,
+        refusal: refusal?.code ?? null,
+        fee: found.kind === 'group' ? await getGroupFee(String(req.query.date)) : null,
       });
     } catch (err) {
       next(err);
