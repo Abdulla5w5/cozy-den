@@ -7762,3 +7762,18 @@ button.link {
 [data-theme='dark'] .proof-avatars i:nth-child(2) {
   color: #17120d;
 }
+
+/* The booking panel is narrow even on desktop, so two columns squeezed the
+   people menu out beside the hours stepper. One column, as on phones. */
+.sitting-options {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* Less yellow (client, Nov 2026): the shape under the hero's logo card is
+   orange in both themes. */
+.hero-stage::after {
+  background: var(--orange);
+}
+[data-theme='dark'] .hero-stage::after {
+  background: linear-gradient(145deg, #ff8c28, var(--orange));
+  box-shadow: 0 0 42px rgba(244, 119, 0, 0.14);
+}
