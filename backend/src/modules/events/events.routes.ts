@@ -271,7 +271,20 @@ eventsRouter.get('/seats/return', async (req, res) => {
   if (!chargeId) return res.redirect(`${site}/events?seat=error`);
   try {
     const outcome = await finalizeSeatCharge(chargeId);
-    return res.redirect(`${site}/events?seat=${outcome}`);
+    // The reservation's reference, so the customer has something to show at
+    // the counter — a paid seat is otherwise never shown to them. One indexed
+    // lookup by the charge id this request just verified with Tap.
+    let ref = '';
+    if (outcome !== 'failed') {
+      const { rows } = await query<{ verification_code: string }>(
+        'SELECT verification_code FROM event_reservations WHERE payment_ref = $1',
+        [chargeId],
+      );
+      ref = rows[0]?.verification_code ?? '';
+    }
+    return res.redirect(
+      `${site}/events?seat=${outcome}${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`,
+    );
   } catch (err) {
     console.error('[tap] event seat return failed', err);
     return res.redirect(`${site}/events?seat=error`);

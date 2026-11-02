@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { Roadmap } from '../components/Roadmap';
+import { PaymentReturnNotice } from '../components/PaymentReturnNotice';
 import { Game } from '../types';
 
 /**
@@ -124,6 +125,8 @@ export function WantedBoard() {
         <h1>{t('wb.title')}</h1>
         <p className="wb-sub">{t('wb.sub')}</p>
       </header>
+
+      <PaymentReturnNotice param="reserve" paidKey="wb.payPaid" />
 
       <section className="section wb-guide">
         <div className="section-head">

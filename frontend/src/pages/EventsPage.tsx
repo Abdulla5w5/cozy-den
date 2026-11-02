@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { EventItem } from '../types';
 import { checkoutToken } from '../checkoutToken';
+import { PaymentReturnNotice } from '../components/PaymentReturnNotice';
 import { DateTile, EventTag, EventTokens, SeatsMeter } from '../components/EventTicket';
 
 type Filter = 'all' | 'internal' | 'external';
@@ -43,6 +44,8 @@ export function EventsPage() {
         <h1>{t('ev.title')}</h1>
         <p className="muted">{t('ev.sub')}</p>
       </header>
+
+      <PaymentReturnNotice param="seat" paidKey="ev.payPaid" />
 
       <div className="chips left">
         {(['all', 'internal', 'external'] as Filter[]).map((f) => (

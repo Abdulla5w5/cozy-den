@@ -92,13 +92,13 @@ const dict: Record<string, { en: string; ar: string }> = {
   },
   'home.step1': { en: 'Pick a table', ar: 'اختار طاولتك' },
   'home.step1b': {
-    en: 'Pick a date and any 30-minute start time for a 2-hour session.',
-    ar: 'حدد اليوم والوقت اللي يناسبكم؛ كل جلسة ساعتين والبدايات كل نص ساعة.',
+    en: 'Pick a date, a start time, and how long you’ll stay — 2 to 6 hours.',
+    ar: 'حدد اليوم ووقت البداية وكم ساعة بتقعدون — من ساعتين إلى ٦ ساعات.',
   },
-  'home.step2': { en: 'Pay the holding fee', ar: 'ثبّت حجزك' },
+  'home.step2': { en: 'Pay to book', ar: 'ادفع واحجز' },
   'home.step2b': {
-    en: 'A small per-person holding fee secures your session.',
-    ar: 'ادفع رسوم الحجز البسيطة ونضمن لكم الطاولة.',
+    en: 'Pay per person for your table and time, and the booking is yours.',
+    ar: 'ادفع للشخص الواحد حسب الطاولة والمدة، والحجز صار لكم.',
   },
   'home.step3': { en: 'Show your code', ar: 'ورّنا الكود' },
   'home.step3b': {
@@ -221,6 +221,34 @@ const dict: Record<string, { en: string; ar: string }> = {
   'ev.freeSeat': { en: 'Free', ar: 'مجاناً' },
   'ev.payAndReserve': { en: 'Pay {amount} & reserve', ar: 'ادفع {amount} واحجز' },
   'ev.confirmFree': { en: 'Confirm reservation', ar: 'أكد الحجز' },
+  'ev.payPaid': {
+    en: 'Payment received — your seats are reserved.',
+    ar: 'وصلنا الدفع — مقاعدكم محجوزة.',
+  },
+  'ev.payPending': {
+    en: 'Your bank hasn’t confirmed the payment yet. Don’t pay again — your seats stay held while it finishes.',
+    ar: 'البنك ما أكد الدفع للحين. لا تدفعون مرة ثانية — مقاعدكم محجوزة لين يكتمل.',
+  },
+  'ev.payReview': {
+    en: 'We received a payment we need to check by hand. Don’t pay again — we’ll contact you.',
+    ar: 'وصلنا دفع لازم نراجعه يدوياً. لا تدفعون مرة ثانية — بنتواصل معكم.',
+  },
+  'ev.payFailed': {
+    en: 'The payment didn’t go through, so nothing was charged and the seats were released. You can try again.',
+    ar: 'الدفع ما تم، فما انسحب شي والمقاعد رجعت متاحة. تقدرون تحاولون مرة ثانية.',
+  },
+  'ev.payError': {
+    en: 'We couldn’t confirm your payment just now. If you were charged, contact us on WhatsApp and we’ll sort it out.',
+    ar: 'ما قدرنا نأكد الدفع الحين. إذا انسحب منكم مبلغ، كلمونا على الواتساب ونحلها.',
+  },
+  'ev.payRef': {
+    en: 'Your reference: {ref} — show it at the counter.',
+    ar: 'رقم حجزكم: {ref} — ورّوه عند الكاونتر.',
+  },
+  'wb.payPaid': {
+    en: 'Payment received — your seat on this listing is reserved.',
+    ar: 'وصلنا الدفع — مقعدك في هذا الإعلان محجوز.',
+  },
   'ev.reserved': { en: 'Reserved. Your reference is', ar: 'تم الحجز. رقم حجزك' },
   'ev.reserveFailed': { en: 'Could not reserve those seats.', ar: 'ما قدرنا نحجز المقاعد.' },
   'ev.tableHold': { en: 'Holds a table', ar: 'يحجز طاولة' },

@@ -8210,3 +8210,51 @@ a.ev-ticket:active {
   background: linear-gradient(145deg, #ff8c28, var(--orange));
   box-shadow: 0 0 42px rgba(244, 119, 0, 0.14);
 }
+
+/* Payment result after coming back from Tap (Our Calendar, Wanted Board). */
+.pay-return {
+  position: relative;
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 2.6rem 0.85rem 1rem;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  box-shadow: 3px 3px 0 var(--ink);
+  color: #17120d;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.pay-return p {
+  margin: 0;
+}
+.pay-return.ok {
+  background: color-mix(in srgb, var(--green) 22%, #fff);
+}
+.pay-return.wait {
+  background: color-mix(in srgb, var(--yellow) 35%, #fff);
+}
+.pay-return.bad {
+  background: color-mix(in srgb, var(--red) 18%, #fff);
+}
+.pay-return-x {
+  position: absolute;
+  top: 0.5rem;
+  inset-inline-end: 0.5rem;
+  margin: 0;
+  padding: 0.1rem 0.4rem;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: #17120d;
+  font-size: 1rem;
+}
+[data-theme='dark'] .pay-return {
+  border-color: #08090b;
+  box-shadow: 3px 3px 0 #050608;
+}
+[data-theme='dark'] .pay-return-x,
+[data-theme='dark'] .pay-return-x:hover:not(:disabled) {
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: #17120d;
+}
