@@ -87,14 +87,18 @@ bookingsRouter.get('/tap/return', async (req, res) => {
 // POST /api/bookings/tap/webhook — Tap's server-to-server notification. The
 // reliable confirmation path: it fires even if the customer closes the tab
 // before the redirect. We re-verify with Tap rather than trusting the body, so
-// it's safe without parsing Tap's drift-prone signature. Always 200 so Tap
-// doesn't retry something we've already handled.
+// it's safe without parsing Tap's drift-prone signature. 200 once handled, so
+// Tap stops; 500 if handling failed, so Tap tries again.
 bookingsRouter.post('/tap/webhook', async (req, res) => {
   try {
     const chargeId = String(req.body?.id || '');
     if (chargeId) await finalizeCharge(chargeId, 'webhook');
   } catch (err) {
+    // A 5xx makes Tap retry. Settling is idempotent, so a retry is safe, and
+    // without one a payment that hit a database blip would never be settled.
     console.error('[tap] webhook handler failed', err);
+    res.status(500).json({ received: false });
+    return;
   }
   res.status(200).json({ received: true });
 });

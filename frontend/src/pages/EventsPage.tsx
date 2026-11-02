@@ -2,6 +2,8 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { EventItem } from '../types';
+import { checkoutToken } from '../checkoutToken';
+import { DateTile, EventTag, EventTokens, SeatsMeter } from '../components/EventTicket';
 
 type Filter = 'all' | 'internal' | 'external';
 
@@ -78,8 +80,7 @@ export function EventsPage() {
 }
 
 export function EventRow({ e }: { e: EventItem }) {
-  const { t, money } = useI18n();
-  const d = new Date(e.event_date + 'T00:00:00');
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
   const left = e.capacity === null ? null : Math.max(0, e.capacity - (e.seats_taken ?? 0));
@@ -88,47 +89,32 @@ export function EventRow({ e }: { e: EventItem }) {
   const bookable = e.type === 'internal' && !full;
 
   return (
-    <article className={`ev-row ${e.type}`}>
-      <div className="ev-date">
-        <strong>{d.getDate()}</strong>
-        <span>{d.toLocaleDateString(undefined, { month: 'short' })}</span>
-      </div>
-      <div className="ev-body">
-        <div className="ev-head">
+    <article className={`ev-ticket ev-ticket-row ${e.type}`}>
+      <div className="ev-ticket-main">
+        <DateTile e={e} />
+        <div className="ev-ticket-body">
+          <EventTag e={e} />
           <h3>{e.title}</h3>
-          <span className={`pill ${e.type === 'external' ? 'ext' : ''}`}>
-            {e.type === 'internal' ? t('ev.internal') : t('ev.external')}
-          </span>
+          {e.description && <p className="ev-ticket-desc is-full">{e.description}</p>}
+          <EventTokens e={e} />
         </div>
-        {e.description && <p className="muted">{e.description}</p>}
-        <p className="ev-meta">
-          {e.start_time ? `${e.start_time} · ` : e.event_time ? `${e.event_time} · ` : ''}
-          {e.table_label ? `${e.table_label} · ` : ''}
-          {e.location}
-        </p>
-
-        {e.type === 'internal' && (
-          <div className="ev-seats">
-            <span className={full ? 'ev-full' : 'ev-open'}>
-              {left === null
-                ? t('ev.openSeating')
-                : full
-                  ? t('ev.soldOut')
-                  : t('ev.seatsLeft', { n: left })}
-            </span>
-            <span className="ev-price">
-              {e.seat_price_cents > 0 ? money(e.seat_price_cents) : t('ev.freeSeat')}
-            </span>
-            {bookable && !open && (
-              <button className="primary" onClick={() => setOpen(true)}>
-                {t('ev.reserve')}
-              </button>
-            )}
-          </div>
+        {e.image_url && (
+          <img className="ev-ticket-thumb" src={e.image_url} alt="" loading="lazy" decoding="async" />
         )}
-
-        {open && <ReserveForm e={e} onClose={() => setOpen(false)} />}
       </div>
+
+      {e.type === 'internal' && (
+        <div className="ev-ticket-stub">
+          <SeatsMeter e={e} />
+          {bookable && !open && (
+            <button className="primary" onClick={() => setOpen(true)}>
+              {t('ev.reserve')}
+            </button>
+          )}
+        </div>
+      )}
+
+      {open && <ReserveForm e={e} onClose={() => setOpen(false)} />}
     </article>
   );
 }
@@ -171,7 +157,13 @@ function ReserveForm({ e, onClose }: { e: EventItem; onClose: () => void }) {
     try {
       const res = await api.post<{ redirectUrl?: string; code?: string; free?: boolean }>(
         `/events/${e.id}/reserve`,
-        { guestName: name, guestEmail: email, guestPhone: phone || undefined, seats },
+        {
+          guestName: name,
+          guestEmail: email,
+          guestPhone: phone || undefined,
+          seats,
+          retryToken: checkoutToken(),
+        },
       );
       if (res.redirectUrl) {
         window.location.assign(res.redirectUrl); // leave the SPA for the gateway

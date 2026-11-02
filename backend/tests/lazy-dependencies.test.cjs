@@ -21,6 +21,7 @@ test('optional integrations stay out of the normal API startup path', () => {
     env: {
       ...process.env,
       NODE_ENV: 'production',
+      ALLOW_MOCK_PAYMENTS: 'true',
       JWT_SECRET: 'test-only-secret-that-is-at-least-32-chars',
       PAYMENT_PROVIDER: 'mock',
       REDIS_URL: '',
@@ -66,6 +67,7 @@ test('Google token verification loads its client on first use', () => {
     env: {
       ...process.env,
       NODE_ENV: 'production',
+      ALLOW_MOCK_PAYMENTS: 'true',
       JWT_SECRET: 'test-only-secret-that-is-at-least-32-chars',
       GOOGLE_CLIENT_ID: 'test-client-id',
     },
@@ -100,6 +102,7 @@ test('security headers keep Google popups functional without allowing framing', 
     env: {
       ...process.env,
       NODE_ENV: 'production',
+      ALLOW_MOCK_PAYMENTS: 'true',
       JWT_SECRET: 'test-only-secret-that-is-at-least-32-chars',
       PAYMENT_PROVIDER: 'mock',
     },

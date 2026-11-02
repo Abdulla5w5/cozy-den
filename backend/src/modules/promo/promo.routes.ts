@@ -3,21 +3,13 @@ import { z } from 'zod';
 import { query, withTransaction } from '../../db/pool';
 import { validate } from '../../middleware/validate';
 import { requireStaff } from '../../middleware/auth';
+import { linkish } from '../../utils/catalogue';
 
 // Entry popup: exactly one active promo, staff-editable without a deploy.
 export const promoRouter = Router();
 
-
-// Accept either an absolute URL (https://…) or a root-relative path (/events),
-// so staff can link to internal pages as well as external sites.
-const linkish = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .refine((v) => v === '' || v.startsWith('/') || /^https?:\/\//i.test(v), 'must be a URL or a /path')
-    .nullable()
-    .optional();
+// Links: an http(s) URL or a same-site /path (the shared rule, which also
+// refuses protocol-relative //host links that would leave the site).
 
 const SELECT = `SELECT id, image_url, text, link_url, link_label, is_active FROM promos`;
 

@@ -1,7 +1,7 @@
 import { Response, Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate';
-import { loginLimiter } from '../../middleware/rateLimit';
+import { loginLimiter, mailLimiter } from '../../middleware/rateLimit';
 import { AUTH_COOKIE, requireAuth, signToken } from '../../middleware/auth';
 import { env } from '../../config/env';
 import {
@@ -50,11 +50,14 @@ const registerSchema = z.object({
 });
 
 // POST /api/auth/register — universal sign up (auto-signs in).
-authRouter.post('/register', loginLimiter, validate(registerSchema), async (req, res, next) => {
+authRouter.post('/register', mailLimiter, validate(registerSchema), async (req, res, next) => {
   try {
     const user = await registerUser(req.body.email, req.body.name, req.body.phone, req.body.password);
     // New self-registered accounts start unverified; email the confirm link.
-    void sendVerificationEmail({ id: user.id, name: user.name, email: user.email });
+    // Caught here: a failed token write must not become an unhandled rejection.
+    sendVerificationEmail({ id: user.id, name: user.name, email: user.email }).catch((e) =>
+      console.error('[verify] could not send verification email', e),
+    );
     res.status(201).json({ user: await issueSession(res, user) });
   } catch (err) {
     next(err);
@@ -114,7 +117,7 @@ authRouter.get('/bookings', requireAuth, async (req, res, next) => {
       res.json({ bookings: [], emailUnverified: true });
       return;
     }
-    res.json({ bookings: await getBookingsByEmail(req.user!.email) });
+    res.json({ bookings: await getBookingsByEmail(req.user!.email, req.user!.sub) });
   } catch (err) {
     next(err);
   }
@@ -144,7 +147,7 @@ authRouter.get('/verify-email', async (req, res) => {
 });
 
 // POST /api/auth/resend-verification — re-send the link for the signed-in user.
-authRouter.post('/resend-verification', requireAuth, async (req, res, next) => {
+authRouter.post('/resend-verification', mailLimiter, requireAuth, async (req, res, next) => {
   try {
     if (await isEmailVerified(req.user!.sub)) {
       res.json({ alreadyVerified: true });
@@ -168,7 +171,7 @@ const forgotSchema = z.object({ email: z.string().trim().email().max(200) });
 // Always answers the same, whether or not the address has an account. Varying
 // the response (or the timing, or the status code) would turn this into a way
 // to discover which of our customers' emails are registered.
-authRouter.post('/forgot-password', loginLimiter, validate(forgotSchema), async (req, res, next) => {
+authRouter.post('/forgot-password', mailLimiter, validate(forgotSchema), async (req, res, next) => {
   try {
     await requestPasswordReset(req.body.email);
     res.json({ sent: true });

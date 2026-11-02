@@ -149,37 +149,71 @@ export interface SeatHold {
 }
 
 /**
- * Clear this guest's OWN abandoned holds on this event before counting seats.
+ * Settle this guest's earlier holds on this event before counting seats.
  *
- * Same reasoning as table checkout: a customer whose payment page died holds
- * seats they never bought, and on a nearly-full event the person that shuts out
- * is themselves, retrying. The charge is re-asked of the gateway first, so a
- * payment that actually went through is settled rather than thrown away.
+ * The charge is re-asked of the gateway: a paid one is confirmed and a
+ * declined one released (finalizeSeatCharge does both). A charge still open
+ * is released at once only when the retry proves it is the same customer —
+ * the same signed-in member, or the same browser's checkout token (migration
+ * 048). Anyone can type any email here, so without that proof the hold is
+ * left for the sweep to expire by age. If the customer pays the old page
+ * after all, confirmSeats reinstates the seats rather than losing the money.
+ *
+ * A hold with no charge at all is released after a few minutes (at once for
+ * the same customer).
  */
-async function clearOwnAbandonedHolds(eventId: number, email: string): Promise<void> {
-  const { rows } = await query<{ id: number; payment_ref: string | null }>(
-    `SELECT id, payment_ref FROM event_reservations
+async function clearOwnAbandonedHolds(
+  eventId: number,
+  email: string,
+  proof: { memberId: number | null; retryTokenHash: string | null },
+): Promise<void> {
+  const { rows } = await query<{
+    id: number;
+    payment_ref: string | null;
+    member_id: number | null;
+    retry_token_hash: string | null;
+    stale: boolean;
+  }>(
+    `SELECT id, payment_ref, member_id, retry_token_hash,
+            created_at < now() - interval '5 minutes' AS stale
+       FROM event_reservations
       WHERE event_id = $1 AND status = 'pending_payment' AND lower(guest_email) = lower($2)`,
     [eventId, email],
   );
   for (const row of rows) {
-    if (row.payment_ref?.startsWith('chg_') && paymentProvider.retrieveCharge) {
+    const own =
+      (proof.memberId !== null && row.member_id === proof.memberId) ||
+      (proof.retryTokenHash !== null && row.retry_token_hash === proof.retryTokenHash);
+    if (row.payment_ref?.startsWith('chg_')) {
+      if (!paymentProvider.retrieveCharge) continue;
       try {
-        if ((await finalizeSeatCharge(row.payment_ref)) === 'paid') continue;
+        const outcome = await finalizeSeatCharge(row.payment_ref);
+        if (outcome === 'pending' && own) await releaseSeats(row.id);
       } catch (err) {
-        console.error('[events] could not re-check an abandoned charge', err);
+        console.error('[events] could not re-check an earlier charge', err);
       }
+      continue;
     }
-    await releaseSeats(row.id);
+    if (own || row.stale) await releaseSeats(row.id);
   }
 }
 
 export async function holdSeats(
   eventId: number,
   seats: number,
-  guest: { name: string; email: string; phone?: string | null; memberId?: number | null },
+  guest: {
+    name: string;
+    email: string;
+    phone?: string | null;
+    memberId?: number | null;
+    /** SHA-256 of the browser's checkout token (migration 048). */
+    retryTokenHash?: string | null;
+  },
 ): Promise<SeatHold> {
-  await clearOwnAbandonedHolds(eventId, guest.email);
+  await clearOwnAbandonedHolds(eventId, guest.email, {
+    memberId: guest.memberId ?? null,
+    retryTokenHash: guest.retryTokenHash ?? null,
+  });
   return withTransaction(async (client) => {
     const { rows } = await client.query<{
       capacity: number | null;
@@ -211,11 +245,11 @@ export async function holdSeats(
     const ins = await client.query<{ id: number }>(
       `INSERT INTO event_reservations
          (event_id, member_id, guest_name, guest_email, guest_phone, seats,
-          verification_code, status, amount_cents)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'pending_payment',$8)
+          verification_code, status, amount_cents, retry_token_hash)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'pending_payment',$8,$9)
        RETURNING id`,
       [eventId, guest.memberId ?? null, guest.name, guest.email, guest.phone ?? null,
-       seats, code, amountCents],
+       seats, code, amountCents, guest.retryTokenHash ?? null],
     );
     return { reservationId: ins.rows[0].id, code, amountCents };
   });
@@ -230,13 +264,33 @@ export async function releaseSeats(reservationId: number): Promise<void> {
   );
 }
 
-/** Confirm seats once the gateway says the money arrived. */
+/**
+ * Confirm seats once the gateway says the money arrived.
+ *
+ * If the hold had already been released (the sweep expired it a moment before
+ * a slow payment landed), the money is real, so the reservation is put back
+ * rather than lost — even if that oversells the event by those seats — and
+ * logged loudly for staff to look at.
+ */
 export async function confirmSeats(reservationId: number, paymentRef: string): Promise<void> {
-  await query(
+  const { rowCount } = await query(
     `UPDATE event_reservations SET status = 'pending', payment_ref = $2
       WHERE id = $1 AND status = 'pending_payment'`,
     [reservationId, paymentRef],
   );
+  if (rowCount) return;
+  const { rows } = await query<{ id: number }>(
+    `UPDATE event_reservations SET status = 'pending', payment_ref = $2
+      WHERE id = $1 AND status = 'cancelled'
+      RETURNING id`,
+    [reservationId, paymentRef],
+  );
+  if (rows[0]) {
+    console.error(
+      `[events] PAID charge ${paymentRef} landed on released reservation ${reservationId}; ` +
+        'reinstated it — check the event is not oversold.',
+    );
+  }
 }
 
 export interface ReservationView {
@@ -303,12 +357,29 @@ export async function attachSeatCharge(reservationId: number, chargeId: string):
  */
 export async function finalizeSeatCharge(
   chargeId: string,
-): Promise<'paid' | 'failed' | 'pending'> {
+): Promise<'paid' | 'failed' | 'pending' | 'review'> {
   if (!paymentProvider.retrieveCharge) return 'failed';
   const charge = await paymentProvider.retrieveCharge(chargeId);
   const reservationId = Number(charge.metadata?.reservationId ?? 0);
   if (!reservationId) return 'failed';
   if (charge.paid) {
+    // The charge must be the one recorded for this hold, for its amount.
+    const { rows } = await query<{ amount_cents: number; payment_ref: string | null }>(
+      'SELECT amount_cents, payment_ref FROM event_reservations WHERE id = $1',
+      [reservationId],
+    );
+    const hold = rows[0];
+    const wrongCharge = hold?.payment_ref?.startsWith('chg_') && hold.payment_ref !== chargeId;
+    const wrongAmount =
+      hold && (charge.amountMillis === undefined || charge.amountMillis !== hold.amount_cents * 10);
+    if (!hold || wrongCharge || wrongAmount) {
+      console.error(
+        `[events] paid charge ${chargeId} does not match reservation ${reservationId} ` +
+          `(amount ${charge.amountMillis ?? 'unknown'}) — needs staff review`,
+      );
+      // Not 'pending': the sweep would then release the paid-for seats.
+      return 'review';
+    }
     await confirmSeats(reservationId, chargeId);
     return 'paid';
   }

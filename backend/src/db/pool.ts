@@ -55,15 +55,22 @@ export async function withTransaction<T>(
   fn: (client: PoolClient) => Promise<T>
 ): Promise<T> {
   const client = await pool.connect();
+  let broken = false;
   try {
     await client.query('BEGIN');
     const result = await fn(client);
     await client.query('COMMIT');
     return result;
   } catch (err) {
-    await client.query('ROLLBACK');
+    // If the rollback itself fails the connection is dead: keep the original
+    // error, and destroy the client rather than hand it to the next caller.
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      broken = true;
+    }
     throw err;
   } finally {
-    client.release();
+    client.release(broken);
   }
 }

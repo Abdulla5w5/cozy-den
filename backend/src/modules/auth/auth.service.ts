@@ -71,19 +71,32 @@ export async function registerUser(
     throw new ApiError(409, 'An account with this email already exists.');
   }
   const hash = await bcrypt.hash(password, 10);
-  const { rows } = await query<UserRow>(
-    `INSERT INTO users (email, name, phone, password_hash, provider)
-     VALUES ($1, $2, $3, $4, 'local')
-     RETURNING id, email, name, phone, password_hash, provider`,
-    [email.toLowerCase(), name, phone, hash]
-  );
-  return rows[0];
+  try {
+    const { rows } = await query<UserRow>(
+      `INSERT INTO users (email, name, phone, password_hash, provider)
+       VALUES ($1, $2, $3, $4, 'local')
+       RETURNING id, email, name, phone, password_hash, provider`,
+      [email.toLowerCase(), name, phone, hash]
+    );
+    return rows[0];
+  } catch (err) {
+    // Two sign-ups racing (a double-click): the loser hits the unique email.
+    if ((err as { code?: string }).code === '23505') {
+      throw new ApiError(409, 'An account with this email already exists.');
+    }
+    throw err;
+  }
 }
+
+// A real bcrypt hash of nothing in particular, so an unknown email costs the
+// same comparison time as a known one. (bcryptjs answers a malformed hash in
+// no time at all, which would tell an attacker which emails have accounts.)
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
 
 export async function authenticateUser(email: string, password: string): Promise<UserRow> {
   const user = await getUserByEmail(email);
   // Constant-ish comparison + generic error so we don't reveal which emails exist.
-  const hash = user?.password_hash ?? '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinv';
+  const hash = user?.password_hash ?? DUMMY_HASH;
   const ok = await bcrypt.compare(password, hash);
   if (!user || !user.password_hash || !ok) {
     throw new ApiError(401, 'Invalid email or password.');
@@ -104,15 +117,31 @@ export async function upsertGoogleUser(
   googleVerified: boolean,
   phone?: string,
 ): Promise<UserRow> {
-  const existing = await getUserByEmail(email);
+  let existing = await getUserByEmail(email);
   if (existing) {
-    if (googleVerified) {
-      await query(
-        `UPDATE users SET email_verified = TRUE, email_verified_at = COALESCE(email_verified_at, now())
-          WHERE id = $1 AND NOT email_verified`,
-        [existing.id],
-      );
+    // Signing in to an existing account needs Google to vouch for the address.
+    // Otherwise a Google account set up with someone else's (unverified) email
+    // would walk straight into theirs — staff and admin accounts included.
+    if (!googleVerified) {
+      throw new ApiError(401, 'Google has not verified this email address, so it cannot be used to sign in here.');
     }
+    // Google proves the address belongs to the person signing in. If the
+    // account was never verified, whoever set its password did NOT prove that
+    // — it may be someone who registered the address first to read the owner's
+    // bookings. So the password is removed and every older session signed
+    // out; the owner can set a new password with "Forgot password".
+    const { rows: upgraded } = await query<UserRow>(
+      `UPDATE users
+          SET email_verified = TRUE, email_verified_at = now(),
+              -- Whole seconds, minus one: a session's issue time is rounded
+              -- down to the second (and taken from the app's clock, not the
+              -- database's), and the one being created right now must survive.
+              password_hash = NULL, password_changed_at = date_trunc('second', now()) - interval '1 second'
+        WHERE id = $1 AND NOT email_verified
+        RETURNING id, email, name, phone, password_hash, provider`,
+      [existing.id],
+    );
+    if (upgraded[0]) existing = upgraded[0];
     // Lets a legacy Google account acquire its missing phone when the owner
     // intentionally uses the sign-up form, without overwriting known contact.
     if (!existing.phone && phone) {
@@ -124,13 +153,22 @@ export async function upsertGoogleUser(
   if (!phone) {
     throw new ApiError(400, 'A valid Kuwait phone number is required to create an account.');
   }
-  const { rows } = await query<UserRow>(
-    `INSERT INTO users (email, name, phone, provider, email_verified, email_verified_at)
-     VALUES ($1, $2, $3, 'google', $4, CASE WHEN $4 THEN now() END)
-     RETURNING id, email, name, phone, password_hash, provider`,
-    [email.toLowerCase(), name, phone, googleVerified]
-  );
-  return rows[0];
+  try {
+    const { rows } = await query<UserRow>(
+      `INSERT INTO users (email, name, phone, provider, email_verified, email_verified_at)
+       VALUES ($1, $2, $3, 'google', $4, CASE WHEN $4 THEN now() END)
+       RETURNING id, email, name, phone, password_hash, provider`,
+      [email.toLowerCase(), name, phone, googleVerified]
+    );
+    return rows[0];
+  } catch (err) {
+    // Two Google sign-ins racing (two tabs): the other one created the row.
+    if ((err as { code?: string }).code === '23505') {
+      const created = await getUserByEmail(email);
+      if (created) return created;
+    }
+    throw err;
+  }
 }
 
 /** Verify a Google ID token server-side. Requires GOOGLE_CLIENT_ID. */

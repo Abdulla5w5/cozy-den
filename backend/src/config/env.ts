@@ -78,3 +78,12 @@ export const env = {
 if (env.isProd && env.jwtSecret.length < 32) {
   throw new Error('JWT_SECRET must be at least 32 characters in production.');
 }
+// The mock provider approves every charge, so a production server that fell
+// back to it (PAYMENT_PROVIDER dropped or misspelt in the panel) would hand out
+// tables for free. Refuse to start unless that is explicitly intended, as in
+// the local docker-compose stack.
+if (env.isProd && env.paymentProvider === 'mock' && process.env.ALLOW_MOCK_PAYMENTS !== 'true') {
+  throw new Error(
+    'PAYMENT_PROVIDER is mock in production. Set it to tap, or ALLOW_MOCK_PAYMENTS=true for a local stack.',
+  );
+}

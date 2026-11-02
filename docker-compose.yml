@@ -68,6 +68,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TABLE_FEE_CENTS: "500"
       PAYMENT_PROVIDER: mock
+      ALLOW_MOCK_PAYMENTS: "true"
       # Only these emails sign in as staff (need a valid account + password too).
       STAFF_ALLOWED_EMAILS: ${STAFF_ALLOWED_EMAILS:-staff@cozyden.local}
       # Google Sign-In: verifies ID tokens against this client id (not sensitive).

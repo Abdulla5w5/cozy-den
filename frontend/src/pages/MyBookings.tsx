@@ -59,7 +59,13 @@ export function MyBookings() {
               <p className="muted">
                 {b.date} · {b.timeSlot} ({t('bk.sessionHours', { n: formatHours(b.durationMin) })})
               </p>
-              <span className="tag">{b.verificationCode}</span>
+              {/* Only bookings made from this account carry their code; one
+                  staff entered under the same email does not. */}
+              {b.verificationCode ? (
+                <span className="tag">{b.verificationCode}</span>
+              ) : (
+                <span className="muted">{t('acct.codeAtCounter')}</span>
+              )}
             </div>
           ))}
         </div>

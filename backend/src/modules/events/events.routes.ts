@@ -2,9 +2,11 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, withTransaction } from '../../db/pool';
 import { validate } from '../../middleware/validate';
-import { requireStaff } from '../../middleware/auth';
+import { optionalAuth, requireStaff } from '../../middleware/auth';
+import { bookingLimiter } from '../../middleware/rateLimit';
 import { ApiError } from '../../middleware/error';
 import { isoDate } from '../../utils/dates';
+import { hashRetryToken, retryTokenSchema } from '../../utils/retryToken';
 import { env } from '../../config/env';
 import { linkish } from '../../utils/catalogue';
 import {
@@ -154,10 +156,34 @@ eventsRouter.put(
 );
 
 // DELETE /api/events/:id — staff delete.
+//
+// Refused while anyone has paid for a seat, or is paying right now: deleting
+// would cascade away the reservations, the only record of who paid and of the
+// charge to refund. Staff cancel and refund first, as on the Wanted Board.
 eventsRouter.delete('/:id', requireStaff, validate(idParam, 'params'), async (req, res, next) => {
   try {
-    const { rowCount } = await query('DELETE FROM events WHERE id = $1', [Number(req.params.id)]);
-    if (!rowCount) throw new ApiError(404, 'Event not found.');
+    const id = Number(req.params.id);
+    await withTransaction(async (client) => {
+      const { rows: ev } = await client.query('SELECT id FROM events WHERE id = $1 FOR UPDATE', [id]);
+      if (!ev[0]) throw new ApiError(404, 'Event not found.');
+      const { rows } = await client.query<{ paid: string; paying: string }>(
+        `SELECT count(*) FILTER (WHERE status IN ('pending', 'attended') AND amount_cents > 0)::text AS paid,
+                count(*) FILTER (WHERE status = 'pending_payment')::text AS paying
+           FROM event_reservations WHERE event_id = $1`,
+        [id],
+      );
+      if (Number(rows[0].paid) > 0) {
+        throw new ApiError(
+          409,
+          'People have paid for seats at this event. Refund them first — deleting it ' +
+            'would remove the record of their payment.',
+        );
+      }
+      if (Number(rows[0].paying) > 0) {
+        throw new ApiError(409, 'Someone is paying for a seat right now. Try again in a few minutes.');
+      }
+      await client.query('DELETE FROM events WHERE id = $1', [id]);
+    });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -171,6 +197,9 @@ const reserveBody = z.object({
   guestEmail: z.string().trim().email().max(200),
   guestPhone: z.string().trim().max(20).optional(),
   seats: z.number().int().min(1).max(20).default(1),
+  // The browser's checkout token, so a retry can release its own abandoned
+  // hold at once (utils/retryToken.ts).
+  retryToken: retryTokenSchema,
 });
 
 // POST /api/events/:id/reserve — customer reserves seats.
@@ -178,8 +207,12 @@ const reserveBody = z.object({
 // Paid seats go through the same redirect checkout a table booking uses; free
 // events (seat_price_cents = 0) confirm straight away, since there is nothing
 // to charge and sending someone to a gateway for KD 0.000 would be absurd.
+// Rate-limited like table bookings (no sign-in needed, so a script could
+// otherwise hold or fill seats), and linked to the member when signed in.
 eventsRouter.post(
   '/:id/reserve',
+  bookingLimiter,
+  optionalAuth,
   validate(idParam, 'params'),
   validate(reserveBody),
   async (req, res, next) => {
@@ -191,6 +224,7 @@ eventsRouter.post(
         email: b.guestEmail,
         phone: b.guestPhone ?? null,
         memberId: req.user?.sub ?? null,
+        retryTokenHash: hashRetryToken(b.retryToken),
       });
 
       if (hold.amountCents === 0) {
@@ -251,7 +285,11 @@ eventsRouter.post('/seats/webhook', async (req, res) => {
     const chargeId = String(req.body?.id || '');
     if (chargeId) await finalizeSeatCharge(chargeId);
   } catch (err) {
+    // A 5xx makes Tap retry. Settling is idempotent, so a retry is safe, and
+    // without one a payment that hit a database blip would never be settled.
     console.error('[tap] event seat webhook failed', err);
+    res.status(500).json({ received: false });
+    return;
   }
   res.status(200).json({ received: true });
 });

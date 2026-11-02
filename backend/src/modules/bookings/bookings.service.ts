@@ -18,6 +18,7 @@ import { bookingAlertRecipients } from '../../notifications/staffRecipients';
 import { CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
 import { normalizeKuwaitiPhone } from '../../utils/phone';
 import { resolvePromoCode } from '../promo/codes.service';
+import { hashRetryToken } from '../../utils/retryToken';
 
 // Legacy line items are still surfaced for pre-overhaul bookings; new bookings
 // have none (menu ordering was removed from checkout).
@@ -56,9 +57,13 @@ function todayIso(): string {
 
 async function assertTableExists(
   tableId: number,
+  { activeOnly = true }: { activeOnly?: boolean } = {},
 ): Promise<{ capacity: number; minParty: number | null }> {
+  // A retired table is hidden from availability, but a stale page or a
+  // hand-made request could still name it — so customers are refused here.
+  // Staff entering a booking by hand may still use one.
   const { rows } = await query<{ id: number; capacity: number; min_party: number | null }>(
-    'SELECT id, capacity, min_party FROM tables WHERE id = $1',
+    `SELECT id, capacity, min_party FROM tables WHERE id = $1 ${activeOnly ? 'AND is_active' : ''}`,
     [tableId],
   );
   if (!rows[0]) throw new ApiError(404, 'Table not found.');
@@ -134,6 +139,10 @@ interface InsertParams {
   promoCode?: string | null;
   /** Took a newcomer discount — at most one per customer (migration 045). */
   newcomerDiscount?: boolean;
+  /** The signed-in account that made it, if any (migration 047). */
+  userId?: number | null;
+  /** SHA-256 of the browser's checkout token (migration 048). */
+  retryTokenHash?: string | null;
 }
 
 const ALREADY_BOOKED = 'That table is already booked for an overlapping session.';
@@ -168,11 +177,12 @@ async function insertBooking(p: InsertParams): Promise<number> {
         `INSERT INTO bookings
            (table_id, booking_date, time_slot, guest_name, guest_email, guest_phone,
             verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
-            duration_min, party_size, terms_accepted_at, promo_code, newcomer_discount)
+            duration_min, party_size, terms_accepted_at, promo_code, newcomer_discount, user_id,
+            retry_token_hash)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,
-                 CASE WHEN $14 THEN now() END, $15, $16)
+                 CASE WHEN $14 THEN now() END, $15, $16, $17, $18)
          RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true]
+        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true, p.userId ?? null, p.retryTokenHash ?? null]
       );
       return rows[0].id;
     } catch (err) {
@@ -181,7 +191,11 @@ async function insertBooking(p: InsertParams): Promise<number> {
         throw new ApiError(409, ALREADY_BOOKED);
       }
       if (e.code === '23505' && e.constraint?.startsWith('bookings_newcomer_')) {
-        throw new ApiError(400, 'This code is for your first booking only.');
+        throw new ApiError(
+          400,
+          'This code is for your first booking only. If you just started a checkout with it, ' +
+            'finish paying there, or try again in about 20 minutes.',
+        );
       }
       if (e.code === '23505') continue; // verification_code collision — retry
       if (e.code === '40P01' || e.code === '40001') {
@@ -233,7 +247,7 @@ export async function createBooking(
     input.guestPhone,
   );
   if (promo?.kind === 'newcomer' && account) {
-    await releaseOwnNewcomerHolds(account.email, input.guestPhone);
+    await releaseOwnNewcomerHolds(account.email);
   }
   const quote = await quoteBooking(
     input.date,
@@ -253,7 +267,12 @@ export async function createBooking(
     guestName: input.guestName,
     // A newcomer code is tied to the account, so its booking is too — or the
     // same account could use it again.
-    guestEmail: promo?.kind === 'newcomer' && account ? account.email : (input.guestEmail ?? null),
+    // The account's own email, never one typed into the request: it decides
+    // whose history the booking joins, who gets the receipt, and whether the
+    // newcomer discount has been used. A booking without an account has none.
+    guestEmail: account ? account.email : null,
+    userId: account ? account.sub : null,
+    retryTokenHash: hashRetryToken(input.retryToken),
     guestPhone: input.guestPhone,
     durationMin: sitting.durationMin,
     partySize: sitting.partySize,
@@ -386,6 +405,9 @@ export async function startBookingCheckout(
     date: input.date,
     timeSlot: input.timeSlot,
     guestPhone: input.guestPhone,
+    accountEmail: account?.email ?? null,
+    accountId: account?.sub ?? null,
+    retryTokenHash: hashRetryToken(input.retryToken),
   });
   if (alreadyPaid) return { code: alreadyPaid.verificationCode, booking: alreadyPaid };
 
@@ -399,7 +421,7 @@ export async function startBookingCheckout(
     input.guestPhone,
   );
   if (promo?.kind === 'newcomer' && account) {
-    await releaseOwnNewcomerHolds(account.email, input.guestPhone);
+    await releaseOwnNewcomerHolds(account.email);
   }
   const quote = await quoteBooking(
     input.date,
@@ -419,7 +441,12 @@ export async function startBookingCheckout(
     guestName: input.guestName,
     // A newcomer code is tied to the account, so its booking is too — or the
     // same account could use it again.
-    guestEmail: promo?.kind === 'newcomer' && account ? account.email : (input.guestEmail ?? null),
+    // The account's own email, never one typed into the request: it decides
+    // whose history the booking joins, who gets the receipt, and whether the
+    // newcomer discount has been used. A booking without an account has none.
+    guestEmail: account ? account.email : null,
+    userId: account ? account.sub : null,
+    retryTokenHash: hashRetryToken(input.retryToken),
     guestPhone: input.guestPhone,
     durationMin: sitting.durationMin,
     partySize: sitting.partySize,
@@ -497,8 +524,9 @@ export async function finalizeCharge(
   // the narrow interval around local expiry; ignoring that callback loses money.
   const status = await paymentProvider.retrieveCharge(chargeId);
   const expectedMillis = payment.totalCents * 10;
+  // A capture with no amount on it is not taken on trust either.
   const wrongAmount =
-    status.paid && status.amountMillis !== undefined && status.amountMillis !== expectedMillis;
+    status.paid && (status.amountMillis === undefined || status.amountMillis !== expectedMillis);
   const wrongCurrency = status.paid && (status.currency || '').toUpperCase() !== 'KWD';
   const capturedAfterCancellation = status.paid && payment.bookingStatus === 'cancelled';
   const cancelledStillPayable =
@@ -626,48 +654,78 @@ export async function expireHold(bookingId: number): Promise<boolean> {
  * who most wants the slot — the same customer, hitting back and trying again —
  * is the one it locks out.
  *
- * So a repeat attempt at the same table, date and time by the same email
- * resolves the earlier hold on the spot:
+ * So a repeat attempt at the same table, date and time with the same phone
+ * resolves the earlier hold where it safely can:
  *
- *  - The charge is re-asked of the gateway first. If it actually went through,
- *    the booking is confirmed by finalizeCharge and this returns it: the right
- *    answer to "did my payment work?" is their booking, not a second one.
- *  - Otherwise the hold is expired, freeing the window immediately so the retry
- *    can proceed.
+ *  - The charge is re-asked of the gateway. A paid one is confirmed (and
+ *    handed back only to the customer it belongs to); a declined one has
+ *    already been cancelled by finalizeCharge.
+ *  - A charge still open is released AT ONCE when the retry proves it is the
+ *    same customer: the same signed-in account, or the same browser's checkout
+ *    token (migration 048). Nobody else has either, so this cannot be used to
+ *    knock someone off a table. If they then pay the old page after all, the
+ *    late-capture check flags it for staff rather than losing the money.
+ *  - Without that proof a phone number is all there is, so the open charge is
+ *    released only once the gateway's own payment window
+ *    (TAP_CHARGE_EXPIRY_MINUTES) has closed.
+ *  - A hold that never reached the gateway is released after a few minutes
+ *    (at once for the same customer).
  *
- * Only ever touches a row with the SAME guest phone, so it can never be used to
- * knock somebody else off a table. A charge that settles after this is not lost
- * either: finalizeCharge flags a capture against a cancelled booking for staff
- * review rather than swallowing it.
+ * If the gateway cannot be reached, the hold is left for the sweep.
  */
 async function resolveOwnStaleHold(input: {
   tableId: number;
   date: string;
   timeSlot: string;
   guestPhone: string;
+  accountEmail: string | null;
+  accountId: number | null;
+  retryTokenHash: string | null;
 }): Promise<BookingView | null> {
-  const { rows } = await query<{ id: number; payment_ref: string | null }>(
-    `SELECT id, payment_ref FROM bookings
+  const { rows } = await query<{
+    id: number;
+    payment_ref: string | null;
+    user_id: number | null;
+    retry_token_hash: string | null;
+    past_window: boolean;
+    stale: boolean;
+  }>(
+    `SELECT id, payment_ref, user_id, retry_token_hash,
+            created_at < now() - ($5 || ' minutes')::interval AS past_window,
+            created_at < now() - interval '5 minutes' AS stale
+       FROM bookings
       WHERE status = 'pending_payment' AND source = 'online'
         AND table_id = $1 AND booking_date = $2 AND time_slot = $3
         AND guest_phone = $4`,
-    [input.tableId, input.date, input.timeSlot, input.guestPhone],
+    [input.tableId, input.date, input.timeSlot, input.guestPhone, String(TAP_CHARGE_EXPIRY_MINUTES)],
   );
 
   for (const row of rows) {
-    if (row.payment_ref?.startsWith('chg_') && paymentProvider.retrieveCharge) {
+    const own =
+      (input.accountId !== null && row.user_id === input.accountId) ||
+      (input.retryTokenHash !== null && row.retry_token_hash === input.retryTokenHash);
+    if (row.payment_ref?.startsWith('chg_')) {
+      if (!paymentProvider.retrieveCharge) continue;
       try {
         const { outcome } = await finalizeCharge(row.payment_ref, 'reconcile');
-        if (outcome === 'paid') return await getBookingById(row.id);
-        // 'review' means staff have to look at it. Leave the row alone.
-        if (outcome === 'review') continue;
+        if (outcome === 'paid') {
+          if (own) return await getBookingById(row.id);
+          // Paid, but this caller cannot be shown it. Say so plainly instead
+          // of the "table already booked" error that would follow.
+          throw new ApiError(
+            409,
+            'Your earlier payment for this table went through, so it is booked. ' +
+              'Give your phone number at the counter, or contact us on WhatsApp for your code.',
+          );
+        }
+        if (outcome === 'pending' && (own || row.past_window)) await expireHold(row.id);
       } catch (err) {
-        // The gateway being unreachable must not block the retry; the hold is
-        // this customer's own, and the sweep will re-check the charge later.
-        console.error('[checkout] could not re-check an abandoned charge', err);
+        if (err instanceof ApiError) throw err;
+        console.error('[checkout] could not re-check an earlier charge', err);
       }
+      continue;
     }
-    await expireHold(row.id);
+    if (own || row.stale) await expireHold(row.id);
   }
   return null;
 }
@@ -678,22 +736,34 @@ async function resolveOwnStaleHold(input: {
  * once-only rule (migration 045) does not refuse the retry until the sweep
  * gets to it. Paid after all: kept, and the rule then refuses this one.
  */
-async function releaseOwnNewcomerHolds(email: string, phone: string): Promise<void> {
-  const { rows } = await query<{ id: number; payment_ref: string | null }>(
-    `SELECT id, payment_ref FROM bookings
+async function releaseOwnNewcomerHolds(email: string): Promise<void> {
+  // Matched on the signed-in account only (never a typed phone), so these are
+  // always the customer's own and an open one is released at once, as in
+  // resolveOwnStaleHold.
+  const { rows } = await query<{
+    id: number;
+    payment_ref: string | null;
+    past_window: boolean;
+    stale: boolean;
+  }>(
+    `SELECT id, payment_ref,
+            created_at < now() - ($2 || ' minutes')::interval AS past_window,
+            created_at < now() - interval '5 minutes' AS stale
+       FROM bookings
       WHERE status = 'pending_payment' AND source = 'online' AND newcomer_discount
-        AND (lower(guest_email) = lower($1) OR guest_phone = $2)`,
-    [email, phone],
+        AND lower(guest_email) = lower($1)`,
+    [email, String(TAP_CHARGE_EXPIRY_MINUTES)],
   );
   for (const row of rows) {
-    if (row.payment_ref?.startsWith('chg_') && paymentProvider.retrieveCharge) {
+    if (row.payment_ref?.startsWith('chg_')) {
+      if (!paymentProvider.retrieveCharge) continue;
       try {
         const { outcome } = await finalizeCharge(row.payment_ref, 'reconcile');
-        if (outcome === 'paid' || outcome === 'review') continue;
+        if (outcome === 'pending') await expireHold(row.id);
       } catch (err) {
-        console.error('[checkout] could not re-check an abandoned newcomer charge', err);
-        continue;
+        console.error('[checkout] could not re-check an earlier newcomer charge', err);
       }
+      continue;
     }
     await expireHold(row.id);
   }
@@ -706,7 +776,7 @@ async function releaseOwnNewcomerHolds(email: string, phone: string): Promise<vo
  */
 export async function createStaffBooking(input: StaffCreateBookingInput): Promise<BookingView> {
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
-  const table = await assertTableExists(input.tableId);
+  const table = await assertTableExists(input.tableId, { activeOnly: false });
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize);
   // Staff type whatever the customer gave them. A Kuwait number goes in the
   // phone column, like an online booking's; anything else stays as before.
@@ -844,14 +914,22 @@ export async function getBookingByCode(code: string): Promise<BookingView | null
   return hydrateOne(rows[0]);
 }
 
-/** All bookings made with a given email (a signed-in customer's history). */
-export async function getBookingsByEmail(email: string): Promise<BookingView[]> {
-  const { rows } = await query<BookingRow>(
-    `${BOOKING_SELECT}
-      WHERE lower(b.guest_email) = lower($1)
+/**
+ * A signed-in customer's history: bookings this account made, plus older or
+ * staff-entered ones under the same email. Only the account's own bookings
+ * carry their code and phone — the rest are shown without them, so holding an
+ * account with someone's email is never enough to claim their table.
+ */
+export async function getBookingsByEmail(email: string, userId: number): Promise<BookingView[]> {
+  const { rows } = await query<BookingRow & { user_id: number | null }>(
+    `${BOOKING_SELECT.replace('SELECT ', 'SELECT b.user_id, ')}
+      WHERE b.user_id = $2 OR (b.user_id IS NULL AND lower(b.guest_email) = lower($1))
       ORDER BY b.booking_date DESC, b.time_slot DESC`,
-    [email]
+    [email, userId]
   );
   const items = await loadItems(rows.map((r) => r.id));
-  return rows.map((r) => hydrate(r, items.get(r.id) ?? []));
+  return rows.map((r) => {
+    const view = hydrate(r, items.get(r.id) ?? []);
+    return r.user_id === userId ? view : { ...view, verificationCode: '', guestPhone: null };
+  });
 }

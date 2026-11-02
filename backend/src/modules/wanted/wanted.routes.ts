@@ -182,7 +182,11 @@ wantedRouter.post('/reserve/webhook', async (req, res) => {
     const chargeId = String(req.body?.id || '');
     if (chargeId) await finalizeListingCharge(chargeId);
   } catch (err) {
+    // A 5xx makes Tap retry. Settling is idempotent, so a retry is safe, and
+    // without one a payment that hit a database blip would never be settled.
     console.error('[tap] wanted reserve webhook failed', err);
+    res.status(500).json({ received: false });
+    return;
   }
   res.status(200).json({ received: true });
 });

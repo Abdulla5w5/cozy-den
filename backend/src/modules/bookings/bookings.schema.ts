@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { isValidStart, MAX_SESSION_MIN, SESSION_MIN, STEP_MIN } from '../../utils/slots';
 import { isoDate } from '../../utils/dates';
 import { kuwaitPhoneSchema } from '../../utils/phone';
+import { retryTokenSchema } from '../../utils/retryToken';
 
 // Length is validated against the specific start time in the service layer,
 // where closing time and the table's other bookings are known. Here we only
@@ -38,6 +39,9 @@ export const createBookingSchema = z.object({
   partySize: partySize.optional(),
   // A group promo code; checked against the party in the service.
   promoCode: z.string().trim().max(40).optional(),
+  // The browser's checkout token, so a retry can release its own abandoned
+  // hold at once (utils/retryToken.ts).
+  retryToken: retryTokenSchema,
   // Only the direct (mock) provider uses a client token. The redirect gateway
   // (Tap) collects payment on its own hosted page, so this is optional.
   paymentToken: z.string().min(1).max(200).optional(),

@@ -32,7 +32,7 @@ export async function getRecurrentCustomers(limit = 200): Promise<CustomerRow[]>
        FROM users u
        LEFT JOIN bookings b
          ON lower(b.guest_email) = u.email
-        AND b.status <> 'cancelled'
+        AND b.status NOT IN ('cancelled', 'pending_payment') AND b.source <> 'event'
       WHERE NOT u.is_staff
       GROUP BY u.id
       ORDER BY visits DESC, last_visit DESC NULLS LAST, u.created_at DESC
@@ -60,7 +60,9 @@ export interface MonthlyAnalytics {
 
 /**
  * Basic monthly aggregates. `month` is 'YYYY-MM'; we bound the range to that
- * calendar month. Cancelled bookings are excluded from every metric.
+ * calendar month. Counted: real bookings only — not cancelled ones, not
+ * checkouts still waiting on payment (or abandoned there), and not the table
+ * holds events write (source 'event'), which carry no revenue of their own.
  */
 export async function getMonthlyAnalytics(month: string): Promise<MonthlyAnalytics> {
   // Range: [first day of month, first day of next month)
@@ -70,7 +72,7 @@ export async function getMonthlyAnalytics(month: string): Promise<MonthlyAnalyti
     await query<{ bookings_count: string; revenue_cents: string | null }>(
       `SELECT COUNT(*) AS bookings_count, COALESCE(SUM(total_cents), 0) AS revenue_cents
          FROM bookings
-        WHERE status <> 'cancelled'
+        WHERE status NOT IN ('cancelled', 'pending_payment') AND source <> 'event'
           AND booking_date >= $1::date
           AND booking_date < ($1::date + INTERVAL '1 month')`,
       [start]
@@ -82,7 +84,7 @@ export async function getMonthlyAnalytics(month: string): Promise<MonthlyAnalyti
       `SELECT g.title, COUNT(*) AS bookings
          FROM bookings b
          JOIN games g ON g.id = b.game_id
-        WHERE b.status <> 'cancelled'
+        WHERE b.status NOT IN ('cancelled', 'pending_payment') AND b.source <> 'event'
           AND b.booking_date >= $1::date
           AND b.booking_date < ($1::date + INTERVAL '1 month')
         GROUP BY g.title
@@ -96,7 +98,7 @@ export async function getMonthlyAnalytics(month: string): Promise<MonthlyAnalyti
     await query<{ time_slot: string; bookings: string }>(
       `SELECT time_slot, COUNT(*) AS bookings
          FROM bookings
-        WHERE status <> 'cancelled'
+        WHERE status NOT IN ('cancelled', 'pending_payment') AND source <> 'event'
           AND booking_date >= $1::date
           AND booking_date < ($1::date + INTERVAL '1 month')
         GROUP BY time_slot
@@ -115,7 +117,7 @@ export async function getMonthlyAnalytics(month: string): Promise<MonthlyAnalyti
          FROM tables t
          LEFT JOIN bookings b
            ON b.table_id = t.id
-          AND b.status <> 'cancelled'
+          AND b.status NOT IN ('cancelled', 'pending_payment') AND b.source <> 'event'
           AND b.booking_date >= $1::date
           AND b.booking_date < ($1::date + INTERVAL '1 month')
         GROUP BY t.id, t.label, t.capacity, t.is_active

@@ -117,9 +117,18 @@ export function App() {
         <VerifyBanner email={user.email} />
       )}
       <header className="topbar">
-        <Link to="/" className="brand brand-lockup" aria-label={t('brand.home')}>
-          <img src="/brand/cozy-den-header-stacked.png" alt={t('brand.logoAlt')} />
-        </Link>
+        {/* The sleeping panda lies on the header's bottom line with its paw
+            hanging over (the café's list, item 9); the name sits beside it.
+            The panda link is a second way home for the pointer only, so it
+            stays out of the tab order and away from screen readers. */}
+        <div className="brand-wrap">
+          <Link to="/" className="brand-panda-link" tabIndex={-1} aria-hidden="true">
+            <img className="brand-panda" src="/brand/cozy-den-panda.png" alt="" />
+          </Link>
+          <Link to="/" className="brand brand-lockup" aria-label={t('brand.home')}>
+            <img src="/brand/cozy-den-header-word.png" alt={t('brand.logoAlt')} />
+          </Link>
+        </div>
         {/* Guests see four links, which fit without scrolling; signed-in users
             get extra links and the row becomes swipeable. */}
         <nav className={`mainnav ${loggedIn ? 'authed' : 'guest'}`}>

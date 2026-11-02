@@ -76,6 +76,48 @@ async function reconcileLegacyCancelledPayments(): Promise<number> {
   return rows.length;
 }
 
+/**
+ * Late captures. A booking's hold can be cancelled (local expiry, or a failed
+ * status) and the money still be captured a little later — a slow KNET
+ * session, or a webhook that arrived during a database blip. finalizeCharge
+ * turns that into a staff review item, but only if something asks Tap again.
+ * This re-asks for recently expired or failed Tap payments, at most every 30
+ * minutes each and only for six hours, which is far longer than any payment
+ * page stays open.
+ */
+async function reconcileLateCaptures(): Promise<number> {
+  const { rows } = await query<{ provider_charge_id: string }>(
+    `SELECT provider_charge_id
+       FROM payments
+      WHERE provider = 'tap' AND state IN ('expired', 'failed')
+        AND provider_charge_id LIKE 'chg_%'
+        AND created_at > now() - interval '6 hours'
+        AND (last_checked_at IS NULL OR last_checked_at < now() - interval '30 minutes')
+      ORDER BY last_checked_at NULLS FIRST
+      LIMIT 20`,
+  );
+  for (const row of rows) {
+    try {
+      // Only a capture matters here. Anything else (still INITIATED after the
+      // hold was released, say) is an abandoned checkout, not something for
+      // staff to review — so just note that it was looked at.
+      const status = await paymentProvider.retrieveCharge!(row.provider_charge_id);
+      if (status.paid) {
+        await finalizeCharge(row.provider_charge_id, 'reconcile');
+      } else {
+        await query(
+          `UPDATE payments SET last_checked_at = now()
+            WHERE provider = 'tap' AND provider_charge_id = $1`,
+          [row.provider_charge_id],
+        );
+      }
+    } catch (err) {
+      console.error('[reconcile] late-capture check failed', err);
+    }
+  }
+  return rows.length;
+}
+
 export async function reconcilePendingPayments(): Promise<{
   checked: number;
   confirmed: number;
@@ -153,7 +195,7 @@ export async function reconcilePendingPayments(): Promise<{
 async function reconcileHolds<T extends { id: number; paymentRef: string | null; expirable: boolean }>(
   label: string,
   list: (staleAfterMin: number, expiryMin: number, limit: number) => Promise<T[]>,
-  finalize: (chargeId: string) => Promise<'paid' | 'failed' | 'pending'>,
+  finalize: (chargeId: string) => Promise<'paid' | 'failed' | 'pending' | 'review'>,
   release: (id: number) => Promise<void>,
 ): Promise<void> {
   const rows = await list(STALE_AFTER_MIN, HOLD_EXPIRY_MIN, BATCH);
@@ -176,6 +218,9 @@ async function reconcileHolds<T extends { id: number; paymentRef: string | null;
       const outcome = await finalize(row.paymentRef);
       if (outcome === 'paid') confirmed++;
       else if (outcome === 'failed') cancelled++;
+      // 'review': money was taken but does not match the hold. The seats stay
+      // held for staff; releasing them would resell what someone paid for.
+      else if (outcome === 'review') continue;
       else if (row.expirable) {
         await release(row.id);
         expired++;
@@ -207,6 +252,7 @@ export function startReconciler(intervalMs = 2 * 60 * 1000): void {
     try {
       await reconcileLegacyCancelledPayments();
       await reconcilePendingPayments();
+      await reconcileLateCaptures();
       await reconcileHolds('event seats', listStaleSeatHolds, finalizeSeatCharge, releaseSeats);
       await reconcileHolds(
         'wanted listings',

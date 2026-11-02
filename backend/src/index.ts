@@ -26,5 +26,10 @@ async function shutdown(signal: string) {
     process.exit(0);
   });
 }
+// A stray rejected promise is logged, not allowed to take the server down
+// (Node exits on one by default), which would drop payment returns in flight.
+process.on('unhandledRejection', (reason) => {
+  console.error('[process] unhandled promise rejection', reason);
+});
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));

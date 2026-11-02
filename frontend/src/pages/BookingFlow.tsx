@@ -6,6 +6,7 @@ import { useI18n } from '../i18n';
 import { Booking, formatHours, TableAvailability } from '../types';
 import { CafeFloorPlan, tablePhoto } from '../components/CafeFloorPlan';
 import { isKuwaitPhone } from '../phone';
+import { checkoutToken } from '../checkoutToken';
 import { TermsBody, termsTitle } from './TermsPage';
 
 // POST /bookings returns one of two shapes: the finished booking (direct/mock
@@ -495,6 +496,7 @@ export function BookingFlow() {
         durationMin,
         partySize,
         promoCode: promoApplies ? promo?.code : undefined,
+        retryToken: checkoutToken(),
       });
       if (res.redirectUrl) {
         // Redirect gateway (Tap): hand the browser to the hosted payment page.

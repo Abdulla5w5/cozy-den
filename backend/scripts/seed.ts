@@ -12,15 +12,27 @@ const STAFF_NAME = process.env.SEED_STAFF_NAME || 'Front Counter';
 const SEED_STAFF =
   Boolean(process.env.SEED_STAFF_EMAIL) || process.env.NODE_ENV !== 'production';
 
+// Sample data is for a fresh database. Production runs this script on every
+// start (App Platform's run_command), and re-running it there brought back
+// sample menu items and events staff had deleted and reset table and game
+// details. So production skips it unless SEED_REFERENCE_DATA=true is set for
+// a deliberate one-off.
+const SEED_REFERENCE =
+  process.env.NODE_ENV !== 'production' || process.env.SEED_REFERENCE_DATA === 'true';
+
 async function main() {
   // 1) Reference data (tables / games / menu).
-  const seedPath = [
-    join(__dirname, '..', 'db', 'seed.sql'),
-    join(__dirname, '..', '..', 'db', 'seed.sql'),
-  ].find(existsSync);
-  if (!seedPath) throw new Error('Could not find database seed data');
-  const sql = readFileSync(seedPath, 'utf8');
-  await pool.query(sql);
+  if (SEED_REFERENCE) {
+    const seedPath = [
+      join(__dirname, '..', 'db', 'seed.sql'),
+      join(__dirname, '..', '..', 'db', 'seed.sql'),
+    ].find(existsSync);
+    if (!seedPath) throw new Error('Could not find database seed data');
+    const sql = readFileSync(seedPath, 'utf8');
+    await pool.query(sql);
+  } else {
+    console.log('  Skipping sample data in production.');
+  }
 
   // 2) Development convenience account. Skipped in production so a known
   //    default login can never exist on the live site.

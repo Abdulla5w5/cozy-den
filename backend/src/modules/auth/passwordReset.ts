@@ -47,6 +47,14 @@ export async function requestPasswordReset(email: string): Promise<void> {
   const user = rows[0];
   if (!user) return;
 
+  // At most one email a minute per account, however many requests arrive.
+  const { rows: recent } = await query(
+    `SELECT 1 FROM password_reset_tokens
+      WHERE user_id = $1 AND created_at > now() - interval '1 minute' LIMIT 1`,
+    [user.id],
+  );
+  if (recent.length > 0) return;
+
   const token = randomBytes(32).toString('hex');
   // One live link per account, so requesting again invalidates the previous
   // email rather than leaving several usable links in an inbox.

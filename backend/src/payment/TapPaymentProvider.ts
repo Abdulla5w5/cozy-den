@@ -43,8 +43,10 @@ const FAILED = new Set([
   'EXPIRED',
   'VOID',
   'TIMEDOUT',
-  'UNKNOWN',
 ]);
+// UNKNOWN is deliberately not a failure: it means the issuer's answer is not
+// in yet, and it can still settle as CAPTURED. Treated as still in flight, so
+// the hold stays until Tap answers or the normal expiry releases it.
 
 export class TapPaymentProvider implements PaymentProvider {
   readonly name = 'tap';

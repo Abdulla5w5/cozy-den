@@ -23,6 +23,14 @@ export async function sendVerificationEmail(user: {
   name: string;
   email: string;
 }): Promise<void> {
+  // At most one email a minute per account, however many requests arrive.
+  const { rows: recent } = await query(
+    `SELECT 1 FROM email_verification_tokens
+      WHERE user_id = $1 AND created_at > now() - interval '1 minute' LIMIT 1`,
+    [user.id],
+  );
+  if (recent.length > 0) return;
+
   const token = randomBytes(32).toString('hex');
   // One live token per account: clear old ones so a resend invalidates the last.
   await query('DELETE FROM email_verification_tokens WHERE user_id = $1', [user.id]);

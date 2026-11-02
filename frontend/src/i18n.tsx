@@ -507,6 +507,10 @@ const dict: Record<string, { en: string; ar: string }> = {
   'nav.mybookings': { en: 'My Bookings', ar: 'حجوزاتي' },
   'acct.title': { en: 'My Bookings', ar: 'حجوزاتي' },
   'acct.sub': { en: 'Your past and upcoming sessions.', ar: 'جلساتك السابقة والقادمة.' },
+  'acct.codeAtCounter': {
+    en: 'Booked by phone or at the counter — give your name there.',
+    ar: 'محجوز بالهاتف أو عند الكاونتر — اعطهم اسمك هناك.',
+  },
   'acct.empty': { en: "You haven't booked anything yet.", ar: 'ما حجزت شي بعد.' },
   'staff.imgSharePage': {
     en: 'That is a share page, not an image. Drive, Docs, Dropbox and OneDrive links serve a web page, so the picture will not appear. Upload to a free image host (Cloudinary works well) and paste the direct link — it should end in .jpg, .png or .webp.',
@@ -868,6 +872,8 @@ const dict: Record<string, { en: string; ar: string }> = {
     ar: 'كل اللي جاي — ليالينا بالدن والأماكن اللي تلقونا فيها.',
   },
   'ev.upcoming': { en: 'Upcoming events', ar: 'فعاليات قادمة' },
+  'ev.details': { en: 'Details & seats →', ar: 'التفاصيل والمقاعد ←' },
+  'ev.detailsOnly': { en: 'Details →', ar: 'التفاصيل ←' },
   'ev.seeAll': { en: 'Full calendar →', ar: 'التقويم الكامل ←' },
   'ev.internal': { en: 'At Cozy Den', ar: 'في كوزي دن' },
   'ev.external': { en: 'Off-site', ar: 'خارج المحل' },

@@ -296,6 +296,43 @@ export function listingPerSeat(preferredDays: number[], rates: Rates, durationMi
   );
 }
 
+/**
+ * One seat on a Wanted Board listing that has a session date: priced from
+ * that date exactly as a table booking on it would be — a staff override for
+ * the date (a holiday) wins, then the weekday's normal prices. Listings
+ * without a date fall back to listingPerSeat's preferred-days rule.
+ */
+export function listingPerSeatOn(
+  sessionDate: string | null,
+  preferredDays: number[],
+  rates: Rates,
+  overrides: Map<string, number>,
+  durationMin: number,
+): number {
+  if (!sessionDate) return listingPerSeat(preferredDays, rates, durationMin);
+  const override = overrides.get(sessionDate);
+  if (override !== undefined) return perSeatForLength(override, null, null, durationMin);
+  const dow = new Date(`${sessionDate}T00:00:00Z`).getUTCDay();
+  return PEAK_DAYS.has(dow)
+    ? perSeatForLength(rates.peakCents, null, rates.extraHourPeakCents, durationMin)
+    : perSeatForLength(
+        rates.offPeakCents,
+        rates.sixHourOffPeakCents,
+        rates.extraHourOffPeakCents,
+        durationMin,
+      );
+}
+
+/** Upcoming date overrides as date -> per-seat block price (from yesterday on,
+ *  so a service night past midnight UTC is still covered). */
+export async function getOverrideMap(): Promise<Map<string, number>> {
+  const { rows } = await query<{ d: string; fee_cents: number }>(
+    `SELECT to_char(override_date, 'YYYY-MM-DD') AS d, fee_cents
+       FROM price_overrides WHERE override_date >= current_date - 1`,
+  );
+  return new Map(rows.map((r) => [r.d, r.fee_cents]));
+}
+
 export async function getTableFee(date: string): Promise<TableFee> {
   const { rows } = await query<{
     dow: number;

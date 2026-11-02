@@ -27,6 +27,9 @@ if (env.redisUrl) {
   client = createClient({
     url: env.redisUrl,
     socket: { reconnectStrategy: (retries) => Math.min(retries * 200, 5000) },
+    // Fail commands at once while Redis is down instead of queueing them, so
+    // the limiter's fail-open path runs rather than every request hanging.
+    disableOfflineQueue: true,
   });
   client.on('error', (err) => {
     if (redisReady) console.error('[ratelimit] redis error', err.message);
@@ -63,8 +66,24 @@ function failOpen(limiter: RequestHandler): RequestHandler {
 }
 
 // Generous global cap so a single client can't hammer the whole API.
+/**
+ * Who is asking, for counting. On App Platform every request reaches us
+ * through Cloudflare and DigitalOcean's edge, so req.ip is the address of
+ * whichever edge server passed it on — a different one almost every time.
+ * Measured on the live site (Nov 2026): the limit counter never went below
+ * 299 of 300, i.e. no limit ever applied. The edge puts the visitor's own
+ * address in do-connecting-ip (overwriting anything the client sent), with
+ * Cloudflare's cf-connecting-ip as a fallback; req.ip only off the platform.
+ */
+export function clientKey(req: Request): string {
+  const header = req.headers['do-connecting-ip'] ?? req.headers['cf-connecting-ip'];
+  const value = Array.isArray(header) ? header[0] : header;
+  return value?.trim() || req.ip || 'unknown';
+}
+
 export const globalLimiter = failOpen(
   rateLimit({
+    keyGenerator: clientKey,
     windowMs: 15 * 60 * 1000,
     max: 300,
     standardHeaders: true,
@@ -77,6 +96,7 @@ export const globalLimiter = failOpen(
 // Tighter cap on booking creation (writes + payment side effects).
 export const bookingLimiter = failOpen(
   rateLimit({
+    keyGenerator: clientKey,
     windowMs: 10 * 60 * 1000,
     max: env.bookingRateMax,
     standardHeaders: true,
@@ -91,6 +111,7 @@ export const bookingLimiter = failOpen(
 // codes cannot be guessed by the thousand.
 export const promoLimiter = failOpen(
   rateLimit({
+    keyGenerator: clientKey,
     windowMs: 10 * 60 * 1000,
     max: 40,
     standardHeaders: true,
@@ -100,11 +121,31 @@ export const promoLimiter = failOpen(
   })
 );
 
+// Anything that sends an email to an address the requester types: sign-up,
+// forgot-password, resend-verification. Counted whether or not it succeeds
+// (those all answer 200/201), so nobody can flood a customer's inbox or burn
+// the café's daily mail allowance and stop booking receipts going out.
+export const mailLimiter = failOpen(
+  rateLimit({
+    keyGenerator: clientKey,
+    windowMs: 60 * 60 * 1000,
+    // Generous enough for a café's shared Wi-Fi on a busy night; the
+    // once-a-minute rule per account (verification.ts, passwordReset.ts)
+    // is what stops one inbox being flooded.
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: redisStore('rl:mail:'),
+    message: { error: 'Too many emails requested. Please try again in an hour.' },
+  })
+);
+
 // Cap on login/registration to blunt credential-stuffing / brute force.
 // 13 per 15 min: enough headroom for a customer fumbling a password or a typo'd
 // email a few times, still far below what a brute-force run needs.
 export const loginLimiter = failOpen(
   rateLimit({
+    keyGenerator: clientKey,
     windowMs: 15 * 60 * 1000,
     max: 13,
     // Don't spend the budget on successful logins — only failures count, so a

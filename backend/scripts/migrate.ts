@@ -17,6 +17,22 @@ async function main() {
 
   if (!dir) throw new Error('Could not find database migrations');
 
+  // Two instances starting together must not both apply the same file. A
+  // session-level advisory lock on one dedicated connection serialises them;
+  // the second waits, then finds everything already applied.
+  const lock = await pool.connect();
+  await lock.query('SELECT pg_advisory_lock(735918)');
+  try {
+    await apply(dir);
+  } finally {
+    await lock.query('SELECT pg_advisory_unlock(735918)');
+    lock.release();
+  }
+  console.log('Migrations up to date.');
+  await pool.end();
+}
+
+async function apply(dir: string) {
   await pool.query(
     `CREATE TABLE IF NOT EXISTS schema_migrations (
        filename TEXT PRIMARY KEY,
@@ -44,9 +60,6 @@ async function main() {
     await pool.query(sql);
     await pool.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
   }
-
-  console.log('Migrations up to date.');
-  await pool.end();
 }
 
 main().catch(async (err) => {

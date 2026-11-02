@@ -5,6 +5,7 @@ import { COMMUNITY_URL } from '../community';
 import { useI18n } from '../i18n';
 import { EventItem, Game, MenuItem } from '../types';
 import { GameCard, tileFor } from '../components/GameCard';
+import { DateTile, EventTag, EventTokens, SeatsMeter } from '../components/EventTicket';
 import { ReviewSlider } from '../components/ReviewSlider';
 import { Roadmap } from '../components/Roadmap';
 
@@ -146,30 +147,47 @@ export function Home() {
       </section>
 
       {events.length > 0 && (
-        <section className="section">
+        <section className="section events-home">
           <div className="section-head">
-            <h2>{t('ev.upcoming')}</h2>
+            <div>
+              <span className="section-kicker">{t('ev.eyebrow')}</span>
+              <h2>{t('ev.upcoming')}</h2>
+            </div>
             <Link to="/events" className="see-all">
               {t('ev.seeAll')}
             </Link>
           </div>
-          <div className="ev-strip">
-            {events.slice(0, 4).map((e) => (
-              <Link to="/events" className="ev-card" key={e.id}>
+          {/* Bigger than before (the café's list, item 2): the next event is a
+              wide featured ticket, the two after it sit underneath. */}
+          <div className="ev-board">
+            {events.slice(0, 3).map((e, i) => (
+              <Link
+                to="/events"
+                className={`ev-ticket ${e.type} ${i === 0 ? 'is-featured' : ''} ${e.image_url ? 'has-art' : ''}`}
+                key={e.id}
+              >
                 {e.image_url && (
-                  <img className="ev-card-img" src={e.image_url} alt="" loading="lazy" decoding="async" />
+                  <div className="ev-ticket-art">
+                    <img src={e.image_url} alt="" loading="lazy" decoding="async" />
+                  </div>
                 )}
-                <span className={`pill ${e.type === 'external' ? 'ext' : ''}`}>
-                  {e.type === 'internal' ? t('ev.internal') : t('ev.external')}
-                </span>
-                <h3>{homeContent(e.title, lang)}</h3>
-                <p className="muted">
-                  {e.event_date}
-                  {e.event_time ? ` · ${e.event_time}` : ''}
-                </p>
-                {e.description && (
-                  <p className="muted ev-card-desc">{homeContent(e.description, lang)}</p>
-                )}
+                <div className="ev-ticket-main">
+                  <DateTile e={e} />
+                  <div className="ev-ticket-body">
+                    <EventTag e={e} />
+                    <h3>{homeContent(e.title, lang)}</h3>
+                    {e.description && (
+                      <p className="ev-ticket-desc">{homeContent(e.description, lang)}</p>
+                    )}
+                    <EventTokens e={e} />
+                  </div>
+                </div>
+                <div className="ev-ticket-stub">
+                  {e.type === 'internal' ? <SeatsMeter e={e} /> : <span />}
+                  <span className="ev-ticket-go">
+                    {e.type === 'internal' ? t('ev.details') : t('ev.detailsOnly')}
+                  </span>
+                </div>
               </Link>
             ))}
           </div>
