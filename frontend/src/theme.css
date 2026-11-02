@@ -107,9 +107,10 @@
   box-shadow: 0 0 55px rgba(17, 119, 238, 0.22);
 }
 
+/* Orange, not yellow (client, Nov 2026: less yellow). */
 [data-theme='dark'] .hero-stage::after {
-  background: linear-gradient(145deg, #ffe05a, #ffbd17);
-  box-shadow: 0 0 42px rgba(255, 210, 28, 0.12);
+  background: linear-gradient(145deg, #ff8c28, var(--orange));
+  box-shadow: 0 0 42px rgba(244, 119, 0, 0.14);
 }
 
 [data-theme='dark'] .hero-logo-card {
