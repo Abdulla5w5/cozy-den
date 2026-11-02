@@ -264,6 +264,9 @@ const dict: Record<string, { en: string; ar: string }> = {
   'bk.stayUntil': { en: 'Until', ar: 'إلى' },
   'bk.stayLength': { en: 'How long?', ar: 'كم مدة؟' },
   'bk.hoursShort': { en: '{n}h', ar: '{n} ساعة' },
+  'bk.hoursWord': { en: 'hours', ar: 'ساعات' },
+  'bk.lessTime': { en: 'One hour less', ar: 'ساعة أقل' },
+  'bk.moreTime': { en: 'One hour more', ar: 'ساعة زيادة' },
   'bk.lateSeating': { en: 'Last seating', ar: 'آخر جلسة' },
   'bk.lateSeatingHint': {
     en: 'We close at 3 AM, so this sitting runs until then at our late rate.',

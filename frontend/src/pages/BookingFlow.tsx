@@ -175,6 +175,64 @@ function groupPerSeat(g: GroupFee, durationMin: number): number {
   return Math.round(g.cents + (g.extraHourCents * Math.max(0, durationMin - SESSION_MIN)) / 60);
 }
 
+/**
+ * The length picker (the café's list, item 27): starts at two hours, with a
+ * minus and a plus around it, stepping through the lengths this table and
+ * start time allow. The pips underneath fill up like a game meter.
+ */
+function HourStepper({
+  choices,
+  value,
+  onChange,
+  until,
+}: {
+  choices: number[];
+  value: number;
+  onChange: (d: number) => void;
+  until: (d: number) => string;
+}) {
+  const { t } = useI18n();
+  const index = Math.max(0, choices.indexOf(value));
+  const canLess = index > 0;
+  const canMore = index < choices.length - 1;
+  return (
+    <div className="hour-stepper">
+      <button
+        type="button"
+        className="hour-step"
+        onClick={() => canLess && onChange(choices[index - 1])}
+        disabled={!canLess}
+        aria-label={t('bk.lessTime')}
+      >
+        −
+      </button>
+      <div className="hour-readout" aria-live="polite">
+        <strong>{formatHours(value)}</strong>
+        <span>{t('bk.hoursWord')}</span>
+        <small>
+          {t('bk.stayUntil')} <b dir="ltr">{until(value)}</b>
+        </small>
+        {choices.length > 1 && (
+          <span className="hour-pips" aria-hidden="true">
+            {choices.map((d, i) => (
+              <i key={d} className={i <= index ? 'on' : ''} />
+            ))}
+          </span>
+        )}
+      </div>
+      <button
+        type="button"
+        className="hour-step"
+        onClick={() => canMore && onChange(choices[index + 1])}
+        disabled={!canMore}
+        aria-label={t('bk.moreTime')}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
 export function BookingFlow() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -655,26 +713,24 @@ export function BookingFlow() {
 
                   {timeSlot && (
                     <div className="sitting-options">
-                      <label className="sitting-field">
-                        <span>{t('bk.stayLength')}</span>
+                      {/* A div, not a label: a label hands its clicks to the
+                          first button inside it, so tapping "How long?" would
+                          have taken an hour off. */}
+                      <div className="sitting-field" role="group" aria-labelledby="stay-length">
+                        <span id="stay-length">{t('bk.stayLength')}</span>
                         {late ? (
                           <em className="sitting-fixed">
                             {t('bk.lateSeating')} · {timeSlot}–{endLabel(timeSlot, durationMin)}
                           </em>
                         ) : (
-                          <select
+                          <HourStepper
+                            choices={durationChoices}
                             value={durationMin}
-                            onChange={(e) => setDurationMin(Number(e.target.value))}
-                          >
-                            {durationChoices.map((d) => (
-                              <option key={d} value={d}>
-                                {t('bk.hoursShort', { n: formatHours(d) })} · {t('bk.stayUntil')}{' '}
-                                {endLabel(timeSlot, d)}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={setDurationMin}
+                            until={(d) => endLabel(timeSlot, d)}
+                          />
                         )}
-                      </label>
+                      </div>
 
                       <label className="sitting-field">
                         <span>{t('bk.partySize')}</span>

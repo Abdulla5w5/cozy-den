@@ -1307,7 +1307,7 @@ table.data code {
 /* ============ Menu — image + content cards ============ */
 .menu-grid2 {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 1.25rem;
 }
 .mcard {
@@ -7625,4 +7625,140 @@ button.link {
     inset-inline: 1rem;
     width: auto;
   }
+}
+
+/* Length stepper (item 27): chunky arcade buttons around a score-style
+   readout, with a pip meter for how far up the lengths you are. */
+.hour-stepper {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+.hour-step {
+  display: grid;
+  place-items: center;
+  min-height: 56px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  background: var(--orange);
+  color: #fff;
+  font-size: 1.9rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 3px 3px 0 var(--ink);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.hour-step:hover:not(:disabled) {
+  background: var(--orange);
+  color: #fff;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.hour-step:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--ink);
+}
+.hour-step:disabled {
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  opacity: 0.55;
+}
+.hour-readout {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  padding: 0.35rem 0.5rem 0.45rem;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  background: var(--surface-low);
+  color: var(--ink);
+  text-align: center;
+}
+.hour-readout strong {
+  font-family: 'Space Mono', monospace;
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.05;
+}
+.hour-readout > span:not(.hour-pips) {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.hour-readout small {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.hour-readout small b {
+  color: var(--ink);
+  font-family: 'Space Mono', monospace;
+}
+.hour-pips {
+  display: flex;
+  gap: 4px;
+  margin-top: 0.35rem;
+}
+.hour-pips i {
+  width: 14px;
+  height: 6px;
+  border: 1.5px solid var(--ink);
+  border-radius: 3px;
+  background: transparent;
+}
+.hour-pips i.on {
+  background: var(--orange);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hour-step {
+    transition: none;
+  }
+}
+/* Dark mode: the general dark button style would turn these grey. Same
+   glowing orange as the site's main buttons instead. */
+[data-theme='dark'] .hour-step,
+[data-theme='dark'] .hour-step:hover:not(:disabled),
+[data-theme='dark'] .hour-step:focus:not(:disabled) {
+  border-color: #08090b;
+  background: linear-gradient(135deg, #ff8c28, var(--orange));
+  color: #17120d;
+  box-shadow: 3px 3px 0 #050608, 0 0 20px rgba(244, 119, 0, 0.15);
+}
+[data-theme='dark'] .hour-step:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 #050608;
+}
+[data-theme='dark'] .hour-step:disabled {
+  border-color: rgba(246, 239, 227, 0.4);
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+[data-theme='dark'] .hour-pips i {
+  border-color: rgba(246, 239, 227, 0.6);
+}
+/* Dark mode: --ink turns cream there, which washed the 400+ sticker's label,
+   outline and shadow out against its white face. Keep it a light-mode
+   sticker — dark ink on white — in both themes. */
+[data-theme='dark'] .hero-sticker {
+  border-color: #08090b;
+  box-shadow: 5px 5px 0 #050608;
+}
+[data-theme='dark'] .hero-sticker small {
+  color: #17120d;
+  font-weight: 800;
+}
+/* The rook sits on the yellow circle, where white barely shows. */
+.proof-avatars i:nth-child(2),
+[data-theme='dark'] .proof-avatars i:nth-child(2) {
+  color: #17120d;
 }
