@@ -36,6 +36,8 @@ export const createBookingSchema = z.object({
   }),
   durationMin: durationMin.optional(),
   partySize: partySize.optional(),
+  // A group promo code; checked against the party in the service.
+  promoCode: z.string().trim().max(40).optional(),
   // Only the direct (mock) provider uses a client token. The redirect gateway
   // (Tap) collects payment on its own hosted page, so this is optional.
   paymentToken: z.string().min(1).max(200).optional(),

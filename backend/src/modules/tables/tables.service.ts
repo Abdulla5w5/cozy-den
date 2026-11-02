@@ -111,7 +111,7 @@ export async function getAvailability(
         .reduce((lo, m) => Math.min(lo, m), Number.POSITIVE_INFINITY);
       const room = Math.min(maxDurationFor(s), nextStart - sMin);
       // Report the longest length actually on offer, not the raw gap: sittings
-      // are sold in whole blocks, so a 5-hour gap still only sells 4 hours.
+      // come in fixed lengths, so a 5.5-hour gap still only sells 5 hours.
       const fits = allowedDurations(s).filter((d) => d <= room);
       freeSlots.push(s);
       maxDuration[s] = fits.length ? fits[fits.length - 1] : shortest;

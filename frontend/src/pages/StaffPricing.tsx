@@ -6,7 +6,8 @@ import { kd, kdToCents } from '../types';
 /**
  * Staff price editor.
  *
- * Two base rates, plus a list of dated overrides. An override is simply "on
+ * Two base rates, the late-seating rates, a flat six-hour weekday price, plus
+ * a list of dated overrides. An override is simply "on
  * this date, charge this instead" — a national holiday, a quiet-Tuesday
  * discount and an event upcharge are all the same operation, so staff never
  * need a deploy to change a price.
@@ -20,6 +21,22 @@ interface Rates {
   offPeakCents: number;
   latePeakCents: number;
   lateOffPeakCents: number;
+  sixHourOffPeakCents: number | null;
+  extraHourPeakCents: number | null;
+  extraHourOffPeakCents: number | null;
+}
+/** Null until set; blank in the form. */
+interface GroupRates {
+  offPeakCents: number | null;
+  extraOffPeakCents: number | null;
+  saturdayCents: number | null;
+  extraSaturdayCents: number | null;
+}
+interface PromoCode {
+  id: number;
+  code: string;
+  minParty: number;
+  isActive: boolean;
 }
 interface Override {
   date: string;
@@ -29,6 +46,8 @@ interface Override {
 
 const toKd = kd;
 const toCents = kdToCents;
+const kdOrBlank = (c: number | null) => (c === null ? '' : toKd(c));
+const centsOrNull = (v: string) => (v.trim() === '' ? null : toCents(v));
 
 export function StaffPricing() {
   const { t } = useI18n();
@@ -38,7 +57,20 @@ export function StaffPricing() {
   const [offPeak, setOffPeak] = useState('');
   const [latePeak, setLatePeak] = useState('');
   const [lateOffPeak, setLateOffPeak] = useState('');
+  // Blank means no flat six-hour price.
+  const [sixHour, setSixHour] = useState('');
+  // Blank means the odd hour of a 3- or 5-hour booking is half a block.
+  const [extraPeak, setExtraPeak] = useState('');
+  const [extraOffPeak, setExtraOffPeak] = useState('');
   const [note, setNote] = useState<string | null>(null);
+  // Group promo code prices and the codes themselves.
+  const [codes, setCodes] = useState<PromoCode[]>([]);
+  const [groupOff, setGroupOff] = useState('');
+  const [groupExtraOff, setGroupExtraOff] = useState('');
+  const [groupSat, setGroupSat] = useState('');
+  const [groupExtraSat, setGroupExtraSat] = useState('');
+  const [newCode, setNewCode] = useState('');
+  const [newMinParty, setNewMinParty] = useState('6');
 
   const [date, setDate] = useState('');
   const [label, setLabel] = useState('');
@@ -46,14 +78,26 @@ export function StaffPricing() {
 
   function load() {
     api
-      .get<{ rates: Rates; overrides: Override[] }>('/staff/pricing')
+      .get<{ rates: Rates; overrides: Override[]; groupRates: GroupRates; codes: PromoCode[] }>(
+        '/staff/pricing',
+      )
       .then((r) => {
         setRates(r.rates);
         setOverrides(r.overrides);
+        setCodes(r.codes);
+        setGroupOff(kdOrBlank(r.groupRates.offPeakCents));
+        setGroupExtraOff(kdOrBlank(r.groupRates.extraOffPeakCents));
+        setGroupSat(kdOrBlank(r.groupRates.saturdayCents));
+        setGroupExtraSat(kdOrBlank(r.groupRates.extraSaturdayCents));
         setPeak(toKd(r.rates.peakCents));
         setOffPeak(toKd(r.rates.offPeakCents));
         setLatePeak(toKd(r.rates.latePeakCents));
         setLateOffPeak(toKd(r.rates.lateOffPeakCents));
+        setSixHour(r.rates.sixHourOffPeakCents === null ? '' : toKd(r.rates.sixHourOffPeakCents));
+        setExtraPeak(r.rates.extraHourPeakCents === null ? '' : toKd(r.rates.extraHourPeakCents));
+        setExtraOffPeak(
+          r.rates.extraHourOffPeakCents === null ? '' : toKd(r.rates.extraHourOffPeakCents),
+        );
       })
       .catch(() => setRates(null));
   }
@@ -69,6 +113,9 @@ export function StaffPricing() {
         offPeakCents: toCents(offPeak),
         latePeakCents: toCents(latePeak),
         lateOffPeakCents: toCents(lateOffPeak),
+        sixHourOffPeakCents: sixHour.trim() === '' ? null : toCents(sixHour),
+        extraHourPeakCents: extraPeak.trim() === '' ? null : toCents(extraPeak),
+        extraHourOffPeakCents: extraOffPeak.trim() === '' ? null : toCents(extraOffPeak),
       });
       setNote(t('pr.saved'));
       load();
@@ -95,6 +142,51 @@ export function StaffPricing() {
     } catch (err) {
       setNote(err instanceof Error ? err.message : t('pr.failed'));
     }
+  }
+
+  async function saveGroupRates(e: FormEvent) {
+    e.preventDefault();
+    setNote(null);
+    try {
+      await api.put('/staff/pricing/group', {
+        offPeakCents: centsOrNull(groupOff),
+        extraOffPeakCents: centsOrNull(groupExtraOff),
+        saturdayCents: centsOrNull(groupSat),
+        extraSaturdayCents: centsOrNull(groupExtraSat),
+      });
+      setNote(t('pr.saved'));
+      load();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : t('pr.failed'));
+    }
+  }
+
+  async function addCode(e: FormEvent) {
+    e.preventDefault();
+    setNote(null);
+    try {
+      const r = await api.post<{ codes: PromoCode[] }>('/staff/pricing/codes', {
+        code: newCode.trim(),
+        minParty: Number(newMinParty) || 6,
+      });
+      setCodes(r.codes);
+      setNewCode('');
+      setNote(t('pr.saved'));
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : t('pr.failed'));
+    }
+  }
+
+  async function toggleCode(c: PromoCode) {
+    const r = await api
+      .put<{ codes: PromoCode[] }>(`/staff/pricing/codes/${c.id}`, { isActive: !c.isActive })
+      .catch(() => null);
+    if (r) setCodes(r.codes);
+  }
+
+  async function removeCode(c: PromoCode) {
+    const r = await api.del<{ codes: PromoCode[] }>(`/staff/pricing/codes/${c.id}`).catch(() => null);
+    if (r) setCodes(r.codes);
   }
 
   async function removeOverride(d: string) {
@@ -140,8 +232,124 @@ export function StaffPricing() {
               inputMode="decimal"
             />
           </label>
+          <label className="field inline">
+            {t('pr.sixHour')}
+            <input
+              value={sixHour}
+              onChange={(e) => setSixHour(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('pr.sixHourOff')}
+            />
+          </label>
+          <label className="field inline">
+            {t('pr.extraPeak')}
+            <input
+              value={extraPeak}
+              onChange={(e) => setExtraPeak(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('pr.extraHalf')}
+            />
+          </label>
+          <label className="field inline">
+            {t('pr.extraOffPeak')}
+            <input
+              value={extraOffPeak}
+              onChange={(e) => setExtraOffPeak(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('pr.extraHalf')}
+            />
+          </label>
           <button className="primary">{t('pr.save')}</button>
         </div>
+      </form>
+
+      <form className="summary manual-form" onSubmit={saveGroupRates}>
+        <h3>{t('pr.groupTitle')}</h3>
+        <p className="muted">{t('pr.groupHelp')}</p>
+        <div className="row">
+          <label className="field inline">
+            {t('pr.groupOff')}
+            <input value={groupOff}
+              onChange={(e) => setGroupOff(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('pr.groupUnset')}
+            />
+          </label>
+          <label className="field inline">
+            {t('pr.groupExtraOff')}
+            <input
+              value={groupExtraOff}
+              onChange={(e) => setGroupExtraOff(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('pr.groupUnset')}
+            />
+          </label>
+          <label className="field inline">
+            {t('pr.groupSat')}
+            <input value={groupSat}
+              onChange={(e) => setGroupSat(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('pr.groupUnset')}
+            />
+          </label>
+          <label className="field inline">
+            {t('pr.groupExtraSat')}
+            <input
+              value={groupExtraSat}
+              onChange={(e) => setGroupExtraSat(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('pr.groupUnset')}
+            />
+          </label>
+          <button className="primary">{t('pr.save')}</button>
+        </div>
+      </form>
+
+      <form className="summary manual-form" onSubmit={addCode}>
+        <h3>{t('pr.codesTitle')}</h3>
+        <p className="muted">{t('pr.codesHelp')}</p>
+        <div className="row">
+          <label className="field inline">
+            {t('pr.code')}
+            <input
+              value={newCode}
+              onChange={(e) => setNewCode(e.target.value)}
+              maxLength={40}
+              autoCapitalize="characters"
+              dir="ltr"
+            />
+          </label>
+          <label className="field inline">
+            {t('pr.codeMinParty')}
+            <input
+              value={newMinParty}
+              onChange={(e) => setNewMinParty(e.target.value)}
+              inputMode="numeric"
+            />
+          </label>
+          <button className="primary" disabled={newCode.trim().length < 3}>
+            {t('pr.addCode')}
+          </button>
+        </div>
+        {codes.length === 0 ? (
+          <p className="muted">{t('pr.noCodes')}</p>
+        ) : (
+          <ul className="promo-code-list">
+            {codes.map((c) => (
+              <li key={c.id}>
+                <code dir="ltr">{c.code}</code>
+                <span className="muted">{t('pr.codeFor', { n: String(c.minParty) })}</span>
+                <span className="tag">{c.isActive ? t('pr.codeOn') : t('pr.codeOff')}</span>
+                <button type="button" className="link" onClick={() => toggleCode(c)}>
+                  {c.isActive ? t('pr.codeDisable') : t('pr.codeEnable')}
+                </button>
+                <button type="button" className="link" onClick={() => removeCode(c)}>
+                  {t('pr.remove')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </form>
 
       <form className="summary manual-form" onSubmit={saveOverride}>

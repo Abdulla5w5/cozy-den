@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
-import { Booking, Game, HistoryEntry } from '../types';
+import { Booking, formatHours, Game, HistoryEntry } from '../types';
 
 /** Customer profile: booking history + the games they've logged playing. */
 export function MyBookings() {
@@ -57,7 +57,7 @@ export function MyBookings() {
               </div>
               <h3>{b.tableLabel}</h3>
               <p className="muted">
-                {b.date} · {b.timeSlot} {t('bk.seating')}
+                {b.date} · {b.timeSlot} ({t('bk.sessionHours', { n: formatHours(b.durationMin) })})
               </p>
               <span className="tag">{b.verificationCode}</span>
             </div>

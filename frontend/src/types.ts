@@ -160,6 +160,12 @@ export interface MonthlyAnalytics {
  * of it — a third would promise a precision the amounts cannot hold. Every
  * price the site shows or puts in an editable field goes through one of these.
  */
+/** Minutes as hours for display: 300 -> "5", 90 -> "1.5". */
+export function formatHours(mins: number) {
+  const h = mins / 60;
+  return Number.isInteger(h) ? String(h) : h.toFixed(1);
+}
+
 export const kd = (cents: number) => (cents / 100).toFixed(2);
 export const money = (cents: number) => `KD ${kd(cents)}`;
 /** The inverse, for a price typed into a form. */

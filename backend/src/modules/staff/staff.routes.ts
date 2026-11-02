@@ -16,11 +16,19 @@ import { deletePost, listPostsForStaff, moderatePost } from '../wanted/wanted.se
 import { setReviewed } from '../support/support.service';
 import {
   deleteOverride,
+  getGroupRates,
   getRates,
   listOverrides,
+  setGroupRates,
   setRates,
   upsertOverride,
 } from '../../utils/pricing';
+import {
+  createCode,
+  deleteCode,
+  listCodes,
+  setCodeActive,
+} from '../promo/codes.service';
 import { staffCreateBookingSchema } from '../bookings/bookings.schema';
 import { createStaffBooking, getBookingById } from '../bookings/bookings.service';
 import { isoDate, isoMonth } from '../../utils/dates';
@@ -321,6 +329,8 @@ staffRouter.get('/pricing', requireAdmin, async (_req, res, next) => {
     res.json({
       rates: await getRates(),
       overrides: await listOverrides(new Date().toISOString().slice(0, 10)),
+      groupRates: await getGroupRates(),
+      codes: await listCodes(),
     });
   } catch (err) {
     next(err);
@@ -332,6 +342,11 @@ const ratesSchema = z.object({
   offPeakCents: z.number().int().min(0).max(100000),
   latePeakCents: z.number().int().min(0).max(100000),
   lateOffPeakCents: z.number().int().min(0).max(100000),
+  // Null switches the flat six-hour weekday price off.
+  sixHourOffPeakCents: z.number().int().min(0).max(100000).nullable(),
+  // Null makes the odd hour of a 3- or 5-hour booking half a block.
+  extraHourPeakCents: z.number().int().min(0).max(100000).nullable(),
+  extraHourOffPeakCents: z.number().int().min(0).max(100000).nullable(),
 });
 
 // PUT /api/staff/pricing/rates — the Thu/Fri/Sat and everyday rates.
@@ -359,6 +374,85 @@ staffRouter.put(
     try {
       await upsertOverride(req.body);
       res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Null leaves that price unset, and a code then changes nothing on those days.
+const groupRatesSchema = z.object({
+  offPeakCents: z.number().int().min(0).max(100000).nullable(),
+  extraOffPeakCents: z.number().int().min(0).max(100000).nullable(),
+  saturdayCents: z.number().int().min(0).max(100000).nullable(),
+  extraSaturdayCents: z.number().int().min(0).max(100000).nullable(),
+});
+
+// PUT /api/staff/pricing/group — the prices a group promo code unlocks.
+staffRouter.put(
+  '/pricing/group',
+  requireAdmin,
+  validate(groupRatesSchema),
+  async (req, res, next) => {
+    try {
+      await setGroupRates(req.body);
+      res.json({ groupRates: await getGroupRates() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const codeBody = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(3)
+    .max(40)
+    .regex(/^[A-Za-z0-9_-]+$/, 'Letters, numbers, - and _ only'),
+  minParty: z.number().int().min(1).max(100).default(6),
+});
+
+// POST /api/staff/pricing/codes — add a group promo code.
+staffRouter.post('/pricing/codes', requireAdmin, validate(codeBody), async (req, res, next) => {
+  try {
+    await createCode(req.body.code, req.body.minParty);
+    res.json({ codes: await listCodes() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const codeActiveBody = z.object({ isActive: z.boolean() });
+
+// PUT /api/staff/pricing/codes/:id — switch a code on or off.
+staffRouter.put(
+  '/pricing/codes/:id',
+  requireAdmin,
+  validate(idParam, 'params'),
+  validate(codeActiveBody),
+  async (req, res, next) => {
+    try {
+      if (!(await setCodeActive(Number(req.params.id), req.body.isActive))) {
+        throw new ApiError(404, 'No such code.');
+      }
+      res.json({ codes: await listCodes() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// DELETE /api/staff/pricing/codes/:id — remove a code. Bookings that used it
+// keep its name.
+staffRouter.delete(
+  '/pricing/codes/:id',
+  requireAdmin,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      if (!(await deleteCode(Number(req.params.id)))) throw new ApiError(404, 'No such code.');
+      res.json({ codes: await listCodes() });
     } catch (err) {
       next(err);
     }

@@ -4,7 +4,11 @@ import { bookingLimiter } from '../../middleware/rateLimit';
 import { ApiError } from '../../middleware/error';
 import { env } from '../../config/env';
 import { paymentProvider } from '../../payment';
+import { z } from 'zod';
 import { createBookingSchema, codeParamSchema } from './bookings.schema';
+import { findActiveCode } from '../promo/codes.service';
+import { getGroupFee } from '../../utils/pricing';
+import { isoDate } from '../../utils/dates';
 import {
   createBooking,
   finalizeCharge,
@@ -87,6 +91,35 @@ bookingsRouter.post('/tap/webhook', async (req, res) => {
   }
   res.status(200).json({ received: true });
 });
+
+const promoCheckQuery = z.object({
+  code: z.string().trim().min(1).max(40),
+  date: isoDate(),
+});
+
+// GET /api/bookings/promo-check?code=&date= — is this group promo code valid,
+// and what are the group prices on that date (null on a holiday priced by
+// hand)? Display only: checkout checks the code again. Rate-limited with
+// bookings so codes cannot be guessed by the thousand. Registered before
+// /:code, which would otherwise swallow it.
+bookingsRouter.get(
+  '/promo-check',
+  bookingLimiter,
+  validate(promoCheckQuery, 'query'),
+  async (req, res, next) => {
+    try {
+      const found = await findActiveCode(String(req.query.code));
+      if (!found) throw new ApiError(404, 'That promo code is not valid.');
+      res.json({
+        code: found.code,
+        minParty: found.minParty,
+        fee: await getGroupFee(String(req.query.date)),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // GET /api/bookings/:code — confirmation lookup. The unguessable code is the
 // capability, so no auth is needed; anyone without the code cannot enumerate.

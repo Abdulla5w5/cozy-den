@@ -17,11 +17,12 @@ export const MAX_SESSION_MIN = 360; // six hours, the longest a customer may hol
 export const STEP_MIN = 30; // start-time granularity
 
 /**
- * The only lengths a normal booking may be: two, four, five or six hours (the
- * café's list, Oct 2026 — five was added between the 2-hour blocks). A late
- * seating is the one exception — it runs to closing, whatever that leaves.
+ * The only lengths a normal booking may be: two, three, four, five or six
+ * hours (the café's requests, Oct 2026 — three and five were added between the
+ * 2-hour blocks, and are priced pro rata). A late seating is the one exception
+ * — it runs to closing, whatever that leaves.
  */
-export const BOOKING_LENGTHS: readonly number[] = [120, 240, 300, 360];
+export const BOOKING_LENGTHS: readonly number[] = [120, 180, 240, 300, 360];
 
 function fmt(min: number): string {
   const h = Math.floor(min / 60) % 24;

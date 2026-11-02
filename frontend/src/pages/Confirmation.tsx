@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { COMMUNITY_URL } from '../community';
 import { useI18n } from '../i18n';
-import { Booking } from '../types';
+import { Booking, formatHours } from '../types';
 
 export function Confirmation() {
   const { code } = useParams<{ code: string }>();
@@ -40,7 +40,7 @@ export function Confirmation() {
       <div className="summary">
         <p>
           <strong>{booking.tableLabel}</strong> · {booking.date} · {booking.timeSlot}{' '}
-          {t('bk.seating')}
+          ({t('bk.sessionHours', { n: formatHours(booking.durationMin) })})
         </p>
         <ul>
           <li>

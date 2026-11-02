@@ -30,9 +30,11 @@ const createSchema = z.object({
   // The exact date the session is for. A wanted session is a one-off, not a
   // recurring event, so it names a day rather than a set of weekdays.
   sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick the date you want to play on.'),
-  // Whole blocks only, exactly as a table booking. The price is derived from
-  // this server-side, so the client never sends a price.
-  durationMin: z.union([z.literal(120), z.literal(240), z.literal(360)]).default(120),
+  // The same lengths as a table booking. The price is derived from this
+  // server-side, so the client never sends a price.
+  durationMin: z
+    .union([z.literal(120), z.literal(180), z.literal(240), z.literal(300), z.literal(360)])
+    .default(120),
   // Mandatory acknowledgment. Literal true, so a missing or false value is a
   // schema failure before it ever reaches the service.
   acknowledgmentConfirmed: z.literal(true, {

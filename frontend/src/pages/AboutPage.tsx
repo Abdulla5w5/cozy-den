@@ -11,7 +11,7 @@ export function AboutPage() {
   const { t } = useI18n();
 
   return (
-    <div>
+    <div className="about-page">
       <header className="page-header left">
         <span className="eyebrow">{t('about.eyebrow')}</span>
         <h1>{t('about.title')}</h1>

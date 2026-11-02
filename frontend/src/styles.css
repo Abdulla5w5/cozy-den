@@ -7400,9 +7400,15 @@ button.link {
   margin-bottom: 0.9rem;
 }
 
-/* ============ Wanted Board: intro + how-it-works guide ============
-   The page's one-line explanation, larger and in ink rather than the muted
-   grey, then the roadmap guide beneath it. */
+/* ============ Page intros: larger, in ink ============
+   The line under every page title (and the booking page's and the home page's
+   section intros), larger and in ink rather than small muted grey — the client
+   found the old one hard to read. Then the Wanted Board's guide. */
+.page-header p,
+.page-header.left p,
+.page-header.left p.muted,
+.booking-intro > div > p,
+.section-head > p.muted,
 .page-header.left .wb-sub {
   max-width: 46rem;
   margin: 0;
@@ -7411,6 +7417,7 @@ button.link {
   font-weight: 600;
   line-height: 1.55;
 }
+.roadmap-card p,
 .wb-roadmap .roadmap-card p {
   color: var(--ink);
   font-size: 0.95rem;
@@ -7418,8 +7425,12 @@ button.link {
 .wb-guide {
   margin-top: 0;
 }
+[data-theme='dark'] .page-header p,
+[data-theme='dark'] .page-header.left p,
+[data-theme='dark'] .booking-intro > div > p,
+[data-theme='dark'] .section-head > p.muted,
 [data-theme='dark'] .page-header.left .wb-sub,
-[data-theme='dark'] .wb-roadmap .roadmap-card p {
+[data-theme='dark'] .roadmap-card p {
   color: var(--text, #f6efe3);
 }
 
@@ -7443,4 +7454,110 @@ button.link {
   justify-content: center;
   gap: 0.75rem;
   margin-top: 1rem;
+}
+
+/* ============ Larger, darker supporting text ============
+   About Us's paragraphs and the landing page's subtext, in ink at a size that
+   reads comfortably (the client found the small grey text hard to read). */
+.about-page .section > p,
+.about-page .section > p.muted,
+.about-page .feature-card p,
+.about-page .feature-card p.muted {
+  /* Identical to the line under the page title, so the page reads as one voice. */
+  color: var(--ink);
+  font-size: clamp(1.1rem, 2.2vw, 1.35rem);
+  font-weight: 600;
+  line-height: 1.55;
+  max-width: 62rem;
+}
+.home .hero-sub {
+  color: var(--ink);
+  font-size: clamp(1.15rem, 2.2vw, 1.35rem);
+  font-weight: 600;
+  line-height: 1.55;
+}
+.home .hero-proof p {
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+.home .stat span {
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.home .ev-card-desc,
+.home .mitem-desc {
+  color: var(--ink);
+  font-size: 1.02rem;
+  line-height: 1.55;
+}
+.home .cta-band .muted {
+  color: #fff;
+  font-size: 1.15rem;
+  line-height: 1.5;
+}
+
+/* Booking page: opening hours and the staff WhatsApp line, side by side. */
+.booking-side {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.booking-whatsapp {
+  color: var(--ink);
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.booking-whatsapp:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.booking-whatsapp .booking-wa-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+}
+@media (max-width: 760px) {
+  .booking-side {
+    width: 100%;
+  }
+  .booking-side > * {
+    flex: 1 1 200px;
+  }
+}
+
+/* Group promo code on the booking summary */
+.promo-code {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+.promo-code .field {
+  flex: 1 1 12rem;
+  margin: 0;
+}
+.promo-code input {
+  text-transform: uppercase;
+}
+.promo-code-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.promo-code-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
 }

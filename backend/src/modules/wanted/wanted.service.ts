@@ -1,5 +1,5 @@
 import { pool, query } from '../../db/pool';
-import { getRates, blockCentsForDays, type Rates } from '../../utils/pricing';
+import { getRates, listingPerSeat, type Rates } from '../../utils/pricing';
 import { paymentProvider } from '../../payment';
 import { ApiError } from '../../middleware/error';
 
@@ -50,7 +50,7 @@ export interface PublicPost {
 }
 
 export interface CreatePostInput {
-  /** 2, 4 or 6 hours, matching the table-booking blocks. */
+  /** 2 to 6 hours, the same lengths as a table booking. */
   durationMin?: number;
   gameId?: number | null;
   gameName?: string | null;
@@ -103,11 +103,10 @@ function toDateString(v: string | Date | null): string | null {
 }
 
 function toPublic(r: PublicRow, rates: Rates): PublicPost {
-  // Whole 2/4/6-hour blocks, same as a table booking, and priced the same way:
-  // per seat, by the listing's date rather than the day it is viewed on. Seats
-  // are bought individually, so this is what ONE player pays.
-  const blocks = Math.max(1, Math.ceil((r.duration_min || 120) / 120));
-  const perSeatCents = blockCentsForDays(r.preferred_days, rates) * blocks;
+  // Priced exactly as a table booking of the same length: per seat, by the
+  // listing's days rather than the day it is viewed on. Seats are bought
+  // individually, so this is what ONE player pays.
+  const perSeatCents = listingPerSeat(r.preferred_days, rates, r.duration_min || 120);
   const taken = Number(r.seats_taken);
   return {
     id: r.id,
@@ -463,12 +462,11 @@ export async function perSeatCentsFor(postId: number): Promise<{
     [postId],
   );
   if (!rows[0]) throw new ApiError(404, 'Post not found.');
-  const blocks = Math.max(1, Math.ceil(rows[0].duration_min / 120));
   return {
     durationMin: rows[0].duration_min,
     // Priced by the listing's own day rather than whenever it happens to be
     // reserved, so the price the board quotes and the price charged agree.
-    perSeatCents: blockCentsForDays(rows[0].preferred_days, await getRates()) * blocks,
+    perSeatCents: listingPerSeat(rows[0].preferred_days, await getRates(), rows[0].duration_min),
     seatsLeft: Math.max(0, rows[0].max_players - Number(rows[0].taken)),
     maxPlayers: rows[0].max_players,
   };
@@ -556,8 +554,7 @@ export async function holdSeats(
       throw new ApiError(409, `Only ${left} seat${left === 1 ? '' : 's'} left on this listing.`);
     }
 
-    const blocks = Math.max(1, Math.ceil(post.duration_min / 120));
-    const perSeat = blockCentsForDays(post.preferred_days, rates) * blocks;
+    const perSeat = listingPerSeat(post.preferred_days, rates, post.duration_min);
     const amountCents = perSeat * seats;
 
     const { rows: held } = await client.query<{ id: number }>(

@@ -297,7 +297,7 @@ function PostForm({ onDone }: { onDone: () => void }) {
   const [minPlayers, setMinPlayers] = useState(2);
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [sessionType, setSessionType] = useState<SessionType>('open');
-  // Whole blocks, same as a table booking. The price follows from this and is
+  // The same lengths as a table booking. The price follows from this and is
   // worked out server-side, so the form never sends an amount.
   const [durationMin, setDurationMin] = useState(120);
   const [sessionDate, setSessionDate] = useState('');
@@ -400,7 +400,7 @@ function PostForm({ onDone }: { onDone: () => void }) {
         <label className="field inline">
           {t('wb.sessionLength')}
           <select value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))}>
-            {[120, 240, 360].map((m) => (
+            {[120, 180, 240, 300, 360].map((m) => (
               <option key={m} value={m}>
                 {t('wb.length', { n: m / 60 })}
               </option>

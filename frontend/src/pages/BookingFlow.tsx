@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
+import { STAFF_WHATSAPP, STAFF_WHATSAPP_URL } from '../community';
 import { useI18n } from '../i18n';
-import { Booking, TableAvailability } from '../types';
+import { Booking, formatHours, TableAvailability } from '../types';
 import { CafeFloorPlan, tablePhoto } from '../components/CafeFloorPlan';
 import { isKuwaitPhone } from '../phone';
 import { TermsBody, termsTitle } from './TermsPage';
@@ -20,9 +21,9 @@ const SESSION_MIN = 120;
 const MAX_SESSION_MIN = 360; // six hours
 const CLOSE_MIN = 27 * 60; // 03:00
 const OPEN_MIN = 14 * 60;
-// Mirrors BOOKING_LENGTHS in backend/src/utils/slots.ts: two, four, five or six
-// hours. A late seating is the exception and runs to closing instead.
-const BOOKING_LENGTHS = [120, 240, 300, 360];
+// Mirrors BOOKING_LENGTHS in backend/src/utils/slots.ts: two, three, four, five
+// or six hours. A late seating is the exception and runs to closing instead.
+const BOOKING_LENGTHS = [120, 180, 240, 300, 360];
 // Mirrors MAX_PARTY in backend/src/utils/pricing.ts: an online booking is for
 // up to eight people, whatever the table seats.
 const MAX_PARTY = 8;
@@ -65,11 +66,6 @@ function maxDurationFor(start: string) {
 function endLabel(start: string, durationMin: number) {
   const end = (slotToMinutes(start) + durationMin) % (24 * 60);
   return `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
-}
-
-function formatHours(mins: number) {
-  const h = mins / 60;
-  return Number.isInteger(h) ? String(h) : h.toFixed(1);
 }
 
 function todayIso() {
@@ -124,6 +120,54 @@ function readDraftOnReturn(): BookingDraft | null {
 }
 
 // Sessions are a fixed 2 hours with rolling 30-minute start times.
+/** The date's prices, as the availability endpoint sends them. */
+interface Fee {
+  /** One seat, one 2-hour block. */
+  cents: number;
+  /** One seat, exactly six hours, where the day has a flat price; else null. */
+  sixHourCents: number | null;
+  /** One seat, the odd hour of a 3- or 5-hour booking; null means half a block. */
+  extraHourCents: number | null;
+  peak: boolean;
+  reason: string | null;
+  lateCents: number;
+}
+
+/** One seat for this many minutes — the same rule as the server's
+ *  perSeatForLength (backend/src/utils/pricing.ts). */
+function perSeatForLength(fee: Fee, durationMin: number): number {
+  if (durationMin === 360 && fee.sixHourCents !== null) return fee.sixHourCents;
+  const minutes = Math.max(SESSION_MIN, durationMin);
+  const blocks = Math.floor(minutes / SESSION_MIN);
+  const oddMin = minutes - blocks * SESSION_MIN;
+  const odd =
+    oddMin === 0
+      ? 0
+      : fee.extraHourCents !== null
+        ? Math.round((fee.extraHourCents * oddMin) / 60)
+        : Math.round((fee.cents * oddMin) / SESSION_MIN);
+  return fee.cents * blocks + odd;
+}
+
+/** A date's group prices, unlocked by a promo code for a big enough party. */
+interface GroupFee {
+  cents: number;
+  extraHourCents: number;
+  sixHourCents: number | null;
+}
+interface AppliedPromo {
+  code: string;
+  minParty: number;
+  /** Null on a holiday priced by hand: the code does nothing that day. */
+  fee: GroupFee | null;
+}
+
+/** One seat at the group prices — the server's groupPerSeat. */
+function groupPerSeat(g: GroupFee, durationMin: number): number {
+  if (durationMin === 360 && g.sixHourCents !== null) return g.sixHourCents;
+  return Math.round(g.cents + (g.extraHourCents * Math.max(0, durationMin - SESSION_MIN)) / 60);
+}
+
 export function BookingFlow() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -162,16 +206,21 @@ export function BookingFlow() {
   // Not kept in the draft: agreeing is asked for again on every checkout.
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
+  const [promoInput, setPromoInput] = useState('');
+  const [promo, setPromo] = useState<AppliedPromo | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Priced by date on the server (Thu/Fri/Sat and Kuwait national holidays cost
   // more). Display only — checkout re-derives it, so this can never set a price.
-  const [fee, setFee] = useState<{
-    cents: number;
-    peak: boolean;
-    reason: string | null;
-    lateCents: number;
-  }>({ cents: 275, peak: false, reason: null, lateCents: 200 });
+  const [fee, setFee] = useState<Fee>({
+    cents: 275,
+    sixHourCents: 590,
+    extraHourCents: 135,
+    peak: false,
+    reason: null,
+    lateCents: 200,
+  });
 
   useEffect(() => {
     setError(null);
@@ -186,14 +235,21 @@ export function BookingFlow() {
       .get<{
         slots: string[];
         availability: TableAvailability[];
-        fee: { cents: number; peak: boolean; reason: string | null; lateCents: number };
+        fee: Fee;
       }>(`/tables/availability?date=${date}`)
       .then((r) => {
         setSlots(r.slots);
         setAvailability(r.availability);
         // Older API instances did not include fee details in availability.
         // Keep the safe display default until checkout when that field is absent.
-        if (r.fee) setFee(r.fee);
+        // An instance from before the six-hour and extra-hour prices sends
+        // neither.
+        if (r.fee)
+          setFee({
+            ...r.fee,
+            sixHourCents: r.fee.sixHourCents ?? null,
+            extraHourCents: r.fee.extraHourCents ?? null,
+          });
         // Re-apply the saved table/time once the grid for its date has loaded.
         if (restoreRef.current && restoreRef.current.date === date) {
           setTableId(restoreRef.current.tableId);
@@ -247,11 +303,18 @@ export function BookingFlow() {
   const durationChoices = late ? [floorMin] : BOOKING_LENGTHS.filter((d) => d <= roomMin);
 
   // Charged per SEAT: one seat's fare (the block rate per two hours, so five
-  // hours is two and a half; a late seating is one flat rate) times the party. The big tables carry a minimum
-  // party, so they never bill fewer seats than that. The server recomputes all
-  // of this at checkout — what follows is the customer-facing preview.
-  const blocks = Math.max(1, durationMin / SESSION_MIN);
-  const perSeatCents = late ? fee.lateCents : Math.round(fee.cents * blocks);
+  // hours is two and a half; six hours Sunday to Wednesday is a flat price; a
+  // late seating is one flat rate) times the party. The big tables carry a minimum party, so
+  // they never bill fewer seats than that. The server recomputes all of this
+  // at checkout — what follows is the customer-facing preview.
+  const normalPerSeat = late ? fee.lateCents : perSeatForLength(fee, durationMin);
+  // The group price only for a party big enough for the code, never dearer
+  // than the normal price — the same rule checkout applies.
+  const promoApplies = !!promo?.fee && !late && partySize >= (promo?.minParty ?? Infinity);
+  const perSeatCents =
+    promoApplies && promo?.fee
+      ? Math.min(normalPerSeat, groupPerSeat(promo.fee, durationMin))
+      : normalPerSeat;
   const minParty = selectedTable ? minSeatsFor(selectedTable) : 1;
   // Too small a party for this table: the server would refuse the booking, so
   // the panel blocks it here and names the tables that would take them.
@@ -321,6 +384,27 @@ export function BookingFlow() {
             ? t('bk.payPending')
             : null;
 
+  // Group prices depend on the day, so a code applied for one date is checked
+  // again for another.
+  useEffect(() => {
+    if (promo) void applyPromo(promo.code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
+
+  async function applyPromo(code: string) {
+    setPromoError(null);
+    if (!code.trim()) return setPromo(null);
+    try {
+      const r = await api.get<AppliedPromo>(
+        `/bookings/promo-check?code=${encodeURIComponent(code.trim())}&date=${date}`,
+      );
+      setPromo(r);
+    } catch (e) {
+      setPromo(null);
+      setPromoError(e instanceof ApiError && e.status === 404 ? t('bk.promoInvalid') : t('bk.wrong'));
+    }
+  }
+
   async function submit() {
     if (!tableId || !timeSlot) return; // guarded by the button, belt-and-braces
     setError(null);
@@ -336,6 +420,7 @@ export function BookingFlow() {
         acceptedTerms,
         durationMin,
         partySize,
+        promoCode: promoApplies ? promo?.code : undefined,
       });
       if (res.redirectUrl) {
         // Redirect gateway (Tap): hand the browser to the hosted payment page.
@@ -379,12 +464,33 @@ export function BookingFlow() {
               <h1>{t('bk.mapTitle')}</h1>
               <p>{t('bk.mapSub')}</p>
             </div>
-            <div className="booking-hours" aria-label={t('bk.hours')}>
-              <span className="booking-status-dot" aria-hidden="true" />
-              <div>
-                <strong>{t('bk.hours')}</strong>
-                <span>{t('bk.lastSeating')}</span>
+            <div className="booking-side">
+              <div className="booking-hours" aria-label={t('bk.hours')}>
+                <span className="booking-status-dot" aria-hidden="true" />
+                <div>
+                  <strong>{t('bk.hours')}</strong>
+                  <span>{t('bk.lastSeating')}</span>
+                </div>
               </div>
+              <a
+                className="booking-hours booking-whatsapp"
+                href={STAFF_WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="booking-wa-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="16" height="16" focusable="false">
+                    <path
+                      fill="currentColor"
+                      d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3Z"
+                    />
+                  </svg>
+                </span>
+                <div>
+                  <strong>{t('bk.whatsapp')}</strong>
+                  <span dir="ltr">{STAFF_WHATSAPP}</span>
+                </div>
+              </a>
             </div>
           </header>
 
@@ -658,6 +764,39 @@ export function BookingFlow() {
             <p className="total">
               {t('bk.total')} {money(totalCents)}
             </p>
+
+            <form
+              className="promo-code"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void applyPromo(promoInput);
+              }}
+            >
+              <label className="field inline">
+                {t('bk.promo')}
+                <input
+                  value={promoInput}
+                  onChange={(e) => setPromoInput(e.target.value)}
+                  autoCapitalize="characters"
+                  dir="ltr"
+                />
+              </label>
+              <button type="submit">{t('bk.promoApply')}</button>
+            </form>
+            {promoError && <p className="field-hint is-error">{promoError}</p>}
+            {promo && (
+              <p className="muted field-hint">
+                {!promo.fee
+                  ? t('bk.promoNotToday')
+                  : partySize < promo.minParty
+                    ? t('bk.promoTooSmall', { n: String(promo.minParty) })
+                    : late
+                      ? t('bk.promoNotLate')
+                      : perSeatCents < normalPerSeat
+                        ? t('bk.promoApplied', { code: promo.code })
+                        : t('bk.promoSamePrice', { code: promo.code })}
+              </p>
+            )}
           </div>
 
           <label className="field">

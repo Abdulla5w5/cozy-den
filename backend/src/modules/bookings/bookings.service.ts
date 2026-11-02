@@ -17,6 +17,7 @@ import { mailer, formatReceiptEmail, formatStaffBookingAlert } from '../../notif
 import { bookingAlertRecipients } from '../../notifications/staffRecipients';
 import { CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
 import { normalizeKuwaitiPhone } from '../../utils/phone';
+import { resolvePromoCode } from '../promo/codes.service';
 
 // Legacy line items are still surfaced for pre-overhaul bookings; new bookings
 // have none (menu ordering was removed from checkout).
@@ -129,6 +130,8 @@ interface InsertParams {
   partySize: number;
   /** Customer bookings only; staff-entered ones never see the terms. */
   termsAccepted?: boolean;
+  /** The group promo code the price was worked out with, if any. */
+  promoCode?: string | null;
 }
 
 const ALREADY_BOOKED = 'That table is already booked for an overlapping session.';
@@ -163,11 +166,11 @@ async function insertBooking(p: InsertParams): Promise<number> {
         `INSERT INTO bookings
            (table_id, booking_date, time_slot, guest_name, guest_email, guest_phone,
             verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
-            duration_min, party_size, terms_accepted_at)
+            duration_min, party_size, terms_accepted_at, promo_code)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,
-                 CASE WHEN $14 THEN now() END)
+                 CASE WHEN $14 THEN now() END, $15)
          RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true]
+        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null]
       );
       return rows[0].id;
     } catch (err) {
@@ -215,9 +218,15 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
     maxParty: MAX_PARTY,
   });
-  const feeCents = (
-    await quoteBooking(input.date, input.timeSlot, sitting.durationMin, sitting.billedSeats)
-  ).totalCents;
+  const promoCode = await resolvePromoCode(input.promoCode, sitting.partySize);
+  const quote = await quoteBooking(
+    input.date,
+    input.timeSlot,
+    sitting.durationMin,
+    sitting.billedSeats,
+    { group: promoCode !== null },
+  );
+  const feeCents = quote.totalCents;
   const bookingId = await insertBooking({
     tableId: input.tableId,
     date: input.date,
@@ -230,6 +239,8 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingV
     status: 'pending_payment',
     source: 'online',
     termsAccepted: input.acceptedTerms,
+    // Only recorded when it actually changed the price.
+    promoCode: quote.group ? promoCode : null,
     feeCents,
     totalCents: feeCents,
   });
@@ -358,9 +369,15 @@ export async function startBookingCheckout(
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
     maxParty: MAX_PARTY,
   });
-  const feeCents = (
-    await quoteBooking(input.date, input.timeSlot, sitting.durationMin, sitting.billedSeats)
-  ).totalCents;
+  const promoCode = await resolvePromoCode(input.promoCode, sitting.partySize);
+  const quote = await quoteBooking(
+    input.date,
+    input.timeSlot,
+    sitting.durationMin,
+    sitting.billedSeats,
+    { group: promoCode !== null },
+  );
+  const feeCents = quote.totalCents;
   const bookingId = await insertBooking({
     tableId: input.tableId,
     date: input.date,
@@ -373,6 +390,8 @@ export async function startBookingCheckout(
     status: 'pending_payment',
     source: 'online',
     termsAccepted: input.acceptedTerms,
+    // Only recorded when it actually changed the price.
+    promoCode: quote.group ? promoCode : null,
     feeCents,
     totalCents: feeCents,
   });
