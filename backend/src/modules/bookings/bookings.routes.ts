@@ -13,7 +13,7 @@ import {
   hasBookedBefore,
 } from '../promo/codes.service';
 import { optionalAuth } from '../../middleware/auth';
-import { getGroupFee } from '../../utils/pricing';
+import { getCodeFee } from '../../utils/pricing';
 import { isoDate } from '../../utils/dates';
 import {
   createBooking,
@@ -123,9 +123,9 @@ bookingsRouter.get('/newcomer-offer', optionalAuth, async (req, res, next) => {
   }
 });
 
-// GET /api/bookings/promo-check?code=&date= — is this group promo code valid,
-// and what are the group prices on that date (null on a holiday priced by
-// hand)? Display only: checkout checks the code again. Rate-limited with
+// GET /api/bookings/promo-check?code=&date= — is this promo code valid, and
+// what does it charge on that date (its percentage, or its hourly prices: null
+// on a day it has none, or a holiday priced by hand)? Display only: checkout checks the code again. Rate-limited with
 // bookings so codes cannot be guessed by the thousand. Registered before
 // /:code, which would otherwise swallow it.
 bookingsRouter.get(
@@ -148,7 +148,7 @@ bookingsRouter.get(
         minParty: found.minParty,
         percentOff: found.percentOff,
         refusal: refusal?.code ?? null,
-        fee: found.kind === 'group' ? await getGroupFee(String(req.query.date)) : null,
+        fee: found.hourly ? await getCodeFee(found.hourly, String(req.query.date)) : null,
       });
     } catch (err) {
       next(err);

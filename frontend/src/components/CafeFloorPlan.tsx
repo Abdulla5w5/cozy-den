@@ -138,6 +138,9 @@ export interface TableDecoration {
   tooltip: ReactNode;
   /** Small mark drawn on the table top, under the name (e.g. a booking count). */
   badge?: ReactNode;
+  /** The seat text on the table top. Left out, it is the table's capacity (what
+   *  a customer choosing a table needs); null hides it. */
+  seatsText?: string | null;
 }
 
 interface Props {
@@ -313,7 +316,9 @@ export function CafeFloorPlan({
                 </span>
                 <span className="floor-table-surface">
                   <strong>{mapTableName(tb.label)}</strong>
-                  <small>{t('bk.seatsShort', { n: tb.capacity })}</small>
+                  {deco.seatsText !== null && (
+                    <small>{deco.seatsText ?? t('bk.seatsShort', { n: tb.capacity })}</small>
+                  )}
                   {deco.badge}
                 </span>
                   </>

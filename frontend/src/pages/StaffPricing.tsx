@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
+import { StaffPromoCodes } from './StaffPromoCodes';
 import { kd, kdToCents } from '../types';
 
 /**
@@ -24,21 +25,6 @@ interface Rates {
   sixHourOffPeakCents: number | null;
   extraHourPeakCents: number | null;
   extraHourOffPeakCents: number | null;
-}
-/** Null until set; blank in the form. */
-interface GroupRates {
-  offPeakCents: number | null;
-  extraOffPeakCents: number | null;
-  saturdayCents: number | null;
-  extraSaturdayCents: number | null;
-}
-interface PromoCode {
-  id: number;
-  code: string;
-  kind: 'group' | 'newcomer';
-  minParty: number;
-  percentOff: number | null;
-  isActive: boolean;
 }
 interface Override {
   date: string;
@@ -68,18 +54,10 @@ export function StaffPricing() {
   const [extraPeak, setExtraPeak] = useState('');
   const [extraOffPeak, setExtraOffPeak] = useState('');
   const [note, setNote] = useState<string | null>(null);
-  // Group promo code prices and the codes themselves.
-  const [codes, setCodes] = useState<PromoCode[]>([]);
   // The two private-host options, per hour for the whole table. Blank takes
   // an option off sale.
   const [hostNormal, setHostNormal] = useState('');
   const [hostClocktower, setHostClocktower] = useState('');
-  const [groupOff, setGroupOff] = useState('');
-  const [groupExtraOff, setGroupExtraOff] = useState('');
-  const [groupSat, setGroupSat] = useState('');
-  const [groupExtraSat, setGroupExtraSat] = useState('');
-  const [newCode, setNewCode] = useState('');
-  const [newMinParty, setNewMinParty] = useState('6');
 
   const [date, setDate] = useState('');
   const [label, setLabel] = useState('');
@@ -90,8 +68,6 @@ export function StaffPricing() {
       .get<{
         rates: Rates;
         overrides: Override[];
-        groupRates: GroupRates;
-        codes: PromoCode[];
         hostRates: { normalHourlyCents: number | null; clocktowerHourlyCents: number | null };
       }>(
         '/staff/pricing',
@@ -99,13 +75,8 @@ export function StaffPricing() {
       .then((r) => {
         setRates(r.rates);
         setOverrides(r.overrides);
-        setCodes(r.codes);
         setHostNormal(kdOrBlank(r.hostRates.normalHourlyCents));
         setHostClocktower(kdOrBlank(r.hostRates.clocktowerHourlyCents));
-        setGroupOff(kdOrBlank(r.groupRates.offPeakCents));
-        setGroupExtraOff(kdOrBlank(r.groupRates.extraOffPeakCents));
-        setGroupSat(kdOrBlank(r.groupRates.saturdayCents));
-        setGroupExtraSat(kdOrBlank(r.groupRates.extraSaturdayCents));
         setPeak(toKd(r.rates.peakCents));
         setOffPeak(toKd(r.rates.offPeakCents));
         setLatePeak(toKd(r.rates.latePeakCents));
@@ -182,54 +153,6 @@ export function StaffPricing() {
     } catch (err) {
       setNote(err instanceof Error ? err.message : t('pr.failed'));
     }
-  }
-
-  async function saveGroupRates(e: FormEvent) {
-    e.preventDefault();
-    setNote(null);
-    if (![groupOff, groupExtraOff, groupSat, groupExtraSat].every(isKdOrBlank)) {
-      return setNote(t('pr.badNumber'));
-    }
-    try {
-      await api.put('/staff/pricing/group', {
-        offPeakCents: centsOrNull(groupOff),
-        extraOffPeakCents: centsOrNull(groupExtraOff),
-        saturdayCents: centsOrNull(groupSat),
-        extraSaturdayCents: centsOrNull(groupExtraSat),
-      });
-      setNote(t('pr.saved'));
-      load();
-    } catch (err) {
-      setNote(err instanceof Error ? err.message : t('pr.failed'));
-    }
-  }
-
-  async function addCode(e: FormEvent) {
-    e.preventDefault();
-    setNote(null);
-    try {
-      const r = await api.post<{ codes: PromoCode[] }>('/staff/pricing/codes', {
-        code: newCode.trim(),
-        minParty: Number(newMinParty) || 6,
-      });
-      setCodes(r.codes);
-      setNewCode('');
-      setNote(t('pr.saved'));
-    } catch (err) {
-      setNote(err instanceof Error ? err.message : t('pr.failed'));
-    }
-  }
-
-  async function toggleCode(c: PromoCode) {
-    const r = await api
-      .put<{ codes: PromoCode[] }>(`/staff/pricing/codes/${c.id}`, { isActive: !c.isActive })
-      .catch(() => null);
-    if (r) setCodes(r.codes);
-  }
-
-  async function removeCode(c: PromoCode) {
-    const r = await api.del<{ codes: PromoCode[] }>(`/staff/pricing/codes/${c.id}`).catch(() => null);
-    if (r) setCodes(r.codes);
   }
 
   async function removeOverride(d: string) {
@@ -332,98 +255,7 @@ export function StaffPricing() {
         </div>
       </form>
 
-      <form className="summary manual-form" onSubmit={saveGroupRates}>
-        <h3>{t('pr.groupTitle')}</h3>
-        <p className="muted">{t('pr.groupHelp')}</p>
-        <div className="row">
-          <label className="field inline">
-            {t('pr.groupOff')}
-            <input value={groupOff}
-              onChange={(e) => setGroupOff(e.target.value)}
-              inputMode="decimal"
-              placeholder={t('pr.groupUnset')}
-            />
-          </label>
-          <label className="field inline">
-            {t('pr.groupExtraOff')}
-            <input
-              value={groupExtraOff}
-              onChange={(e) => setGroupExtraOff(e.target.value)}
-              inputMode="decimal"
-              placeholder={t('pr.groupUnset')}
-            />
-          </label>
-          <label className="field inline">
-            {t('pr.groupSat')}
-            <input value={groupSat}
-              onChange={(e) => setGroupSat(e.target.value)}
-              inputMode="decimal"
-              placeholder={t('pr.groupUnset')}
-            />
-          </label>
-          <label className="field inline">
-            {t('pr.groupExtraSat')}
-            <input
-              value={groupExtraSat}
-              onChange={(e) => setGroupExtraSat(e.target.value)}
-              inputMode="decimal"
-              placeholder={t('pr.groupUnset')}
-            />
-          </label>
-          <button className="primary">{t('pr.save')}</button>
-        </div>
-      </form>
-
-      <form className="summary manual-form" onSubmit={addCode}>
-        <h3>{t('pr.codesTitle')}</h3>
-        <p className="muted">{t('pr.codesHelp')}</p>
-        <div className="row">
-          <label className="field inline">
-            {t('pr.code')}
-            <input
-              value={newCode}
-              onChange={(e) => setNewCode(e.target.value)}
-              maxLength={40}
-              autoCapitalize="characters"
-              dir="ltr"
-            />
-          </label>
-          <label className="field inline">
-            {t('pr.codeMinParty')}
-            <input
-              value={newMinParty}
-              onChange={(e) => setNewMinParty(e.target.value)}
-              inputMode="numeric"
-            />
-          </label>
-          <button className="primary" disabled={newCode.trim().length < 6}>
-            {t('pr.addCode')}
-          </button>
-        </div>
-        {codes.length === 0 ? (
-          <p className="muted">{t('pr.noCodes')}</p>
-        ) : (
-          <ul className="promo-code-list">
-            {codes.map((c) => (
-              <li key={c.id}>
-                <code dir="ltr">{c.code}</code>
-                <span className="muted">
-                  {c.kind === 'newcomer'
-                    ? t('pr.codeNewcomer', { n: String(c.percentOff ?? 0) })
-                    : t('pr.codeFor', { n: String(c.minParty) })}
-                </span>
-                <span className="tag">{c.isActive ? t('pr.codeOn') : t('pr.codeOff')}</span>
-                <button type="button" className="link" onClick={() => toggleCode(c)}>
-                  {c.isActive ? t('pr.codeDisable') : t('pr.codeEnable')}
-                </button>
-                <button type="button" className="link" onClick={() => removeCode(c)}>
-                  {t('pr.remove')}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </form>
+      <StaffPromoCodes />
 
       <form className="summary manual-form" onSubmit={saveOverride}>
         <h3>{t('pr.overrideTitle')}</h3>

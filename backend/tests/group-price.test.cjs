@@ -5,7 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { groupPerSeat } = require('../dist/src/utils/pricing.js');
+const { codePerSeat } = require('../dist/src/utils/pricing.js');
 
 const SUN_WED = { cents: 225, extraHourCents: 100, sixHourCents: 590 };
 const SATURDAY = { cents: 285, extraHourCents: 140, sixHourCents: null };
@@ -13,21 +13,21 @@ const THU_FRI = { cents: 350, extraHourCents: 175, sixHourCents: null };
 
 test('Sunday to Wednesday with a code', () => {
   assert.deepStrictEqual(
-    [120, 180, 240, 300, 360].map((d) => groupPerSeat(SUN_WED, d)),
+    [120, 180, 240, 300, 360].map((d) => codePerSeat(SUN_WED, d)),
     [225, 325, 425, 525, 590],
   );
 });
 
 test('Saturday with a code', () => {
   assert.deepStrictEqual(
-    [120, 180, 240, 300, 360].map((d) => groupPerSeat(SATURDAY, d)),
+    [120, 180, 240, 300, 360].map((d) => codePerSeat(SATURDAY, d)),
     [285, 425, 565, 705, 845],
   );
 });
 
 test('Thursday and Friday: the code changes nothing', () => {
   assert.deepStrictEqual(
-    [120, 180, 240, 300, 360].map((d) => groupPerSeat(THU_FRI, d)),
+    [120, 180, 240, 300, 360].map((d) => codePerSeat(THU_FRI, d)),
     [350, 525, 700, 875, 1050],
   );
 });

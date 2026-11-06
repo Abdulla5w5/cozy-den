@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { STAFF_WHATSAPP, STAFF_WHATSAPP_URL } from '../community';
@@ -7,7 +7,7 @@ import { Booking, formatHours, TableAvailability } from '../types';
 import { CafeFloorPlan, tablePhoto } from '../components/CafeFloorPlan';
 import { isKuwaitPhone } from '../phone';
 import { checkoutToken } from '../checkoutToken';
-import { HostChoice, HostPicker, hostFee } from '../components/HostPicker';
+import { HostChoice, HostKind, HostPicker, hostFee } from '../components/HostPicker';
 import { TermsBody, termsTitle } from './TermsPage';
 
 // POST /bookings returns one of two shapes: the finished booking (direct/mock
@@ -102,6 +102,8 @@ interface BookingDraft {
   guestPhone: string;
   durationMin: number;
   partySize: number;
+  promoCode?: string;
+  hostKind?: HostKind;
 }
 function saveDraft(d: BookingDraft) {
   try {
@@ -151,28 +153,28 @@ function perSeatForLength(fee: Fee, durationMin: number): number {
   return fee.cents * blocks + odd;
 }
 
-/** A date's group prices, unlocked by a promo code for a big enough party. */
-interface GroupFee {
+/** A date's prices under a promo code's hourly price set. */
+interface CodeFee {
   cents: number;
   extraHourCents: number;
   sixHourCents: number | null;
 }
 interface AppliedPromo {
   code: string;
-  /** group: the group prices for a big party; newcomer: a percentage off a
-   *  signed-in member's first booking. */
+  /** Who may use it. group: a big enough party; newcomer: a signed-in member's
+   *  first booking. What it charges is percentOff or fee, whichever it has. */
   kind: 'group' | 'newcomer';
   minParty: number;
   percentOff: number | null;
   /** Why the server will not take a newcomer code; null when it will. */
   refusal: 'sign_in' | 'verify_email' | 'first_only' | null;
-  /** A group code's prices; null on a holiday priced by hand, before staff
-   *  set them, or for a newcomer code. */
-  fee: GroupFee | null;
+  /** An hourly code's prices that day; null on a day it has none, a holiday
+   *  priced by hand, or for a percentage code. */
+  fee: CodeFee | null;
 }
 
-/** One seat at the group prices — the server's groupPerSeat. */
-function groupPerSeat(g: GroupFee, durationMin: number): number {
+/** One seat at a code's hourly prices — the server's codePerSeat. */
+function codePerSeat(g: CodeFee, durationMin: number): number {
   if (durationMin === 360 && g.sixHourCents !== null) return g.sixHourCents;
   return Math.round(g.cents + (g.extraHourCents * Math.max(0, durationMin - SESSION_MIN)) / 60);
 }
@@ -265,6 +267,15 @@ export function BookingFlow() {
   const [partySize, setPartySize] = useState<number>(draft?.partySize ?? 2);
   // A private game host for the sitting, if the customer adds one.
   const [host, setHost] = useState<HostChoice | null>(null);
+  // Back from a failed payment: Pay waits while the chosen option is checked again.
+  const [hostChecking, setHostChecking] = useState(!!draft?.hostKind);
+  const [hostLost, setHostLost] = useState(false);
+  const hostTouched = useRef(false);
+  const chooseHost = useCallback((h: HostChoice | null) => {
+    hostTouched.current = true;
+    setHostLost(false);
+    setHost(h);
+  }, []);
 
   const [guestName, setGuestName] = useState(draft?.guestName ?? '');
   const [guestPhone, setGuestPhone] = useState(draft?.guestPhone ?? '');
@@ -275,7 +286,11 @@ export function BookingFlow() {
   // Not kept in the draft: agreeing is asked for again on every checkout.
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
-  const [promoInput, setPromoInput] = useState('');
+  const [promoInput, setPromoInput] = useState(draft?.promoCode ?? '');
+  // Pay waits while a code is being checked: the price on it may be about to change.
+  const [promoChecking, setPromoChecking] = useState(!!draft?.promoCode);
+  const promoRequest = useRef(0);
+  const promoPending = useRef<string | null>(null);
   const [promo, setPromo] = useState<AppliedPromo | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -377,18 +392,17 @@ export function BookingFlow() {
   // they never bill fewer seats than that. The server recomputes all of this
   // at checkout — what follows is the customer-facing preview.
   const normalPerSeat = late ? fee.lateCents : perSeatForLength(fee, durationMin);
-  // The same rules checkout applies. A group code: the group price for a
-  // party big enough, never dearer than the normal one. A newcomer code: a
-  // percentage off, except on the flat six-hour price — offers do not stack.
+  // The same rules checkout applies, for a customer the code is open to. Hourly
+  // prices: never dearer than normal, and not on a late seating. A percentage:
+  // not on the flat six-hour price — offers do not stack.
   const flatSixHours = !late && durationMin === 360 && fee.sixHourCents !== null;
-  const groupApplies =
-    promo?.kind === 'group' && !!promo.fee && !late && partySize >= promo.minParty;
-  const newcomerApplies =
-    promo?.kind === 'newcomer' && !promo.refusal && !flatSixHours && !!promo.percentOff;
+  const promoOpen = !!promo && !promo.refusal && partySize >= promo.minParty;
+  const hourlyApplies = promoOpen && !!promo?.fee && !late;
+  const percentApplies = promoOpen && !flatSixHours && !!promo?.percentOff;
   const perSeatCents =
-    groupApplies && promo?.fee
-      ? Math.min(normalPerSeat, groupPerSeat(promo.fee, durationMin))
-      : newcomerApplies && promo?.percentOff
+    hourlyApplies && promo?.fee
+      ? Math.min(normalPerSeat, codePerSeat(promo.fee, durationMin))
+      : percentApplies && promo?.percentOff
         ? Math.round((normalPerSeat * (100 - promo.percentOff)) / 100)
         : normalPerSeat;
   const promoApplies = perSeatCents < normalPerSeat;
@@ -464,25 +478,70 @@ export function BookingFlow() {
             ? t('bk.payPending')
             : null;
 
-  // Group prices depend on the day, so a code applied for one date is checked
-  // again for another.
+  // Hourly code prices depend on the day, so a code applied for one date is
+  // checked again for another.
   // Signing in changes whether a newcomer code may be used.
   useEffect(() => {
-    if (promo) void applyPromo(promo.code);
+    const code = promoPending.current ?? promo?.code;
+    if (code) void applyPromo(code);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, accountEmail]);
 
+  // Back from a failed payment: the code comes back too, checked again as it
+  // may have been switched off or used up in the meantime.
+  useEffect(() => {
+    if (draft?.promoCode) void applyPromo(draft.promoCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The host comes back too, at today's price, if one is still free for this
+  // sitting. Otherwise say so, rather than the total just dropping.
+  useEffect(() => {
+    const kind = draft?.hostKind;
+    if (!draft || !kind) return;
+    api
+      .get<{ options: HostChoice[] }>(
+        `/hosts/available?date=${draft.date}&timeSlot=${encodeURIComponent(draft.timeSlot)}` +
+          `&durationMin=${draft.durationMin}&retry=${checkoutToken()}`,
+      )
+      .then((r) => r.options.find((o) => o.kind === kind) ?? null)
+      .catch(() => null)
+      .then((option) => {
+        setHostChecking(false);
+        // They have already picked again on the table step.
+        if (hostTouched.current) return;
+        setHost(option);
+        setHostLost(!option);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function applyPromo(code: string) {
+    // Only the newest check counts: an older answer may be for another date.
+    const request = ++promoRequest.current;
     setPromoError(null);
-    if (!code.trim()) return setPromo(null);
+    if (!code.trim()) {
+      promoPending.current = null;
+      setPromoChecking(false);
+      return setPromo(null);
+    }
+    promoPending.current = code;
+    setPromoChecking(true);
     try {
       const r = await api.get<AppliedPromo>(
         `/bookings/promo-check?code=${encodeURIComponent(code.trim())}&date=${date}`,
       );
+      if (request !== promoRequest.current) return;
       setPromo(r);
     } catch (e) {
+      if (request !== promoRequest.current) return;
       setPromo(null);
       setPromoError(e instanceof ApiError && e.status === 404 ? t('bk.promoInvalid') : t('bk.wrong'));
+    } finally {
+      if (request === promoRequest.current) {
+        promoPending.current = null;
+        setPromoChecking(false);
+      }
     }
   }
 
@@ -510,7 +569,17 @@ export function BookingFlow() {
         // A full navigation, not a route change, so we leave our SPA entirely.
         // Save the selection first so a failed/abandoned payment returns to a
         // ready-to-retry checkout rather than a blank form.
-        saveDraft({ tableId, date, timeSlot, guestName, guestPhone, durationMin, partySize });
+        saveDraft({
+          tableId,
+          date,
+          timeSlot,
+          guestName,
+          guestPhone,
+          durationMin,
+          partySize,
+          promoCode: promoApplies ? promo?.code : undefined,
+          hostKind: host && !late ? host.kind : undefined,
+        });
         window.location.assign(res.redirectUrl);
         return; // keep the spinner up while the browser navigates away
       }
@@ -783,7 +852,7 @@ export function BookingFlow() {
                         durationMin={durationMin}
                         late={late}
                         selected={host}
-                        onSelect={setHost}
+                        onSelect={chooseHost}
                       />
                     </div>
                   )}
@@ -859,6 +928,7 @@ export function BookingFlow() {
                 </li>
               )}
             </ul>
+            {hostLost && <p className="field-hint is-error">{t('host.lostOnRetry')}</p>}
             <p className="total">
               {t('bk.total')} {money(totalCents)}
             </p>
@@ -882,7 +952,7 @@ export function BookingFlow() {
               <button type="submit">{t('bk.promoApply')}</button>
             </form>
             {promoError && <p className="field-hint is-error">{promoError}</p>}
-            {promo?.kind === 'newcomer' && (
+            {promo && (
               <p className={`field-hint ${promo.refusal ? 'is-error' : 'muted'}`}>
                 {promo.refusal === 'sign_in'
                   ? t('bk.promoSignIn')
@@ -890,25 +960,22 @@ export function BookingFlow() {
                     ? t('bk.promoVerify')
                     : promo.refusal
                       ? t('bk.promoFirstOnly')
-                      : flatSixHours
-                        ? t('bk.promoNotSixHour')
-                        : t('bk.promoNewcomer', {
-                            code: promo.code,
-                            n: String(promo.percentOff ?? 0),
-                          })}
-              </p>
-            )}
-            {promo?.kind === 'group' && (
-              <p className="muted field-hint">
-                {!promo.fee
-                  ? t('bk.promoNotToday')
-                  : partySize < promo.minParty
-                    ? t('bk.promoTooSmall', { n: String(promo.minParty) })
-                    : late
-                      ? t('bk.promoNotLate')
-                      : promoApplies
-                        ? t('bk.promoApplied', { code: promo.code })
-                        : t('bk.promoSamePrice', { code: promo.code })}
+                      : partySize < promo.minParty
+                        ? t('bk.promoTooSmall', { n: String(promo.minParty) })
+                        : promo.percentOff
+                          ? flatSixHours
+                            ? t('bk.promoNotSixHour')
+                            : t(promo.kind === 'newcomer' ? 'bk.promoNewcomer' : 'bk.promoPercent', {
+                                code: promo.code,
+                                n: String(promo.percentOff),
+                              })
+                          : !promo.fee
+                            ? t('bk.promoNotToday')
+                            : late
+                              ? t('bk.promoNotLate')
+                              : promoApplies
+                                ? t('bk.promoApplied', { code: promo.code })
+                                : t('bk.promoSamePrice', { code: promo.code })}
               </p>
             )}
           </div>
@@ -984,7 +1051,7 @@ export function BookingFlow() {
             <button onClick={() => setStep(1)}>{t('bk.back')}</button>
             <button
               className="primary"
-              disabled={submitting || !guestName || !phoneOk || !acceptedTerms || !tableId || !timeSlot}
+              disabled={submitting || promoChecking || hostChecking || !guestName || !phoneOk || !acceptedTerms || !tableId || !timeSlot}
               onClick={submit}
             >
               {submitting ? t('bk.processing') : t('bk.pay', { amount: money(totalCents) })}

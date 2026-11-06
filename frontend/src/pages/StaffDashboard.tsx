@@ -162,6 +162,8 @@ export function StaffDashboard() {
 
 type StatusFilter = 'all' | 'pending' | 'arrived' | 'order_complete';
 const STATUS_FILTERS: StatusFilter[] = ['all', 'pending', 'arrived', 'order_complete'];
+// Everyone on the café Wi-Fi shares one rate limit, so not much more often than this.
+const FLOOR_REFRESH_MS = 60_000;
 
 function TodayTab() {
   const { t, money } = useI18n();
@@ -173,17 +175,34 @@ function TodayTab() {
   const [showForm, setShowForm] = useState(false);
   const [printing, setPrinting] = useState<StaffBooking | null>(null);
 
+  // Only the newest answer counts: an older one may be for another date, or from
+  // before an action staff just took.
+  const latestFetch = useRef(0);
+
   // Separate from load() so a refresh after a failed action keeps its message.
-  const fetchBookings = useCallback(() => {
-    // A date field held mid-edit (or cleared) reports an empty value, which the
-    // API rightly refuses — don't ask it, and don't flash "Validation failed"
-    // at someone who is halfway through typing a past date.
-    if (!date) return;
-    api
-      .get<{ bookings: StaffBooking[] }>(`/staff/bookings?date=${encodeURIComponent(date)}`)
-      .then((r) => setBookings(r.bookings))
-      .catch((e) => setError(e.message));
-  }, [date]);
+  const fetchBookings = useCallback(
+    (auto = false) => {
+      // A date field held mid-edit (or cleared) reports an empty value, which the
+      // API rightly refuses — don't ask it, and don't flash "Validation failed"
+      // at someone who is halfway through typing a past date.
+      if (!date) return;
+      const request = ++latestFetch.current;
+      // Identical GETs share one request while it runs, so a timed refresh has its
+      // own address: the fetch after an action must not reuse an answer from
+      // before it. The server ignores the extra parameter.
+      const path = `/staff/bookings?date=${encodeURIComponent(date)}${auto ? '&auto=1' : ''}`;
+      api
+        .get<{ bookings: StaffBooking[] }>(path)
+        .then((r) => {
+          if (request === latestFetch.current) setBookings(r.bookings);
+        })
+        .catch((e) => {
+          // A timed refresh that fails says nothing: the next one will try again.
+          if (!auto && request === latestFetch.current) setError(e.message);
+        });
+    },
+    [date],
+  );
 
   const load = useCallback(() => {
     setError(null);
@@ -193,6 +212,20 @@ function TodayTab() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // New bookings, paid holds and QR check-ins on another phone show up on their
+  // own. Paused while the tab is hidden, and refreshed as soon as it is back.
+  useEffect(() => {
+    const refresh = () => {
+      if (!document.hidden) fetchBookings(true);
+    };
+    const timer = window.setInterval(refresh, FLOOR_REFRESH_MS);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [fetchBookings]);
 
   async function act(path: string, body?: unknown) {
     setError(null);
@@ -519,6 +552,17 @@ function TableFloorView({
 
   const selected = tables.find((tb) => tb.tableId === selectedId) ?? null;
   const selectedBookings = selected ? byTable.get(selected.tableId) ?? [] : [];
+  const seatsLabel = (n: number) => (n === 1 ? t('bk.seatOne') : t('bk.seats', { n }));
+  // A checkout still being paid for holds the table, but nobody is sitting there.
+  const isHeldNow = (b: StaffBooking) => phaseOf(b) === 'now' && b.status === 'pending_payment';
+  const isSeated = (b: StaffBooking) => phaseOf(b) === 'now' && b.status !== 'pending_payment';
+  // Staff care how many people are sitting at a table, not how many it could
+  // hold: the seat text is the group seated right now, and nothing otherwise.
+  const seatedNow = (tableId: number) => {
+    const party = (byTable.get(tableId) ?? []).find(isSeated)?.partySize;
+    return party ? seatsLabel(party) : null;
+  };
+  const selectedSeats = selected ? seatedNow(selected.tableId) : null;
   const phases: Phase[] = ['now', 'upcoming', 'earlier'];
 
   return (
@@ -546,21 +590,23 @@ function TableFloorView({
             // Colour means the table's state right now: counting down while
             // someone sits there, blue while a booking is still to come, and
             // green once nothing else is due today — finished sessions do not
-            // keep a table looking taken.
-            const live = list.find((b) => phaseOf(b) === 'now');
-            const next = list.find((b) => phaseOf(b) === 'upcoming');
+            // keep a table looking taken. An unpaid hold is still to come: not
+            // seated, but not free for a walk-in either.
+            const live = list.find(isSeated);
+            const next = list.find((b) => phaseOf(b) === 'upcoming' || isHeldNow(b));
             const left = live ? timeLeft(live) : '';
             const className = live ? 'live' : next ? 'booked' : '';
             const summary = live
               ? `${t('staff.seatedUntil', { name: live.guestName, time: endOf(live) })} · ${t('staff.timeLeft', { time: left })}`
               : next
-                ? t('staff.nextAt', { time: next.timeSlot, name: next.guestName })
+                ? t(isHeldNow(next) ? 'staff.heldAt' : 'staff.nextAt', { time: next.timeSlot, name: next.guestName })
                 : list.length
                   ? t('staff.allDone')
                   : t('staff.freeAllDay');
             const stillDue = list.filter((b) => phaseOf(b) !== 'earlier').length;
             return {
               className,
+              seatsText: seatedNow(tb.tableId),
               accent: live ? '#f47700' : next ? '#1177ee' : '#2d7055',
               ariaLabel: `${tb.label}: ${t('staff.bookingsCount', { n: list.length })}. ${summary}`,
               badge: live ? (
@@ -597,7 +643,7 @@ function TableFloorView({
               <span className="slot-panel-kicker">{t('bk.table')}</span>
               <h2>{selected.label}</h2>
               <div className="slot-panel-meta">
-                <span>♟ {t('bk.seats', { n: selected.capacity })}</span>
+                {selectedSeats && <span>♟ {selectedSeats}</span>}
                 <span className={selectedBookings.length ? 'open' : 'closed'}>
                   <i aria-hidden="true" />
                   {t('staff.bookingsCount', { n: selectedBookings.length })}
@@ -609,7 +655,10 @@ function TableFloorView({
                 <p className="muted center">{t('staff.noTableBookings')}</p>
               )}
               {phases.map((phase) => {
-                const rows = selectedBookings.filter((b) => phaseOf(b) === phase);
+                // Same as the map: an unpaid hold is still to come, not seated.
+                const rows = selectedBookings.filter(
+                  (b) => (isHeldNow(b) ? 'upcoming' : phaseOf(b)) === phase,
+                );
                 if (rows.length === 0) return null;
                 return (
                   <section key={phase} className={`table-day-group ${phase}`}>
@@ -626,7 +675,7 @@ function TableFloorView({
                         <div className="table-day-who">
                           <strong>{b.guestName}</strong>
                           <small>
-                            {b.partySize ? `${t('bk.seats', { n: b.partySize })} · ` : ''}
+                            {b.partySize ? `${seatsLabel(b.partySize)} · ` : ''}
                             {b.hostName ? `${t('host.onBooking', { name: b.hostName })} · ` : ''}
                             <code>{b.verificationCode}</code>
                           </small>

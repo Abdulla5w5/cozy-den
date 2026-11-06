@@ -276,8 +276,8 @@ export async function createBooking(
     sitting.durationMin,
     sitting.billedSeats,
     {
-      group: promo?.kind === 'group',
-      percentOff: promo?.kind === 'newcomer' ? (promo.percentOff ?? 0) : 0,
+      hourly: promo?.hourly ?? null,
+      percentOff: promo?.percentOff ?? 0,
     },
   );
   if (input.hostKind) {
@@ -316,8 +316,9 @@ export async function createBooking(
     source: 'online',
     termsAccepted: input.acceptedTerms,
     // Only recorded when it actually changed the price.
-    promoCode: quote.group || quote.percentOff > 0 ? promo?.code : null,
-    newcomerDiscount: quote.percentOff > 0,
+    promoCode: quote.codePrices || quote.percentOff > 0 ? promo?.code : null,
+    newcomerDiscount:
+      promo?.kind === 'newcomer' && (quote.codePrices || quote.percentOff > 0),
     hostId: host?.hostId ?? null,
     hostKind: input.hostKind ?? null,
     hostFeeCents: hostFee,
@@ -501,8 +502,8 @@ export async function startBookingCheckout(
     sitting.durationMin,
     sitting.billedSeats,
     {
-      group: promo?.kind === 'group',
-      percentOff: promo?.kind === 'newcomer' ? (promo.percentOff ?? 0) : 0,
+      hourly: promo?.hourly ?? null,
+      percentOff: promo?.percentOff ?? 0,
     },
   );
   if (input.hostKind) {
@@ -541,8 +542,9 @@ export async function startBookingCheckout(
     source: 'online',
     termsAccepted: input.acceptedTerms,
     // Only recorded when it actually changed the price.
-    promoCode: quote.group || quote.percentOff > 0 ? promo?.code : null,
-    newcomerDiscount: quote.percentOff > 0,
+    promoCode: quote.codePrices || quote.percentOff > 0 ? promo?.code : null,
+    newcomerDiscount:
+      promo?.kind === 'newcomer' && (quote.codePrices || quote.percentOff > 0),
     hostId: host?.hostId ?? null,
     hostKind: input.hostKind ?? null,
     hostFeeCents: hostFee,

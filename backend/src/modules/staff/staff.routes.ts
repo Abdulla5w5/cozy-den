@@ -16,18 +16,20 @@ import { deletePost, listPostsForStaff, moderatePost } from '../wanted/wanted.se
 import { setReviewed } from '../support/support.service';
 import {
   deleteOverride,
-  getGroupRates,
   getRates,
   listOverrides,
-  setGroupRates,
   setRates,
   upsertOverride,
 } from '../../utils/pricing';
 import {
   createCode,
+  createPriceSet,
   deleteCode,
+  deletePriceSet,
   listCodes,
-  setCodeActive,
+  listPriceSets,
+  updateCode,
+  updatePriceSet,
 } from '../promo/codes.service';
 import { staffCreateBookingSchema } from '../bookings/bookings.schema';
 import {
@@ -342,7 +344,7 @@ staffRouter.get('/pricing', requireAdmin, async (_req, res, next) => {
     res.json({
       rates: await getRates(),
       overrides: await listOverrides(new Date().toISOString().slice(0, 10)),
-      groupRates: await getGroupRates(),
+      priceSets: await listPriceSets(),
       hostRates: await getHostRates(),
       codes: await listCodes(),
     });
@@ -411,22 +413,77 @@ staffRouter.put('/pricing/hosts', requireAdmin, validate(hostRatesSchema), async
   }
 });
 
-const groupRatesSchema = z.object({
-  offPeakCents: z.number().int().min(0).max(100000).nullable(),
-  extraOffPeakCents: z.number().int().min(0).max(100000).nullable(),
-  saturdayCents: z.number().int().min(0).max(100000).nullable(),
-  extraSaturdayCents: z.number().int().min(0).max(100000).nullable(),
+const cents = z.number().int().min(0).max(100000).nullable();
+const priceSetBody = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    kind: z.enum(['hourly', 'percent']),
+    // At most 99: the gateway cannot take a charge of zero.
+    percentOff: z.number().int().min(1).max(99).nullable(),
+    sunWedCents: cents,
+    sunWedExtraCents: cents,
+    thuFriCents: cents,
+    thuFriExtraCents: cents,
+    satCents: cents,
+    satExtraCents: cents,
+  })
+  .superRefine((v, ctx) => {
+    const issue = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+    if (v.kind === 'percent') {
+      if (v.percentOff === null) issue('Enter the percentage off, from 1 to 99.');
+      return;
+    }
+    const days: [number | null, number | null][] = [
+      [v.sunWedCents, v.sunWedExtraCents],
+      [v.thuFriCents, v.thuFriExtraCents],
+      [v.satCents, v.satExtraCents],
+    ];
+    if (days.some(([a, b]) => (a === null) !== (b === null))) {
+      issue('Each day needs both prices, or neither.');
+    }
+    if (days.some(([a]) => a === 0)) issue('The first two hours cannot be free.');
+    if (days.every(([a]) => a === null)) issue('Enter prices for at least one day.');
+  });
+
+// POST /api/staff/pricing/sets — a new code price.
+staffRouter.post('/pricing/sets', requireAdmin, validate(priceSetBody), async (req, res, next) => {
+  try {
+    await createPriceSet(req.body);
+    res.json({ priceSets: await listPriceSets(), codes: await listCodes() });
+  } catch (err) {
+    next(err);
+  }
 });
 
-// PUT /api/staff/pricing/group — the prices a group promo code unlocks.
+// PUT /api/staff/pricing/sets/:id — change one; every code using it follows.
 staffRouter.put(
-  '/pricing/group',
+  '/pricing/sets/:id',
   requireAdmin,
-  validate(groupRatesSchema),
+  validate(idParam, 'params'),
+  validate(priceSetBody),
   async (req, res, next) => {
     try {
-      await setGroupRates(req.body);
-      res.json({ groupRates: await getGroupRates() });
+      if (!(await updatePriceSet(Number(req.params.id), req.body))) {
+        throw new ApiError(404, 'No such code price.');
+      }
+      res.json({ priceSets: await listPriceSets(), codes: await listCodes() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// DELETE /api/staff/pricing/sets/:id — refused while a code still uses it.
+staffRouter.delete(
+  '/pricing/sets/:id',
+  requireAdmin,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      if (!(await deletePriceSet(Number(req.params.id)))) {
+        throw new ApiError(404, 'No such code price.');
+      }
+      res.json({ priceSets: await listPriceSets(), codes: await listCodes() });
     } catch (err) {
       next(err);
     }
@@ -440,30 +497,35 @@ const codeBody = z.object({
     .min(6)
     .max(40)
     .regex(/^[A-Za-z0-9_-]+$/, 'Letters, numbers, - and _ only'),
+  kind: z.enum(['group', 'newcomer']).default('group'),
   minParty: z.number().int().min(1).max(100).default(6),
+  priceSetId: z.number().int().positive(),
 });
 
-// POST /api/staff/pricing/codes — add a group promo code.
+// POST /api/staff/pricing/codes — add a promo code, on one of the code prices.
 staffRouter.post('/pricing/codes', requireAdmin, validate(codeBody), async (req, res, next) => {
   try {
-    await createCode(req.body.code, req.body.minParty);
+    await createCode(req.body.code, req.body.kind, req.body.minParty, req.body.priceSetId);
     res.json({ codes: await listCodes() });
   } catch (err) {
     next(err);
   }
 });
 
-const codeActiveBody = z.object({ isActive: z.boolean() });
+const codeChangeBody = z.object({
+  isActive: z.boolean().optional(),
+  priceSetId: z.number().int().positive().optional(),
+});
 
-// PUT /api/staff/pricing/codes/:id — switch a code on or off.
+// PUT /api/staff/pricing/codes/:id — switch a code on or off, or change its price.
 staffRouter.put(
   '/pricing/codes/:id',
   requireAdmin,
   validate(idParam, 'params'),
-  validate(codeActiveBody),
+  validate(codeChangeBody),
   async (req, res, next) => {
     try {
-      if (!(await setCodeActive(Number(req.params.id), req.body.isActive))) {
+      if (!(await updateCode(Number(req.params.id), req.body))) {
         throw new ApiError(404, 'No such code.');
       }
       res.json({ codes: await listCodes() });

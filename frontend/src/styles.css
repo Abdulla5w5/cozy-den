@@ -8899,3 +8899,33 @@ a.ev-ticket:active {
 .host-tcg-art.normal {
   background: var(--blue);
 }
+
+/* The name's room on a table top is the table's width. Sized to its contents,
+   the column shrank to the name itself once there was no seat text beside it,
+   and 90% of that cut "B3" down to "B..". */
+.floor-table-surface {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Pricing tab: code prices. */
+.price-set-list {
+  margin: 1rem 0 0;
+}
+.price-set-list li > span:first-child {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.price-set-list small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.price-set-list .host-actions {
+  margin-top: 0;
+}
+.promo-code-list select {
+  width: auto;
+  min-height: 34px;
+  margin: 0;
+  padding: 0.15rem 0.5rem;
+}

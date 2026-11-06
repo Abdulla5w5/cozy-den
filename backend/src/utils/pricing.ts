@@ -98,26 +98,29 @@ export interface BookingQuote extends TableFee {
    *  is a flat rate. */
   blocks: number;
   late: boolean;
-  /** Priced at the group rates, through a promo code. */
-  group: boolean;
-  /** Percentage taken off through a newcomer code; 0 when none. */
+  /** Priced at a promo code's hourly prices. */
+  codePrices: boolean;
+  /** Percentage taken off through a promo code; 0 when none. */
   percentOff: number;
 }
 
-/** A date's group prices (promo code, parties of six or more): the first two
+/** A date's prices under a promo code's hourly price set: the first two
  *  hours, each hour after, and a flat six-hour price where there is one. */
-export interface GroupFee {
+export interface CodeFee {
   cents: number;
   extraHourCents: number;
   sixHourCents: number | null;
 }
 
-/** Null until staff set them: a code changes nothing on that day. */
-export interface GroupRates {
-  offPeakCents: number | null;
-  extraOffPeakCents: number | null;
-  saturdayCents: number | null;
-  extraSaturdayCents: number | null;
+/** A code's hourly prices (migration 052), per person: the first two hours and
+ *  each extra hour. A day group left null charges normal prices. */
+export interface DayPrices {
+  sunWedCents: number | null;
+  sunWedExtraCents: number | null;
+  thuFriCents: number | null;
+  thuFriExtraCents: number | null;
+  satCents: number | null;
+  satExtraCents: number | null;
 }
 
 export interface Rates {
@@ -167,65 +170,30 @@ export function discounted(cents: number, percentOff: number): number {
 }
 
 /**
- * One seat at the group prices: the first two hours, then the extra-hour price
+ * One seat at a code's hourly prices: the first two hours, then the extra-hour price
  * for each hour after (not 2-hour blocks), or the flat six-hour price.
  */
-export function groupPerSeat(g: GroupFee, durationMin: number): number {
+export function codePerSeat(g: CodeFee, durationMin: number): number {
   if (durationMin === SIX_HOURS && g.sixHourCents !== null) return g.sixHourCents;
   const extraHours = Math.max(0, durationMin - SESSION_MIN) / 60;
   return Math.round(g.cents + g.extraHourCents * extraHours);
 }
 
-export async function getGroupRates(): Promise<GroupRates> {
-  const { rows } = await query<{
-    group_offpeak_cents: number | null;
-    group_extra_offpeak_cents: number | null;
-    group_saturday_cents: number | null;
-    group_extra_saturday_cents: number | null;
-  }>(
-    `SELECT group_offpeak_cents, group_extra_offpeak_cents,
-            group_saturday_cents, group_extra_saturday_cents
-       FROM pricing_rates WHERE id`,
-  );
-  return {
-    offPeakCents: rows[0].group_offpeak_cents,
-    extraOffPeakCents: rows[0].group_extra_offpeak_cents,
-    saturdayCents: rows[0].group_saturday_cents,
-    extraSaturdayCents: rows[0].group_extra_saturday_cents,
-  };
-}
-
-export async function setGroupRates(g: GroupRates): Promise<void> {
-  await query(
-    `UPDATE pricing_rates
-        SET group_offpeak_cents = $1, group_extra_offpeak_cents = $2,
-            group_saturday_cents = $3, group_extra_saturday_cents = $4,
-            updated_at = now()
-      WHERE id`,
-    [g.offPeakCents, g.extraOffPeakCents, g.saturdayCents, g.extraSaturdayCents],
-  );
-}
-
 /**
- * The group prices on a date, or null on a date staff have priced by hand —
- * a holiday's price wins over a code — or whose group prices are not set.
- * Thursday and Friday have no group price: they charge the normal weekend
- * price.
+ * A price set's prices on a date, or null when it has none that day: a day
+ * group left empty, or a date staff have priced by hand — a holiday's price
+ * wins over a code. Sunday to Wednesday keeps the flat six-hour price, since
+ * offers do not stack.
  */
-export async function getGroupFee(date: string): Promise<GroupFee | null> {
+export async function getCodeFee(prices: DayPrices, date: string): Promise<CodeFee | null> {
   const { rows } = await query<{
     dow: number;
     overridden: boolean;
     six_hour_offpeak_cents: number | null;
-    group_offpeak_cents: number | null;
-    group_extra_offpeak_cents: number | null;
-    group_saturday_cents: number | null;
-    group_extra_saturday_cents: number | null;
   }>(
     `SELECT EXTRACT(DOW FROM $1::date)::int AS dow,
             o.override_date IS NOT NULL AS overridden,
-            r.six_hour_offpeak_cents, r.group_offpeak_cents, r.group_extra_offpeak_cents,
-            r.group_saturday_cents, r.group_extra_saturday_cents
+            r.six_hour_offpeak_cents
        FROM pricing_rates r
        LEFT JOIN price_overrides o ON o.override_date = $1::date
       WHERE r.id`,
@@ -233,21 +201,17 @@ export async function getGroupFee(date: string): Promise<GroupFee | null> {
   );
   const row = rows[0];
   if (row.overridden) return null;
-  if (row.dow === SATURDAY) {
-    if (row.group_saturday_cents === null || row.group_extra_saturday_cents === null) return null;
-    return {
-      cents: row.group_saturday_cents,
-      extraHourCents: row.group_extra_saturday_cents,
-      sixHourCents: null,
-    };
-  }
-  // Thursday and Friday: the normal weekend price, so no group price at all.
-  if (PEAK_DAYS.has(row.dow)) return null;
-  if (row.group_offpeak_cents === null || row.group_extra_offpeak_cents === null) return null;
+  const [cents, extra] =
+    row.dow === SATURDAY
+      ? [prices.satCents, prices.satExtraCents]
+      : PEAK_DAYS.has(row.dow)
+        ? [prices.thuFriCents, prices.thuFriExtraCents]
+        : [prices.sunWedCents, prices.sunWedExtraCents];
+  if (cents === null || extra === null) return null;
   return {
-    cents: row.group_offpeak_cents,
-    extraHourCents: row.group_extra_offpeak_cents,
-    sixHourCents: row.six_hour_offpeak_cents,
+    cents,
+    extraHourCents: extra,
+    sixHourCents: PEAK_DAYS.has(row.dow) ? null : row.six_hour_offpeak_cents,
   };
 }
 
@@ -409,8 +373,9 @@ export async function getTableFee(date: string): Promise<TableFee> {
  * late rate once. That per-seat figure is then multiplied by the party, floored
  * at the table's minimum seats.
  *
- * A party with a group promo code (checked by the caller) pays the group
- * prices instead — see getGroupFee. Late seatings keep their flat rate.
+ * A promo code (checked by the caller) brings its price set: hourly prices (see
+ * getCodeFee), which leave late seatings at their flat rate, or a percentage
+ * off.
  *
  * Derived entirely from the date, start, length and headcount the customer
  * chose, with the headcount already checked against the table. Nothing about
@@ -422,7 +387,7 @@ export async function quoteBooking(
   timeSlot: string,
   durationMin: number,
   seats = 1,
-  { group = false, percentOff = 0 }: { group?: boolean; percentOff?: number } = {},
+  { hourly = null, percentOff = 0 }: { hourly?: DayPrices | null; percentOff?: number } = {},
 ): Promise<BookingQuote> {
   const fee = await getTableFee(date);
   const billed = Math.max(1, seats);
@@ -435,18 +400,18 @@ export async function quoteBooking(
       totalCents: perSeatCents * billed,
       blocks: 0,
       late: true,
-      group: false,
+      codePrices: false,
       percentOff: perSeatCents < fee.lateCents ? percentOff : 0,
     };
   }
   const blocks = Math.max(1, durationMin / SESSION_MIN);
   const normal = perSeatForLength(fee.cents, fee.sixHourCents, fee.extraHourCents, durationMin);
   // A code never makes a booking dearer, whatever staff set the rates to.
-  const groupFee = group ? await getGroupFee(date) : null;
-  const grouped = groupFee ? Math.min(normal, groupPerSeat(groupFee, durationMin)) : normal;
+  const codeFee = hourly ? await getCodeFee(hourly, date) : null;
+  const codeSeat = codeFee ? Math.min(normal, codePerSeat(codeFee, durationMin)) : normal;
   // Offers do not stack: the flat six-hour price takes no percentage off.
   const flatSixHours = durationMin === SIX_HOURS && fee.sixHourCents !== null;
-  const perSeatCents = flatSixHours ? grouped : discounted(grouped, percentOff);
+  const perSeatCents = flatSixHours ? codeSeat : discounted(codeSeat, percentOff);
   return {
     ...fee,
     perSeatCents,
@@ -454,8 +419,8 @@ export async function quoteBooking(
     totalCents: perSeatCents * billed,
     blocks,
     late: false,
-    group: grouped < normal,
-    percentOff: perSeatCents < grouped ? percentOff : 0,
+    codePrices: codeSeat < normal,
+    percentOff: perSeatCents < codeSeat ? percentOff : 0,
   };
 }
 
