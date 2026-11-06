@@ -928,7 +928,12 @@ export function BookingFlow() {
                 </li>
               )}
             </ul>
-            {hostLost && <p className="field-hint is-error">{t('host.lostOnRetry')}</p>}
+            {hostLost &&
+              date === draft?.date &&
+              timeSlot === draft?.timeSlot &&
+              durationMin === draft?.durationMin && (
+                <p className="field-hint is-error">{t('host.lostOnRetry')}</p>
+              )}
             <p className="total">
               {t('bk.total')} {money(totalCents)}
             </p>

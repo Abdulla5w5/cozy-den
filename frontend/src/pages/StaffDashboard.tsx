@@ -26,8 +26,9 @@ type Tab =
   | 'menu';
 
 interface Customer {
+  key: string;
   name: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   visits: number;
   totalCents: number;
@@ -178,6 +179,8 @@ function TodayTab() {
   // Only the newest answer counts: an older one may be for another date, or from
   // before an action staff just took.
   const latestFetch = useRef(0);
+  // Signed out with the tab open: say so, and stop asking until a fetch works.
+  const signedOut = useRef(false);
 
   // Separate from load() so a refresh after a failed action keeps its message.
   const fetchBookings = useCallback(
@@ -194,14 +197,22 @@ function TodayTab() {
       api
         .get<{ bookings: StaffBooking[] }>(path)
         .then((r) => {
+          signedOut.current = false;
           if (request === latestFetch.current) setBookings(r.bookings);
         })
         .catch((e) => {
-          // A timed refresh that fails says nothing: the next one will try again.
-          if (!auto && request === latestFetch.current) setError(e.message);
+          if (request !== latestFetch.current) return;
+          // A timed refresh that fails says nothing, as the next one will try
+          // again, unless the session has gone: then the list has stopped for good.
+          if (auto && e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+            signedOut.current = true;
+            setError(t('staff.signedOut'));
+          } else if (!auto) {
+            setError(e.message);
+          }
         });
     },
-    [date],
+    [date, t],
   );
 
   const load = useCallback(() => {
@@ -217,7 +228,7 @@ function TodayTab() {
   // own. Paused while the tab is hidden, and refreshed as soon as it is back.
   useEffect(() => {
     const refresh = () => {
-      if (!document.hidden) fetchBookings(true);
+      if (!document.hidden && !signedOut.current) fetchBookings(true);
     };
     const timer = window.setInterval(refresh, FLOOR_REFRESH_MS);
     document.addEventListener('visibilitychange', refresh);
@@ -939,17 +950,35 @@ function CustomersTab() {
   const { t, money } = useI18n();
   const [customers, setCustomers] = useState<Customer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sort, setSort] = useState<'recent' | 'visits'>('recent');
 
   useEffect(() => {
+    let active = true;
+    setError(null);
     api
-      .get<{ customers: Customer[] }>('/staff/customers')
-      .then((r) => setCustomers(r.customers))
-      .catch((e) => setError(e.message));
-  }, []);
+      .get<{ customers: Customer[] }>(`/staff/customers?sort=${sort}`)
+      .then((r) => {
+        if (active) setCustomers(r.customers);
+      })
+      .catch((e) => {
+        if (active) setError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [sort]);
 
   return (
     <section>
       <p className="muted">{t('cust.hint')}</p>
+      <div className="chips left">
+        <button className={`chip ${sort === 'recent' ? 'active' : ''}`} onClick={() => setSort('recent')}>
+          {t('cust.sortRecent')}
+        </button>
+        <button className={`chip ${sort === 'visits' ? 'active' : ''}`} onClick={() => setSort('visits')}>
+          {t('cust.sortVisits')}
+        </button>
+      </div>
       {error && <div className="alert error">{error}</div>}
       {customers === null ? (
         <p>{t('loading')}</p>
@@ -970,12 +999,16 @@ function CustomersTab() {
           </thead>
           <tbody>
             {customers.map((c) => (
-              <tr key={c.email}>
+              <tr key={c.key}>
                 <td>{c.name}</td>
                 <td>
-                  <a href={`mailto:${c.email}`} className="card-link">
-                    {c.email}
-                  </a>
+                  {c.email ? (
+                    <a href={`mailto:${c.email}`} className="card-link">
+                      {c.email}
+                    </a>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
                 </td>
                 <td>
                   {c.phone ? (

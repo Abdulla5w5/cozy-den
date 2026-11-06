@@ -619,6 +619,10 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.bookingsCount': { en: '{n} bookings', ar: '{n} حجز' },
   'staff.seatedUntil': { en: '{name} · until {time}', ar: '{name} · لين {time}' },
   'staff.nextAt': { en: 'Next: {time} · {name}', ar: 'الجاي: {time} · {name}' },
+  'staff.signedOut': {
+    en: 'You have been signed out, so this list has stopped updating. Sign in again to continue.',
+    ar: 'تم تسجيل خروجك، وهالقائمة وقفت عن التحديث. سجّل دخولك مرة ثانية عشان تكمل.',
+  },
   'staff.heldAt': { en: 'Awaiting payment: {time} · {name}', ar: 'بانتظار الدفع: {time} · {name}' },
   'staff.allDone': { en: 'All sessions finished', ar: 'كل الجلسات خلصت' },
   'staff.freeAllDay': { en: 'Free all day', ar: 'فاضية طول اليوم' },
@@ -1063,9 +1067,11 @@ const dict: Record<string, { en: string; ar: string }> = {
   // ---- recurrent customers (staff) ----
   'staff.customers': { en: 'Customers', ar: 'العملاء' },
   'cust.hint': {
-    en: 'Registered customers and their contact details. Phone numbers are visible only to staff.',
-    ar: 'العملاء المسجّلون وبيانات التواصل معهم. أرقام الموبايل تظهر للموظفين فقط.',
+    en: 'Everyone with an account or a paid booking, with their contact details. Phone numbers are visible only to staff.',
+    ar: 'كل اللي عندهم حساب أو حجز مدفوع، مع بيانات التواصل معهم. أرقام الموبايل تظهر للموظفين فقط.',
   },
+  'cust.sortRecent': { en: 'Most recent', ar: 'الأحدث' },
+  'cust.sortVisits': { en: 'Most visits', ar: 'الأكثر زيارات' },
   'cust.visits': { en: 'Visits', ar: 'الزيارات' },
   'cust.spent': { en: 'Total spent', ar: 'إجمالي الصرف' },
   'cust.last': { en: 'Last visit', ar: 'آخر زيارة' },

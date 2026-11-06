@@ -4,7 +4,7 @@ import { validate } from '../../middleware/validate';
 import { ApiError } from '../../middleware/error';
 import { requireAdmin, requireStaff } from '../../middleware/auth';
 import { getBookingsForDate, confirmBooking, completeBooking } from './staff.service';
-import { getMonthlyAnalytics, getRecurrentCustomers } from './analytics.service';
+import { getCustomers, getMonthlyAnalytics } from './analytics.service';
 import { listTeam, grantStaff, revokeStaff, grantAdmin, revokeAdmin } from './team.service';
 import {
   addMessage,
@@ -148,10 +148,13 @@ staffRouter.get(
   }
 );
 
-// GET /api/staff/customers — recurrent customers (name, email, visits, spend).
-staffRouter.get('/customers', requireStaff, async (_req, res, next) => {
+// GET /api/staff/customers — accounts and guests (name, contact, visits, spend).
+const customersQuery = z.object({ sort: z.enum(['recent', 'visits']).default('recent') });
+
+staffRouter.get('/customers', requireStaff, validate(customersQuery, 'query'), async (req, res, next) => {
   try {
-    res.json({ customers: await getRecurrentCustomers() });
+    const { sort } = req.query as unknown as z.infer<typeof customersQuery>;
+    res.json({ customers: await getCustomers(sort) });
   } catch (err) {
     next(err);
   }
