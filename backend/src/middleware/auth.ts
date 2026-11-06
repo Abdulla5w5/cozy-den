@@ -22,7 +22,7 @@ export function signToken(claims: UserClaims): string {
 
 // Staff and admin are columns on users, granted from the dashboard — see
 // modules/staff/team.service.ts. Read per request so revoking access takes
-// effect immediately instead of waiting out the holder's 8h session.
+// effect immediately instead of waiting out the holder's 10h session.
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace

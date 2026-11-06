@@ -8,9 +8,22 @@ import { EventsTab, PromoTab, GamesTab, MenuTab } from './StaffContent';
 import { SupportTab } from './StaffSupport';
 import { StaffWanted } from './StaffWanted';
 import { StaffPricing } from './StaffPricing';
+import { StaffHosts } from './StaffHosts';
 import { CafeFloorPlan, FloorTable } from '../components/CafeFloorPlan';
 
-type Tab = 'today' | 'analytics' | 'customers' | 'events' | 'promo' | 'team' | 'support' | 'wanted' | 'pricing' | 'games' | 'menu';
+type Tab =
+  | 'today'
+  | 'analytics'
+  | 'customers'
+  | 'events'
+  | 'promo'
+  | 'team'
+  | 'support'
+  | 'wanted'
+  | 'pricing'
+  | 'hosts'
+  | 'games'
+  | 'menu';
 
 interface Customer {
   name: string;
@@ -107,6 +120,11 @@ export function StaffDashboard() {
           {t('staff.support')}
         </button>
         {isAdmin && (
+          <button className={tab === 'hosts' ? 'active' : ''} onClick={() => setTab('hosts')}>
+            {t('staff.hosts')}
+          </button>
+        )}
+        {isAdmin && (
           <button className={tab === 'team' ? 'active' : ''} onClick={() => setTab('team')}>
             {t('staff.team')}
           </button>
@@ -131,6 +149,8 @@ export function StaffDashboard() {
         <StaffPricing />
       ) : tab === 'wanted' ? (
         <StaffWanted />
+      ) : tab === 'hosts' ? (
+        <StaffHosts />
       ) : tab === 'team' ? (
         <TeamTab meEmail={staffEmail} />
       ) : (
@@ -153,17 +173,22 @@ function TodayTab() {
   const [showForm, setShowForm] = useState(false);
   const [printing, setPrinting] = useState<StaffBooking | null>(null);
 
-  const load = useCallback(() => {
+  // Separate from load() so a refresh after a failed action keeps its message.
+  const fetchBookings = useCallback(() => {
     // A date field held mid-edit (or cleared) reports an empty value, which the
     // API rightly refuses — don't ask it, and don't flash "Validation failed"
     // at someone who is halfway through typing a past date.
     if (!date) return;
-    setError(null);
     api
       .get<{ bookings: StaffBooking[] }>(`/staff/bookings?date=${encodeURIComponent(date)}`)
       .then((r) => setBookings(r.bookings))
       .catch((e) => setError(e.message));
   }, [date]);
+
+  const load = useCallback(() => {
+    setError(null);
+    fetchBookings();
+  }, [fetchBookings]);
 
   useEffect(() => {
     load();
@@ -177,6 +202,9 @@ function TodayTab() {
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Action failed.');
+      // Usually means the row is stale: a QR scan on a phone may have checked
+      // this guest in already.
+      fetchBookings();
     }
   }
 
@@ -296,7 +324,10 @@ function TodayTab() {
               <td>{b.timeSlot}</td>
               {/* Older rows predate these columns; show a dash, not "NaN". */}
               <td>{b.durationMin ? `${b.durationMin / 60}h` : '—'}</td>
-              <td>{b.partySize ?? '—'}</td>
+              <td>
+                {b.partySize ?? '—'}
+                {b.hostName && <div className="muted">{t('host.onBooking', { name: b.hostName })}</div>}
+              </td>
               <td>
                 <code>{b.verificationCode}</code>
               </td>
@@ -596,6 +627,7 @@ function TableFloorView({
                           <strong>{b.guestName}</strong>
                           <small>
                             {b.partySize ? `${t('bk.seats', { n: b.partySize })} · ` : ''}
+                            {b.hostName ? `${t('host.onBooking', { name: b.hostName })} · ` : ''}
                             <code>{b.verificationCode}</code>
                           </small>
                         </div>
@@ -659,7 +691,10 @@ function Receipt({ booking, date }: { booking: StaffBooking; date: string }) {
       {booking.durationMin ? row(t('receipt.length'), `${booking.durationMin / 60}h`) : null}
       {booking.partySize ? row(t('receipt.party'), String(booking.partySize)) : null}
       <hr />
-      {row(t('receipt.fee'), money(booking.totalCents))}
+      {row(t('receipt.fee'), money(booking.totalCents - (booking.hostFeeCents ?? 0)))}
+      {booking.hostName
+        ? row(t('host.onBooking', { name: booking.hostName }), money(booking.hostFeeCents ?? 0))
+        : null}
       <div className="receipt-row total">
         <span>{t('receipt.total')}</span>
         <strong>{money(booking.totalCents)}</strong>

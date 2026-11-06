@@ -101,6 +101,10 @@ export function formatReceiptEmail(booking: {
   totalCents: number;
   durationMin: number;
   partySize: number;
+  hostKind?: 'normal' | 'clocktower' | null;
+  hostFeeCents?: number;
+  /** The QR pass link, when the site's address is known. */
+  passUrl?: string | null;
 }): { subject: string; text: string } {
   const money = (c: number) => `KD ${(c / 100).toFixed(2)}`;
   // The length and headcount are what the customer paid for, so the receipt
@@ -117,12 +121,19 @@ export function formatReceiptEmail(booking: {
       '',
       `    ${booking.verificationCode}`,
       '',
+      ...(booking.passUrl
+        ? ['Or open your QR pass and let staff scan it:', `    ${booking.passUrl}`, '']
+        : []),
       `Date:  ${booking.date}`,
       `Time:  ${session}`,
       `Table: ${booking.tableLabel}`,
       `Party: ${booking.partySize} ${booking.partySize === 1 ? 'guest' : 'guests'}`,
+      ...(booking.hostKind
+        ? [
+            `Host:  ${booking.hostKind === 'clocktower' ? 'Blood on the Clocktower host' : 'Private game host'} (${money(booking.hostFeeCents ?? 0)})`,
+          ]
+        : []),
       '',
-      `Table-holding fee paid: ${money(booking.tableFeeCents)}`,
       `Total paid: ${money(booking.totalCents)}`,
       '',
       'Games and the menu are waiting for you at the café.',
@@ -150,6 +161,7 @@ export function formatStaffBookingAlert(
     totalCents: number;
     durationMin: number;
     partySize: number;
+    hostName?: string | null;
   },
   dashboardUrl?: string,
 ): { subject: string; text: string } {
@@ -166,6 +178,7 @@ export function formatStaffBookingAlert(
       `Time:  ${session}`,
       `Table: ${booking.tableLabel}`,
       `Party: ${party}`,
+      ...(booking.hostName ? [`Host:  ${booking.hostName}`] : []),
       `Guest: ${booking.guestName}`,
       ...(booking.guestPhone ? [`Phone: ${booking.guestPhone}`] : []),
       ...(booking.guestEmail ? [`Email: ${booking.guestEmail}`] : []),

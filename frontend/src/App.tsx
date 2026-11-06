@@ -18,6 +18,10 @@ const Confirmation = lazy(() => import('./pages/Confirmation').then((m) => ({ de
 const StaffLogin = lazy(() => import('./pages/StaffLogin').then((m) => ({ default: m.StaffLogin })));
 const StaffDashboard = lazy(() => import('./pages/StaffDashboard').then((m) => ({ default: m.StaffDashboard })));
 const MyBookings = lazy(() => import('./pages/MyBookings').then((m) => ({ default: m.MyBookings })));
+const CheckIn = lazy(() => import('./pages/CheckIn').then((m) => ({ default: m.CheckIn })));
+const HostSchedule = lazy(() =>
+  import('./pages/HostSchedule').then((m) => ({ default: m.HostSchedule })),
+);
 const EventsPage = lazy(() => import('./pages/EventsPage').then((m) => ({ default: m.EventsPage })));
 const SupportPage = lazy(() => import('./pages/SupportPage').then((m) => ({ default: m.SupportPage })));
 const SupportThreadPage = lazy(() => import('./pages/SupportPage').then((m) => ({ default: m.SupportThreadPage })));
@@ -68,6 +72,7 @@ export function App() {
     email: string;
     isStaff: boolean;
     isAdmin: boolean;
+    isHost?: boolean;
     emailVerified: boolean;
   } | null>(null);
   const [authTick, setAuthTick] = useState(0);
@@ -76,7 +81,16 @@ export function App() {
   useEffect(() => {
     let active = true;
     api
-      .get<{ user: { name: string; email: string; isStaff: boolean; isAdmin: boolean; emailVerified: boolean } }>(
+      .get<{
+        user: {
+          name: string;
+          email: string;
+          isStaff: boolean;
+          isAdmin: boolean;
+          isHost?: boolean;
+          emailVerified: boolean;
+        };
+      }>(
         '/auth/me',
       )
       .then((r) => active && setUser(r.user))
@@ -145,6 +159,7 @@ export function App() {
           )}
           {loggedIn && !user?.isStaff && <NavLink to="/support">{t('nav.support')}</NavLink>}
           {user?.isStaff && <NavLink to="/staff/dashboard">{t('nav.staff')}</NavLink>}
+          {user?.isHost && <NavLink to="/host">{t('nav.host')}</NavLink>}
         </nav>
         <div className="nav-actions">
           {/* Light / dark theme toggle */}
@@ -199,6 +214,8 @@ export function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/account" element={<MyBookings />} />
+            <Route path="/host" element={<HostSchedule />} />
+            <Route path="/c/:token" element={<CheckIn />} />
             <Route path="/staff/dashboard" element={<StaffDashboard />} />
             {/* Bare /staff just points at the dashboard (which guards itself). */}
             <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />

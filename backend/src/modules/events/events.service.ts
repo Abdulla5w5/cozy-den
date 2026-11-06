@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { query, withTransaction } from '../../db/pool';
 import { ApiError } from '../../middleware/error';
 import { paymentProvider } from '../../payment';
+import { emailSeatPass, newCheckinToken } from '../checkin/checkin.service';
 import { isValidStart, maxDurationFor, STEP_MIN } from '../../utils/slots';
 
 /**
@@ -245,11 +246,11 @@ export async function holdSeats(
     const ins = await client.query<{ id: number }>(
       `INSERT INTO event_reservations
          (event_id, member_id, guest_name, guest_email, guest_phone, seats,
-          verification_code, status, amount_cents, retry_token_hash)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'pending_payment',$8,$9)
+          verification_code, status, amount_cents, retry_token_hash, checkin_token)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'pending_payment',$8,$9,$10)
        RETURNING id`,
       [eventId, guest.memberId ?? null, guest.name, guest.email, guest.phone ?? null,
-       seats, code, amountCents, guest.retryTokenHash ?? null],
+       seats, code, amountCents, guest.retryTokenHash ?? null, newCheckinToken()],
     );
     return { reservationId: ins.rows[0].id, code, amountCents };
   });
@@ -278,7 +279,10 @@ export async function confirmSeats(reservationId: number, paymentRef: string): P
       WHERE id = $1 AND status = 'pending_payment'`,
     [reservationId, paymentRef],
   );
-  if (rowCount) return;
+  if (rowCount) {
+    emailSeatPass('event', reservationId);
+    return;
+  }
   const { rows } = await query<{ id: number }>(
     `UPDATE event_reservations SET status = 'pending', payment_ref = $2
       WHERE id = $1 AND status = 'cancelled'
@@ -290,6 +294,7 @@ export async function confirmSeats(reservationId: number, paymentRef: string): P
       `[events] PAID charge ${paymentRef} landed on released reservation ${reservationId}; ` +
         'reinstated it — check the event is not oversold.',
     );
+    emailSeatPass('event', reservationId);
   }
 }
 

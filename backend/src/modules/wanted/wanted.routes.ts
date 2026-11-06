@@ -1,3 +1,4 @@
+import { query } from '../../db/pool';
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate';
@@ -126,7 +127,11 @@ wantedRouter.post(
 
       if (hold.amountCents === 0) {
         await confirmListing(hold.holdId, 'free');
-        return res.status(201).json({ free: true });
+        const { rows } = await query<{ checkin_token: string | null }>(
+          'SELECT checkin_token FROM wanted_post_seats WHERE id = $1',
+          [hold.holdId],
+        );
+        return res.status(201).json({ free: true, pass: rows[0]?.checkin_token ?? null });
       }
       if (!paymentProvider.createCharge) {
         await releaseListing(hold.holdId);
@@ -169,7 +174,18 @@ wantedRouter.get('/reserve/return', async (req, res) => {
   if (!chargeId) return res.redirect(`${site}/wanted?reserve=error`);
   try {
     const outcome = await finalizeListingCharge(chargeId);
-    return res.redirect(`${site}/wanted?reserve=${outcome}`);
+    // The QR pass, once paid: it is what staff scan at the door.
+    let pass = '';
+    if (outcome === 'paid') {
+      const { rows } = await query<{ checkin_token: string | null }>(
+        'SELECT checkin_token FROM wanted_post_seats WHERE payment_ref = $1',
+        [chargeId],
+      );
+      pass = rows[0]?.checkin_token ?? '';
+    }
+    return res.redirect(
+      `${site}/wanted?reserve=${outcome}${pass ? `&pass=${encodeURIComponent(pass)}` : ''}`,
+    );
   } catch (err) {
     console.error('[tap] wanted reserve return failed', err);
     return res.redirect(`${site}/wanted?reserve=error`);

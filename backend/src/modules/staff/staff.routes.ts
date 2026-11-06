@@ -30,8 +30,21 @@ import {
   setCodeActive,
 } from '../promo/codes.service';
 import { staffCreateBookingSchema } from '../bookings/bookings.schema';
+import {
+  addAvailability,
+  deleteAvailabilityAsStaff,
+  listHostAvailability,
+  getHostRates,
+  listHostsForAdmin,
+  setHostRates,
+  removeHost,
+  saveHostByEmail,
+  upcomingSessions,
+} from '../hosts/hosts.service';
+import { linkish } from '../../utils/catalogue';
 import { createStaffBooking, getBookingById } from '../bookings/bookings.service';
 import { isoDate, isoMonth } from '../../utils/dates';
+import { isValidStart } from '../../utils/slots';
 
 // Dashboard DATA endpoints. Auth (login/logout/me) lives in /api/auth.
 // Every route requires a signed-in user flagged as staff in the database.
@@ -330,6 +343,7 @@ staffRouter.get('/pricing', requireAdmin, async (_req, res, next) => {
       rates: await getRates(),
       overrides: await listOverrides(new Date().toISOString().slice(0, 10)),
       groupRates: await getGroupRates(),
+      hostRates: await getHostRates(),
       codes: await listCodes(),
     });
   } catch (err) {
@@ -381,6 +395,22 @@ staffRouter.put(
 );
 
 // Null leaves that price unset, and a code then changes nothing on those days.
+const hostRatesSchema = z.object({
+  // Null takes the option off sale.
+  normalHourlyCents: z.number().int().min(0).max(100000).nullable(),
+  clocktowerHourlyCents: z.number().int().min(0).max(100000).nullable(),
+});
+
+// PUT /api/staff/pricing/hosts — the price per hour of each host option.
+staffRouter.put('/pricing/hosts', requireAdmin, validate(hostRatesSchema), async (req, res, next) => {
+  try {
+    await setHostRates(req.body);
+    res.json({ hostRates: await getHostRates() });
+  } catch (err) {
+    next(err);
+  }
+});
+
 const groupRatesSchema = z.object({
   offPeakCents: z.number().int().min(0).max(100000).nullable(),
   extraOffPeakCents: z.number().int().min(0).max(100000).nullable(),
@@ -453,6 +483,129 @@ staffRouter.delete(
     try {
       if (!(await deleteCode(Number(req.params.id)))) throw new ApiError(404, 'No such code.');
       res.json({ codes: await listCodes() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ---------- Game hosts (admin) ----------
+//
+// Hosts are made from existing accounts, by email. Their hourly price is what
+// customers pay for them, so only admins set it — never the host.
+
+// GET /api/staff/hosts — every host, active first.
+staffRouter.get('/hosts', requireAdmin, async (_req, res, next) => {
+  try {
+    res.json({ hosts: await listHostsForAdmin() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const hostBody = z.object({
+  email: z.string().trim().email().max(200),
+  displayName: z.string().trim().min(1).max(60),
+  bio: z.string().trim().max(400).default(''),
+  photoUrl: linkish(1000),
+  offersBoardGames: z.boolean(),
+  offersClocktower: z.boolean(),
+  offersDnd: z.boolean(),
+  isActive: z.boolean().default(true),
+});
+
+// PUT /api/staff/hosts — make an account a host, or update one.
+staffRouter.put('/hosts', requireAdmin, validate(hostBody), async (req, res, next) => {
+  try {
+    const b = req.body;
+    const id = await saveHostByEmail(b.email, {
+      displayName: b.displayName,
+      bio: b.bio,
+      photoUrl: b.photoUrl || null,
+      offersBoardGames: b.offersBoardGames,
+      offersClocktower: b.offersClocktower,
+      offersDnd: b.offersDnd,
+      isActive: b.isActive,
+    });
+    // Unticking Active is the other way to take a host off: same warning.
+    res.json({
+      hosts: await listHostsForAdmin(),
+      upcoming: b.isActive ? [] : await upcomingSessions(id),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/staff/hosts/:id — remove a host (switched off instead when they
+// have bookings, which must keep their name).
+staffRouter.delete('/hosts/:id', requireAdmin, validate(idParam, 'params'), async (req, res, next) => {
+  try {
+    const result = await removeHost(Number(req.params.id));
+    res.json({ ...result, hosts: await listHostsForAdmin() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/staff/hosts/:id/availability — a host's upcoming free times.
+staffRouter.get(
+  '/hosts/:id/availability',
+  requireAdmin,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      res.json({ availability: await listHostAvailability(Number(req.params.id)) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const hostWindowBody = z.object({
+  date: isoDate(),
+  timeSlot: z.string().refine(isValidStart, 'invalid start time'),
+  durationMin: z
+    .number()
+    .int()
+    .min(60)
+    .max(780)
+    .refine((v) => v % 30 === 0, 'length must be in half hours'),
+});
+
+// POST /api/staff/hosts/:id/availability — add a free time for a host.
+staffRouter.post(
+  '/hosts/:id/availability',
+  requireAdmin,
+  validate(idParam, 'params'),
+  validate(hostWindowBody),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      await addAvailability(id, req.body.date, req.body.timeSlot, req.body.durationMin);
+      res.json({ availability: await listHostAvailability(id) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const hostWindowParams = z.object({
+  id: z.coerce.number().int().positive(),
+  windowId: z.coerce.number().int().positive(),
+});
+
+// DELETE /api/staff/hosts/:id/availability/:windowId — always allowed; a
+// session already booked inside it stays booked.
+staffRouter.delete(
+  '/hosts/:id/availability/:windowId',
+  requireAdmin,
+  validate(hostWindowParams, 'params'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      await deleteAvailabilityAsStaff(id, Number(req.params.windowId));
+      res.json({ availability: await listHostAvailability(id) });
     } catch (err) {
       next(err);
     }

@@ -45,7 +45,7 @@ export const env = {
   redisUrl: process.env.REDIS_URL || undefined,
 
   jwtSecret: required('JWT_SECRET'),
-  jwtExpiresIn: optional('JWT_EXPIRES_IN', '8h'),
+  jwtExpiresIn: optional('JWT_EXPIRES_IN', '10h'),
   cookieSecure: optional('COOKIE_SECURE', 'false') === 'true',
 
   // Optional allow-list of staff emails permitted to sign in. When empty, the

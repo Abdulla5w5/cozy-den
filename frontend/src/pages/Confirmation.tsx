@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { COMMUNITY_URL } from '../community';
 import { useI18n } from '../i18n';
 import { Booking, formatHours } from '../types';
+import { QrPass } from '../components/QrPass';
 
 export function Confirmation() {
   const { code } = useParams<{ code: string }>();
@@ -32,6 +33,18 @@ export function Confirmation() {
           : t('conf.phone', { phone: booking.guestPhone ?? '' })}
       </p>
 
+      {booking.checkinToken && ['pending', 'arrived'].includes(booking.status) && (
+        <QrPass
+          token={booking.checkinToken}
+          lines={[
+            `${booking.tableLabel} · ${booking.date}`,
+            `${booking.timeSlot} · ${booking.partySize} ${booking.partySize === 1 ? 'person' : 'people'}`,
+          ]}
+        />
+      )}
+
+      {/* The typed code stays as the backup for a camera that cannot read a
+          screen. */}
       <div className="code-box">
         <span>{t('conf.show')}</span>
         <strong>{booking.verificationCode}</strong>
@@ -43,9 +56,17 @@ export function Confirmation() {
           ({t('bk.sessionHours', { n: formatHours(booking.durationMin) })})
         </p>
         <ul>
+          {/* The stored fee includes a host's; shown apart so each line is
+              what it says. */}
           <li>
-            {t('bk.tableFee')} — {money(booking.tableFeeCents)}
+            {t('bk.tableFee')} — {money(booking.tableFeeCents - (booking.hostFeeCents ?? 0))}
           </li>
+          {booking.hostKind && (
+            <li>
+              {t(`host.kind.${booking.hostKind}`)} —{' '}
+              {money(booking.hostFeeCents ?? 0)}
+            </li>
+          )}
         </ul>
         <p className="total">
           {t('conf.totalPaid')} {money(booking.totalCents)}

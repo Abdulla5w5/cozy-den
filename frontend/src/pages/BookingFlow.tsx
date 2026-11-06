@@ -7,6 +7,7 @@ import { Booking, formatHours, TableAvailability } from '../types';
 import { CafeFloorPlan, tablePhoto } from '../components/CafeFloorPlan';
 import { isKuwaitPhone } from '../phone';
 import { checkoutToken } from '../checkoutToken';
+import { HostChoice, HostPicker, hostFee } from '../components/HostPicker';
 import { TermsBody, termsTitle } from './TermsPage';
 
 // POST /bookings returns one of two shapes: the finished booking (direct/mock
@@ -262,6 +263,8 @@ export function BookingFlow() {
   // Two, not one: the smallest table on the floor seats four and so takes a
   // party of two, which makes one an opening state no table would accept.
   const [partySize, setPartySize] = useState<number>(draft?.partySize ?? 2);
+  // A private game host for the sitting, if the customer adds one.
+  const [host, setHost] = useState<HostChoice | null>(null);
 
   const [guestName, setGuestName] = useState(draft?.guestName ?? '');
   const [guestPhone, setGuestPhone] = useState(draft?.guestPhone ?? '');
@@ -397,7 +400,10 @@ export function BookingFlow() {
     .filter((tb) => partySize <= tb.capacity && partySize >= minSeatsFor(tb))
     .map((tb) => tb.label);
   const seats = Math.max(minParty, partySize);
-  const totalCents = perSeatCents * seats;
+  const seatsTotalCents = perSeatCents * seats;
+  // A host is per hour for the whole group, on top of the seats.
+  const hostFeeCents = host && !late ? hostFee(host.hourlyCents, durationMin) : 0;
+  const totalCents = seatsTotalCents + hostFeeCents;
 
   useEffect(() => {
     // A new table or start time can allow a different range, so re-seat the
@@ -497,6 +503,7 @@ export function BookingFlow() {
         partySize,
         promoCode: promoApplies ? promo?.code : undefined,
         retryToken: checkoutToken(),
+        hostKind: host && !late ? host.kind : undefined,
       });
       if (res.redirectUrl) {
         // Redirect gateway (Tap): hand the browser to the hosted payment page.
@@ -770,6 +777,14 @@ export function BookingFlow() {
                         </p>
                       )}
                       {late && <p className="sitting-note">{t('bk.lateSeatingHint')}</p>}
+                      <HostPicker
+                        date={date}
+                        timeSlot={timeSlot}
+                        durationMin={durationMin}
+                        late={late}
+                        selected={host}
+                        onSelect={setHost}
+                      />
                     </div>
                   )}
 
@@ -826,7 +841,7 @@ export function BookingFlow() {
                 — {t('bk.seatMath', {
                   seats: String(seats),
                   each: money(perSeatCents),
-                  total: money(totalCents),
+                  total: money(seatsTotalCents),
                 })}
                 {!late && fee.peak && (
                   <span className="pill">
@@ -834,6 +849,15 @@ export function BookingFlow() {
                   </span>
                 )}
               </li>
+              {host && hostFeeCents > 0 && (
+                <li>
+                  {t('host.summary', {
+                    name: t(`host.kind.${host.kind}`),
+                    hours: formatHours(durationMin),
+                    amount: money(hostFeeCents),
+                  })}
+                </li>
+              )}
             </ul>
             <p className="total">
               {t('bk.total')} {money(totalCents)}

@@ -42,6 +42,10 @@ export const createBookingSchema = z.object({
   // The browser's checkout token, so a retry can release its own abandoned
   // hold at once (utils/retryToken.ts).
   retryToken: retryTokenSchema,
+  // A private game host to join the table (migration 051): the customer picks
+  // the option, the server assigns the person. Priced per hour
+  // for the whole group, checked in the service.
+  hostKind: z.enum(['normal', 'clocktower']).optional(),
   // Only the direct (mock) provider uses a client token. The redirect gateway
   // (Tap) collects payment on its own hosted page, so this is optional.
   paymentToken: z.string().min(1).max(200).optional(),

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
 import { Booking, formatHours, Game, HistoryEntry } from '../types';
+import { QrPass } from '../components/QrPass';
 
 /** Customer profile: booking history + the games they've logged playing. */
 export function MyBookings() {
@@ -66,10 +67,13 @@ export function MyBookings() {
               ) : (
                 <span className="muted">{t('acct.codeAtCounter')}</span>
               )}
+              {b.checkinToken && <BookingPass booking={b} />}
             </div>
           ))}
         </div>
       )}
+
+      <SeatPasses />
 
       <GameHistory />
     </div>
@@ -180,6 +184,89 @@ function GameHistory() {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+/** The QR pass for one of the customer's own bookings, opened on demand so a
+ *  long history is not a wall of codes. Shown only while it would scan. */
+function BookingPass({ booking }: { booking: Booking }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const yesterday = new Date(Date.now() + 3 * 3600_000 - 864e5).toISOString().slice(0, 10);
+  if (!booking.checkinToken || booking.date < yesterday) return null;
+  if (!['pending', 'arrived'].includes(booking.status)) return null;
+  return (
+    <div className="booking-pass">
+      <button type="button" className="link" onClick={() => setOpen((o) => !o)}>
+        {open ? t('qr.hide') : t('qr.show')}
+      </button>
+      {open && (
+        <QrPass
+          token={booking.checkinToken}
+          lines={[`${booking.tableLabel} · ${booking.date}`, `${booking.timeSlot} · ${booking.partySize}`]}
+        />
+      )}
+    </div>
+  );
+}
+
+interface SeatPass {
+  kind: 'event' | 'wanted';
+  title: string;
+  date: string;
+  timeSlot: string | null;
+  people: number;
+  token: string;
+  checkedIn: boolean;
+}
+
+/** Event and Wanted Board seats still to come, so a pass can always be found
+ *  again after leaving the page that first showed it. */
+function SeatPasses() {
+  const { t } = useI18n();
+  const [passes, setPasses] = useState<SeatPass[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ passes: SeatPass[] }>('/checkin/mine')
+      .then((r) => setPasses(r.passes))
+      .catch(() => setPasses([]));
+  }, []);
+
+  if (passes.length === 0) return null;
+  return (
+    <section className="section">
+      <h2>{t('qr.seatPasses')}</h2>
+      <div className="feature-grid">
+        {passes.map((p) => (
+          <div className="feature-card" key={p.token}>
+            <span className="tag">{t(`ci.kind.${p.kind}`)}</span>
+            <h3>{p.title}</h3>
+            <p className="muted">
+              {p.date}
+              {p.timeSlot ? ` · ${p.timeSlot}` : ''} · {t('bk.people', { n: p.people })}
+            </p>
+            {p.checkedIn ? (
+              <p className="muted">{t('ci.already')}</p>
+            ) : (
+              <div className="booking-pass">
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => setOpen(open === p.token ? null : p.token)}
+                >
+                  {open === p.token ? t('qr.hide') : t('qr.show')}
+                </button>
+                {open === p.token && (
+                  <QrPass token={p.token} lines={[p.title, `${p.date} ${p.timeSlot ?? ''}`.trim()]} />
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

@@ -165,6 +165,8 @@ bookingsRouter.get(
     try {
       const booking = await getBookingByCode(req.params.code);
       if (!booking) throw new ApiError(404, 'Booking not found.');
+      // Carries the QR pass key, so never kept by a cache along the way.
+      res.set('Cache-Control', 'no-store');
       res.json({ booking });
     } catch (err) {
       next(err);

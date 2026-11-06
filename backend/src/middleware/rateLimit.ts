@@ -140,6 +140,50 @@ export const mailLimiter = failOpen(
   })
 );
 
+// QR check-in passes. Staff scan many a night, and the café's Wi-Fi is one
+// address shared with every guest on it, so a guest's traffic or mischief must
+// never stop the counter. These routes sit outside the global limiter; signed
+// -in staff skip the failed-lookup cap, and check-ins have their own counter.
+// Failed lookups are what guessing looks like, though a 144-bit key is not
+// realistically guessable, so that cap only needs to stop noise.
+export const checkinLimiter = failOpen(
+  rateLimit({
+    keyGenerator: clientKey,
+    windowMs: 10 * 60 * 1000,
+    max: 300,
+    skip: (req) => (req as Request & { staffViewer?: boolean }).staffViewer === true,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: redisStore('rl:checkin:'),
+    message: { error: 'Too many requests, please try again shortly.' },
+  })
+);
+export const checkinPostLimiter = failOpen(
+  rateLimit({
+    keyGenerator: clientKey,
+    windowMs: 10 * 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: redisStore('rl:checkin-post:'),
+    message: { error: 'Too many requests, please try again shortly.' },
+  })
+);
+export const checkinMissLimiter = failOpen(
+  rateLimit({
+    keyGenerator: clientKey,
+    windowMs: 10 * 60 * 1000,
+    max: 60,
+    skipSuccessfulRequests: true,
+    // Set by the pass route once it knows a signed-in staff account is asking.
+    skip: (req) => (req as Request & { staffViewer?: boolean }).staffViewer === true,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: redisStore('rl:checkin-miss:'),
+    message: { error: 'Too many invalid passes. Please try again later.' },
+  })
+);
+
 // Cap on login/registration to blunt credential-stuffing / brute force.
 // 13 per 15 min: enough headroom for a customer fumbling a password or a typo'd
 // email a few times, still far below what a brute-force run needs.

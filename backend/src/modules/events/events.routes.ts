@@ -229,7 +229,13 @@ eventsRouter.post(
 
       if (hold.amountCents === 0) {
         await confirmSeats(hold.reservationId, 'free');
-        return res.status(201).json({ code: hold.code, free: true });
+        const { rows } = await query<{ checkin_token: string | null }>(
+          'SELECT checkin_token FROM event_reservations WHERE id = $1',
+          [hold.reservationId],
+        );
+        return res
+          .status(201)
+          .json({ code: hold.code, free: true, pass: rows[0]?.checkin_token ?? null });
       }
 
       if (!paymentProvider.createCharge) {
@@ -274,16 +280,21 @@ eventsRouter.get('/seats/return', async (req, res) => {
     // The reservation's reference, so the customer has something to show at
     // the counter — a paid seat is otherwise never shown to them. One indexed
     // lookup by the charge id this request just verified with Tap.
+    // The QR pass too, once paid: it is what staff scan at the door.
     let ref = '';
+    let pass = '';
     if (outcome !== 'failed') {
-      const { rows } = await query<{ verification_code: string }>(
-        'SELECT verification_code FROM event_reservations WHERE payment_ref = $1',
+      const { rows } = await query<{ verification_code: string; checkin_token: string | null }>(
+        'SELECT verification_code, checkin_token FROM event_reservations WHERE payment_ref = $1',
         [chargeId],
       );
       ref = rows[0]?.verification_code ?? '';
+      if (outcome === 'paid') pass = rows[0]?.checkin_token ?? '';
     }
     return res.redirect(
-      `${site}/events?seat=${outcome}${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`,
+      `${site}/events?seat=${outcome}` +
+        (ref ? `&ref=${encodeURIComponent(ref)}` : '') +
+        (pass ? `&pass=${encodeURIComponent(pass)}` : ''),
     );
   } catch (err) {
     console.error('[tap] event seat return failed', err);

@@ -126,6 +126,13 @@ export interface Booking {
   durationMin: number;
   partySize: number;
   totalCents: number;
+  /** The private game host on the booking, if any: the option chosen, who was
+   *  assigned, and the fee. */
+  hostKind?: 'normal' | 'clocktower' | null;
+  hostName?: string | null;
+  hostFeeCents?: number;
+  /** The QR check-in pass key; only on the customer's own bookings. */
+  checkinToken?: string | null;
   items: BookingItemView[];
   createdAt: string;
 }
@@ -143,6 +150,8 @@ export interface StaffBooking {
   totalCents: number;
   durationMin?: number;
   partySize?: number;
+  hostName?: string | null;
+  hostFeeCents?: number;
   items: { name: string; quantity: number }[];
 }
 

@@ -23,7 +23,7 @@ function wasDismissed(): boolean {
 
 export function NewcomerBanner({ loggedIn, authKey }: { loggedIn: boolean; authKey: number }) {
   const { t } = useI18n();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [offer, setOffer] = useState<{ code: string; percentOff: number } | null>(null);
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(wasDismissed);
@@ -55,8 +55,17 @@ export function NewcomerBanner({ loggedIn, authKey }: { loggedIn: boolean; authK
     }
   }
 
-  // Not on staff pages, nor over the checkout it points to.
-  if (dismissed || !offer || !open || pathname.startsWith('/staff') || pathname === '/book') {
+  // Not on staff pages, over the checkout it points to, or over a QR pass.
+  if (
+    dismissed ||
+    !offer ||
+    !open ||
+    pathname.startsWith('/staff') ||
+    pathname.startsWith('/c/') ||
+    pathname.startsWith('/confirmation/') ||
+    /[?&](seat|reserve|pass|next)=/.test(search) ||
+    pathname === '/book'
+  ) {
     return null;
   }
 

@@ -27,7 +27,8 @@ const cookieOpts = {
   httpOnly: true,
   sameSite: 'lax' as const,
   secure: env.cookieSecure,
-  maxAge: 8 * 60 * 60 * 1000,
+  // Matches JWT_EXPIRES_IN: one sign-in covers a staff member's whole shift.
+  maxAge: 10 * 60 * 60 * 1000,
   path: '/',
 };
 

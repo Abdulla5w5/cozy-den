@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
+import { QrPass } from './QrPass';
 
 /**
  * What happened to a payment, shown once when Tap sends the customer back
@@ -35,18 +36,24 @@ export function PaymentReturnNotice({
   // Only an uppercase reference code is shown; anything else in the address
   // is ignored rather than echoed onto the page.
   const ref = (params.get('ref') ?? '').toUpperCase();
-  const safeRef = /^[A-Z0-9]{4,32}$/.test(ref) ? ref : '';
+  const safeRef = /^[A-Z0-9-]{4,32}$/.test(ref) ? ref : '';
 
   const text =
     outcome === 'paid' ? t(paidKey) : t(`ev.pay${outcome[0].toUpperCase()}${outcome.slice(1)}`);
 
+  // The QR pass for a paid seat, if the return route sent one.
+  const pass = params.get('pass') ?? '';
+  const safePass = outcome === 'paid' && /^[A-Za-z0-9_-]{20,40}$/.test(pass) ? pass : '';
+
   function dismiss() {
     params.delete(param);
     params.delete('ref');
+    params.delete('pass');
     setParams(params, { replace: true });
   }
 
   return (
+    <>
     <div className={`pay-return ${TONE[outcome]}`} role="status">
       <p>
         {text}
@@ -61,5 +68,7 @@ export function PaymentReturnNotice({
         ✕
       </button>
     </div>
+    {safePass && <QrPass token={safePass} lines={[safeRef || 'Cozy Den']} />}
+    </>
   );
 }

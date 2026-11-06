@@ -6,6 +6,7 @@ import { useI18n } from '../i18n';
 import { EventItem, Game, MenuItem } from '../types';
 import { GameCard, tileFor } from '../components/GameCard';
 import { DateTile, EventTag, EventTokens, SeatsMeter } from '../components/EventTicket';
+import { HostSection } from '../components/HostSection';
 import { ReviewSlider } from '../components/ReviewSlider';
 import { Roadmap } from '../components/Roadmap';
 
@@ -145,6 +146,8 @@ export function Home() {
             step is a die on it showing the step's number in pips. */}
         <Roadmap steps={steps} />
       </section>
+
+      <HostSection />
 
       {events.length > 0 && (
         <section className="section events-home">

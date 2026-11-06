@@ -4,6 +4,7 @@ import { useI18n } from '../i18n';
 import { EventItem } from '../types';
 import { checkoutToken } from '../checkoutToken';
 import { PaymentReturnNotice } from '../components/PaymentReturnNotice';
+import { QrPass } from '../components/QrPass';
 import { DateTile, EventTag, EventTokens, SeatsMeter } from '../components/EventTicket';
 
 type Filter = 'all' | 'internal' | 'external';
@@ -136,6 +137,7 @@ function ReserveForm({ e, onClose }: { e: EventItem; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [donePass, setDonePass] = useState<string | null>(null);
 
   const left = e.capacity === null ? 20 : Math.max(0, e.capacity - (e.seats_taken ?? 0));
   const maxSeats = Math.min(20, left || 1);
@@ -158,7 +160,12 @@ function ReserveForm({ e, onClose }: { e: EventItem; onClose: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.post<{ redirectUrl?: string; code?: string; free?: boolean }>(
+      const res = await api.post<{
+        redirectUrl?: string;
+        code?: string;
+        free?: boolean;
+        pass?: string | null;
+      }>(
         `/events/${e.id}/reserve`,
         {
           guestName: name,
@@ -173,6 +180,7 @@ function ReserveForm({ e, onClose }: { e: EventItem; onClose: () => void }) {
         return; // keep the spinner up while the browser navigates away
       }
       setDone(res.code ?? '');
+      setDonePass(res.pass ?? null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('ev.reserveFailed'));
       setBusy(false);
@@ -181,9 +189,12 @@ function ReserveForm({ e, onClose }: { e: EventItem; onClose: () => void }) {
 
   if (done !== null) {
     return (
-      <div className="alert" role="status">
-        {t('ev.reserved')} <strong>{done}</strong>
-      </div>
+      <>
+        <div className="alert" role="status">
+          {t('ev.reserved')} <strong>{done}</strong>
+        </div>
+        {donePass && <QrPass token={donePass} lines={[e.title, e.event_date]} />}
+      </>
     );
   }
 

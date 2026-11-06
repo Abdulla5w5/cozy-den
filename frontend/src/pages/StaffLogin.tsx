@@ -71,7 +71,11 @@ function loadGis(locale: string): Promise<void> {
 export function StaffLogin() {
   const navigate = useNavigate();
   const { t, lang } = useI18n();
-  const [mode, setMode] = useState<Mode>('signup');
+  // Someone sent here to come back to a page (staff who scanned a QR pass)
+  // already has an account, so open on signing in rather than signing up.
+  const [mode, setMode] = useState<Mode>(() =>
+    new URLSearchParams(window.location.search).get('next') ? 'login' : 'signup',
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -96,6 +100,14 @@ export function StaffLogin() {
 
   function afterAuth(u: AuthUser) {
     notifyAuthChanged();
+    // Back to the scanned QR pass. Only ever that exact shape: a looser check
+    // on "a path on this site" can be fooled (a tab or newline inside the
+    // value turns it into a link to another site after sign-in).
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (next && /^\/c\/[A-Za-z0-9_-]{20,40}$/.test(next)) {
+      navigate(next);
+      return;
+    }
     navigate(u.isStaff ? '/staff/dashboard' : '/');
   }
 

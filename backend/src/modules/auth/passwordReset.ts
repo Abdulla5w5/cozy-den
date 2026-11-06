@@ -26,7 +26,7 @@ import { mailer } from '../../notifications/mailer';
  *  4. LIVE SESSIONS DIE. Resetting stamps password_changed_at, and the auth
  *     middleware refuses any JWT issued before it. Someone who resets because
  *     an attacker had their session actually evicts that attacker, instead of
- *     leaving them signed in for the rest of the 8-hour token life.
+ *     leaving them signed in for the rest of the 10-hour token life.
  */
 
 const TTL_MINUTES = 60;

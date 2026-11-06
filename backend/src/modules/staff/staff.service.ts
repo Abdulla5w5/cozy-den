@@ -32,12 +32,15 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     total_cents: number;
     duration_min: number;
     party_size: number;
+    host_fee_cents: number;
+    host_name: string | null;
   }>(
     `SELECT b.id, b.verification_code, b.time_slot, b.guest_name, b.guest_email, b.guest_phone,
             b.table_id, t.label AS table_label, b.status, b.source, b.total_cents,
-            b.duration_min, b.party_size
+            b.duration_min, b.party_size, b.host_fee_cents, h.display_name AS host_name
        FROM bookings b
        JOIN tables t ON t.id = b.table_id
+       LEFT JOIN hosts h ON h.user_id = b.host_id
       WHERE b.booking_date = $1
         AND b.status <> 'cancelled'
         -- Event table holds live in this table so the exclusion constraint can
@@ -86,6 +89,8 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     totalCents: r.total_cents,
     durationMin: r.duration_min,
     partySize: r.party_size,
+    hostName: r.host_name,
+    hostFeeCents: r.host_fee_cents,
     items: itemsByBooking.get(r.id) ?? [],
   }));
 }

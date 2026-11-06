@@ -1,6 +1,7 @@
 import { pool, query, withTransaction } from '../../db/pool';
 import { getOverrideMap, getRates, listingPerSeatOn, type Rates } from '../../utils/pricing';
 import { paymentProvider } from '../../payment';
+import { emailSeatPass, newCheckinToken } from '../checkin/checkin.service';
 import { ApiError } from '../../middleware/error';
 
 /**
@@ -602,10 +603,10 @@ export async function holdSeats(
 
     const { rows: held } = await client.query<{ id: number }>(
       `INSERT INTO wanted_post_seats
-         (post_id, member_id, seats, amount_cents, payment_state)
-       VALUES ($1, $2, $3, $4, 'pending_payment')
+         (post_id, member_id, seats, amount_cents, payment_state, checkin_token)
+       VALUES ($1, $2, $3, $4, 'pending_payment', $5)
        RETURNING id`,
-      [postId, memberId, seats, amountCents],
+      [postId, memberId, seats, amountCents, newCheckinToken()],
     );
     await client.query('COMMIT');
     return { holdId: held[0].id, amountCents, seats };
@@ -644,6 +645,7 @@ export async function confirmListing(holdId: number, paymentRef: string): Promis
     [holdId, paymentRef],
   );
   if (!rows[0]) return;
+  emailSeatPass('wanted', holdId);
   if (rows[0].was === 'released') {
     console.error(
       `[wanted] PAID charge ${paymentRef} landed on released hold ${holdId}; ` +

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
 import { Promo } from '../types';
@@ -28,6 +28,14 @@ function markSeen(id: number) {
 export function PromoModal() {
   const { t } = useI18n();
   const [promo, setPromo] = useState<Promo | null>(null);
+  const { pathname, search } = useLocation();
+  // Never in the way of a pass: a scanned QR at a busy counter, a confirmation,
+  // the page a customer lands on with their code after paying, or the sign-in
+  // staff are sent to from a pass.
+  const passPage =
+    pathname.startsWith('/c/') ||
+    pathname.startsWith('/confirmation/') ||
+    /[?&](seat|reserve|pass|next)=/.test(search);
 
   useEffect(() => {
     api
@@ -38,7 +46,7 @@ export function PromoModal() {
       .catch(() => {});
   }, []);
 
-  if (!promo) return null;
+  if (!promo || passPage) return null;
 
   const close = () => {
     markSeen(promo.id);

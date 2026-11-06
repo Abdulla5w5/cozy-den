@@ -13,6 +13,8 @@ import { gamesRouter } from './modules/games/games.routes';
 import { menuRouter } from './modules/menu/menu.routes';
 import { bookingsRouter } from './modules/bookings/bookings.routes';
 import { staffRouter } from './modules/staff/staff.routes';
+import { hostsRouter } from './modules/hosts/hosts.routes';
+import { checkinRouter } from './modules/checkin/checkin.routes';
 import { supportRouter } from './modules/support/support.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import { eventsRouter } from './modules/events/events.routes';
@@ -101,6 +103,9 @@ export function createApp() {
 
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
+  // Before the global limiter, with limits of its own: guests sharing the
+  // café's Wi-Fi must not be able to use up the counter's scans.
+  app.use('/api/checkin', checkinRouter);
   // Static assets should never consume the API request budget.
   app.use('/api', globalLimiter);
 
@@ -117,6 +122,7 @@ export function createApp() {
   app.use('/api/wanted', wantedRouter);
   app.use('/api/support', supportRouter);
   app.use('/api/staff', staffRouter);
+  app.use('/api/hosts', hostsRouter);
 
   // Keep unknown API routes JSON-only; they must not fall through to the SPA.
   app.use('/api', notFound);

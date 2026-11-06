@@ -38,19 +38,35 @@ function getGoogleClient(): OAuth2Client {
  */
 export async function getAccountFlags(
   userId: number,
-): Promise<{ isStaff: boolean; isAdmin: boolean; emailVerified: boolean; phone: string | null }> {
+): Promise<{
+  isStaff: boolean;
+  isAdmin: boolean;
+  isHost: boolean;
+  emailVerified: boolean;
+  phone: string | null;
+}> {
   const { rows } = await query<{
     is_staff: boolean;
     is_admin: boolean;
+    is_host: boolean;
     email_verified: boolean;
     phone: string | null;
   }>(
-    'SELECT is_staff, is_admin, email_verified, phone FROM users WHERE id = $1',
+    `SELECT u.is_staff, u.is_admin, u.email_verified, u.phone,
+            -- Active, or removed but still with paid sessions to come.
+            EXISTS (SELECT 1 FROM hosts h WHERE h.user_id = u.id AND (
+                      h.is_active OR EXISTS (
+                        SELECT 1 FROM bookings b
+                         WHERE b.host_id = h.user_id
+                           AND b.status NOT IN ('cancelled', 'pending_payment')
+                           AND b.booking_date >= current_date - 1))) AS is_host
+       FROM users u WHERE u.id = $1`,
     [userId],
   );
   return {
     isStaff: rows[0]?.is_staff === true,
     isAdmin: rows[0]?.is_admin === true,
+    isHost: rows[0]?.is_host === true,
     emailVerified: rows[0]?.email_verified === true,
     phone: rows[0]?.phone ?? null,
   };

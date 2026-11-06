@@ -70,6 +70,10 @@ export function StaffPricing() {
   const [note, setNote] = useState<string | null>(null);
   // Group promo code prices and the codes themselves.
   const [codes, setCodes] = useState<PromoCode[]>([]);
+  // The two private-host options, per hour for the whole table. Blank takes
+  // an option off sale.
+  const [hostNormal, setHostNormal] = useState('');
+  const [hostClocktower, setHostClocktower] = useState('');
   const [groupOff, setGroupOff] = useState('');
   const [groupExtraOff, setGroupExtraOff] = useState('');
   const [groupSat, setGroupSat] = useState('');
@@ -83,13 +87,21 @@ export function StaffPricing() {
 
   function load() {
     api
-      .get<{ rates: Rates; overrides: Override[]; groupRates: GroupRates; codes: PromoCode[] }>(
+      .get<{
+        rates: Rates;
+        overrides: Override[];
+        groupRates: GroupRates;
+        codes: PromoCode[];
+        hostRates: { normalHourlyCents: number | null; clocktowerHourlyCents: number | null };
+      }>(
         '/staff/pricing',
       )
       .then((r) => {
         setRates(r.rates);
         setOverrides(r.overrides);
         setCodes(r.codes);
+        setHostNormal(kdOrBlank(r.hostRates.normalHourlyCents));
+        setHostClocktower(kdOrBlank(r.hostRates.clocktowerHourlyCents));
         setGroupOff(kdOrBlank(r.groupRates.offPeakCents));
         setGroupExtraOff(kdOrBlank(r.groupRates.extraOffPeakCents));
         setGroupSat(kdOrBlank(r.groupRates.saturdayCents));
@@ -149,6 +161,22 @@ export function StaffPricing() {
       setDate('');
       setLabel('');
       setPrice('');
+      setNote(t('pr.saved'));
+      load();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : t('pr.failed'));
+    }
+  }
+
+  async function saveHostRates(e: FormEvent) {
+    e.preventDefault();
+    setNote(null);
+    if (![hostNormal, hostClocktower].every(isKdOrBlank)) return setNote(t('pr.badNumber'));
+    try {
+      await api.put('/staff/pricing/hosts', {
+        normalHourlyCents: centsOrNull(hostNormal),
+        clocktowerHourlyCents: centsOrNull(hostClocktower),
+      });
       setNote(t('pr.saved'));
       load();
     } catch (err) {
@@ -272,6 +300,32 @@ export function StaffPricing() {
               onChange={(e) => setExtraOffPeak(e.target.value)}
               inputMode="decimal"
               placeholder={t('pr.extraHalf')}
+            />
+          </label>
+          <button className="primary">{t('pr.save')}</button>
+        </div>
+      </form>
+
+      <form className="summary manual-form" onSubmit={saveHostRates}>
+        <h3>{t('pr.hostTitle')}</h3>
+        <p className="muted">{t('pr.hostHelp')}</p>
+        <div className="row">
+          <label className="field inline">
+            {t('host.kind.normal')}
+            <input
+              value={hostNormal}
+              onChange={(e) => setHostNormal(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('pr.hostOff')}
+            />
+          </label>
+          <label className="field inline">
+            {t('host.kind.clocktower')}
+            <input
+              value={hostClocktower}
+              onChange={(e) => setHostClocktower(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('pr.hostOff')}
             />
           </label>
           <button className="primary">{t('pr.save')}</button>
