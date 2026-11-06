@@ -420,12 +420,12 @@ const dict: Record<string, { en: string; ar: string }> = {
   'sh.delete': { en: 'Delete', ar: 'حذف' },
   'sh.cancel': { en: 'Cancel', ar: 'إلغاء' },
   'sh.close': { en: 'Close', ar: 'إغلاق' },
-  'sh.addHost': { en: 'Add coach', ar: 'أضف مضيف' },
+  'sh.addHost': { en: 'Add host', ar: 'أضف مضيف' },
   'sh.editing': { en: 'Editing {name}', ar: 'تعديل {name}' },
   'sh.timesFor': { en: '{name}’s free times', ar: 'أوقات {name} المتاحة' },
   'sh.hasBooking': { en: 'Has a booking', ar: 'فيه حجز' },
   'sh.deleteBookedTime': {
-    en: 'A group has booked this coach during this time. Their booking stays — this only stops new bookings. Delete it?',
+    en: 'A group has booked this host during this time. Their booking stays — this only stops new bookings. Delete it?',
     ar: 'في مجموعة حاجزة هالمضيف بهالوقت. حجزهم يبقى — الحذف يوقف الحجوزات الجديدة بس. تحذفه؟',
   },
   'sh.deleteConfirm': {
@@ -1213,7 +1213,7 @@ const dict: Record<string, { en: string; ar: string }> = {
     ar: 'الرابط ما اشتغل. سجّل دخول واستخدم «أعد إرسال الرابط» عشان تجيب واحد جديد.',
   },
   'verify.home': { en: 'Go home', ar: 'الرئيسية' },
-  'promo.kicker': { en: 'Upcoming Event', ar: 'فعالية قادمة' },
+  'promo.kicker': { en: "Don't miss this", ar: 'لا تفوّتونها' },
 
   // ---- booking status workflow + staff manual entry ----
   'status.all': { en: 'All', ar: 'الكل' },

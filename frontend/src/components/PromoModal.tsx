@@ -31,8 +31,9 @@ export function PromoModal() {
   const { pathname, search } = useLocation();
   // Never in the way of a pass: a scanned QR at a busy counter, a confirmation,
   // the page a customer lands on with their code after paying, or the sign-in
-  // staff are sent to from a pass.
-  const passPage =
+  // staff are sent to from a pass. Nor over the staff pages: it is for visitors.
+  const hiddenHere =
+    pathname.startsWith('/staff') ||
     pathname.startsWith('/c/') ||
     pathname.startsWith('/confirmation/') ||
     /[?&](seat|reserve|pass|next)=/.test(search);
@@ -46,7 +47,7 @@ export function PromoModal() {
       .catch(() => {});
   }, []);
 
-  if (!promo || passPage) return null;
+  if (!promo || hiddenHere) return null;
 
   const close = () => {
     markSeen(promo.id);
