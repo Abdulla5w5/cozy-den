@@ -3,7 +3,7 @@ import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
 import { billableSeats, MAX_PARTY, minSeatsFor, quoteBooking } from '../../utils/pricing';
-import { isValidDuration, minDurationFor, slotHasStarted } from '../../utils/slots';
+import { currentSlot, isValidDuration, minDurationFor, slotHasStarted } from '../../utils/slots';
 import { paymentProvider } from '../../payment';
 import { TAP_CHARGE_EXPIRY_MINUTES } from '../../payment/constants';
 import {
@@ -147,6 +147,7 @@ interface InsertParams {
   totalCents: number;
   durationMin: number;
   partySize: number;
+  staffNotes?: string | null;
   /** Customer bookings only; staff-entered ones never see the terms. */
   termsAccepted?: boolean;
   /** The group promo code the price was worked out with, if any. */
@@ -196,11 +197,11 @@ async function insertBooking(p: InsertParams): Promise<number> {
            (table_id, booking_date, time_slot, guest_name, guest_email, guest_phone,
             verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
             duration_min, party_size, terms_accepted_at, promo_code, newcomer_discount, user_id,
-            retry_token_hash, host_id, host_fee_cents, checkin_token, host_kind)
+            retry_token_hash, host_id, host_fee_cents, checkin_token, host_kind, staff_notes)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,
-                 CASE WHEN $14 THEN now() END, $15, $16, $17, $18, $19, $20, $21, $22)
+                 CASE WHEN $14 THEN now() END, $15, $16, $17, $18, $19, $20, $21, $22, $23)
          RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true, p.userId ?? null, p.retryTokenHash ?? null, p.hostId ?? null, p.hostFeeCents ?? 0, newCheckinToken(), p.hostKind ?? null]
+        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true, p.userId ?? null, p.retryTokenHash ?? null, p.hostId ?? null, p.hostFeeCents ?? 0, newCheckinToken(), p.hostKind ?? null, p.staffNotes || null]
       );
       return rows[0].id;
     } catch (err) {
@@ -251,8 +252,8 @@ export async function createBooking(
   // The date check alone let any slot on today through, hours after it began.
   // The availability list already hides these; this is the rule itself, for a
   // page left open past the slot or a request that never saw that list.
-  // (Staff bookings are deliberately exempt: a walk-in for the 16:00 slot is
-  // recorded at 16:10.)
+  // (Staff bookings may use the half hour running now: a walk-in for the 16:00
+  // slot is recorded at 16:10.)
   if (slotHasStarted(input.date, input.timeSlot)) {
     throw new ApiError(400, 'That time has already passed. Please pick a later slot.');
   }
@@ -464,8 +465,8 @@ export async function startBookingCheckout(
   // The date check alone let any slot on today through, hours after it began.
   // The availability list already hides these; this is the rule itself, for a
   // page left open past the slot or a request that never saw that list.
-  // (Staff bookings are deliberately exempt: a walk-in for the 16:00 slot is
-  // recorded at 16:10.)
+  // (Staff bookings may use the half hour running now: a walk-in for the 16:00
+  // slot is recorded at 16:10.)
   if (slotHasStarted(input.date, input.timeSlot)) {
     throw new ApiError(400, 'That time has already passed. Please pick a later slot.');
   }
@@ -905,10 +906,15 @@ async function releaseOwnNewcomerHolds(email: string): Promise<void> {
 /**
  * Staff manual entry for phone/WhatsApp bookings: no payment step, created
  * directly as 'pending' with source 'staff_manual'. Contact may be a phone
- * number or email — no receipt email is attempted.
+ * number or email — no receipt email is attempted. Unlike a customer, staff may
+ * start one in the half hour already running.
  */
 export async function createStaffBooking(input: StaffCreateBookingInput): Promise<BookingView> {
   if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
+  // A walk-in may start in the half hour running now, and no earlier.
+  if (slotHasStarted(input.date, input.timeSlot) && input.timeSlot !== currentSlot(input.date)) {
+    throw new ApiError(400, 'That start time has passed. Pick the current half hour or later.');
+  }
   const table = await assertTableExists(input.tableId, { activeOnly: false });
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize);
   // Staff type whatever the customer gave them. A Kuwait number goes in the
@@ -928,6 +934,7 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     totalCents: 0,
     durationMin: sitting.durationMin,
     partySize: sitting.partySize,
+    staffNotes: input.notes,
   });
 
   const view = await getBookingById(bookingId);

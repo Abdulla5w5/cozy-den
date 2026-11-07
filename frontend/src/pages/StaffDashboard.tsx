@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { FormEvent, Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
@@ -175,6 +175,13 @@ function TodayTab() {
   const [code, setCode] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [printing, setPrinting] = useState<StaffBooking | null>(null);
+  const [notesOpen, setNotesOpen] = useState<number | null>(null);
+  // Unsaved notes, by booking. They outlive the box: it closes, the filter
+  // changes, or the booking moves from Upcoming to Now while someone is typing.
+  const noteDrafts = useRef(new Map<number, NoteDraft>());
+  // Re-render the Notes buttons when a booking gains or loses an unsaved draft.
+  const [, setDraftTick] = useState(0);
+  const onDraftChange = useCallback(() => setDraftTick((n) => n + 1), []);
 
   // Only the newest answer counts: an older one may be for another date, or from
   // before an action staff just took.
@@ -336,7 +343,15 @@ function TodayTab() {
 
       {error && <div className="alert error">{error}</div>}
 
-      <TableFloorView date={date} bookings={bookings} onAct={act} onPrint={setPrinting} />
+      <TableFloorView
+        date={date}
+        bookings={bookings}
+        onAct={act}
+        onPrint={setPrinting}
+        onNotesSaved={fetchBookings}
+        noteDrafts={noteDrafts.current}
+        onDraftChange={onDraftChange}
+      />
 
       <div className="table-scroll">
         <table className="data">
@@ -364,7 +379,8 @@ function TodayTab() {
             </tr>
           )}
           {shown.map((b) => (
-            <tr key={b.id}>
+            <Fragment key={b.id}>
+            <tr>
               <td>{b.timeSlot}</td>
               {/* Older rows predate these columns; show a dash, not "NaN". */}
               <td>{b.durationMin ? `${b.durationMin / 60}h` : '—'}</td>
@@ -412,14 +428,165 @@ function TodayTab() {
                     {t('staff.printBtn')}
                   </button>
                 )}
+                <button
+                  className="link"
+                  aria-expanded={notesOpen === b.id}
+                  onClick={() => setNotesOpen(notesOpen === b.id ? null : b.id)}
+                >
+                  {noteDrafts.current.has(b.id)
+                    ? t('staff.notesDraft')
+                    : b.notes
+                      ? t('staff.notesHas')
+                      : t('staff.notes')}
+                </button>
               </td>
             </tr>
+            {notesOpen === b.id && (
+              <tr className="booking-notes-row">
+                <td colSpan={11}>
+                  <BookingNotes
+                    bookingId={b.id}
+                    saved={b.notes ?? ''}
+                    drafts={noteDrafts.current}
+                    onDraftChange={onDraftChange}
+                    onSaved={fetchBookings}
+                  />
+                </td>
+              </tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>
         </div>
       {printing && <Receipt booking={printing} date={date} />}
     </section>
+  );
+}
+
+/** Typing nobody has saved yet, and the saved note it was typed over. */
+interface NoteDraft {
+  text: string;
+  base: string;
+}
+
+/**
+ * Staff's notes on one booking. What is being typed stays put through the timed
+ * refresh and is kept in `drafts` if this box goes away. Each draft remembers
+ * the saved note it was typed over, so when someone else has saved a different
+ * one since, the box says so and shows it, and Discard drops the draft.
+ */
+function BookingNotes({
+  bookingId,
+  saved,
+  drafts,
+  onDraftChange,
+  onSaved,
+}: {
+  bookingId: number;
+  saved: string;
+  drafts: Map<number, NoteDraft>;
+  onDraftChange: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useI18n();
+  const draft = drafts.get(bookingId);
+  const [text, setText] = useState(draft?.text ?? saved);
+  const [dirty, setDirty] = useState(draft !== undefined);
+  const [busy, setBusy] = useState(false);
+  const [changed, setChanged] = useState(false);
+  const [state, setState] = useState<'idle' | 'saved' | 'failed'>('idle');
+  // The note this box believes is saved. Right after a save it is ahead of
+  // `saved`, which only catches up when the list refreshes.
+  const base = useRef(draft?.base ?? saved);
+  // The value `saved` held when this box last saved: until the list refreshes it
+  // is out of date, and must not replace what was just saved.
+  const outdated = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (saved !== outdated.current) outdated.current = null;
+    if (outdated.current !== null) return;
+    if (!dirty) {
+      setText(saved);
+      base.current = saved;
+      setChanged(false);
+    } else {
+      // Someone else saved a different note while this one was being typed.
+      setChanged(saved.trim() !== base.current.trim());
+    }
+  }, [saved, dirty]);
+
+  function clearDraft() {
+    if (drafts.delete(bookingId)) onDraftChange();
+  }
+
+  async function save() {
+    setBusy(true);
+    setState('idle');
+    try {
+      await api.put(`/staff/bookings/${bookingId}/notes`, { notes: text });
+      clearDraft();
+      base.current = text.trim();
+      outdated.current = saved;
+      setChanged(false);
+      setDirty(false);
+      setState('saved');
+      onSaved();
+    } catch {
+      setState('failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function discard() {
+    clearDraft();
+    const current = outdated.current !== null ? base.current : saved;
+    base.current = current;
+    setText(current);
+    setChanged(false);
+    setDirty(false);
+    setState('idle');
+  }
+
+  return (
+    <div className="booking-notes">
+      <label className="field">
+        {t('staff.notes')}
+        <textarea
+          rows={2}
+          maxLength={2000}
+          placeholder={t('staff.notesPh')}
+          value={text}
+          readOnly={busy}
+          onChange={(e) => {
+            const isNew = !drafts.has(bookingId);
+            setText(e.target.value);
+            drafts.set(bookingId, { text: e.target.value, base: base.current });
+            if (isNew) onDraftChange();
+            setDirty(true);
+            setState('idle');
+          }}
+        />
+      </label>
+      {dirty && changed && (
+        <p className="booking-notes-changed" role="alert">
+          {t('staff.notesChanged')} <q>{saved || t('staff.notesEmpty')}</q>
+        </p>
+      )}
+      <div className="booking-notes-actions">
+        <button type="button" className="link" disabled={!dirty || busy} onClick={save}>
+          {busy ? t('bk.processing') : t('staff.notesSave')}
+        </button>
+        {dirty && !busy && (
+          <button type="button" className="link" onClick={discard}>
+            {t('staff.notesDiscard')}
+          </button>
+        )}
+        {state === 'saved' && <small className="muted">{t('staff.notesSaved')}</small>}
+        {state === 'failed' && <small className="is-error">{t('staff.notesFailed')}</small>}
+      </div>
+    </div>
   );
 }
 
@@ -432,6 +599,21 @@ function slotMinutes(hhmm: string) {
   const [h, m] = hhmm.split(':').map(Number);
   const minutes = h * 60 + m;
   return minutes < FLOOR_OPEN_MIN ? minutes + 24 * 60 : minutes;
+}
+
+// The server's table minimums, for a table without its own.
+function defaultMinParty(capacity: number) {
+  return capacity >= 12 ? 5 : capacity >= 8 ? 4 : capacity >= 6 ? 3 : capacity >= 4 ? 2 : 1;
+}
+
+// The server's rules for a sitting's length, mirrored for the staff form: two to
+// six hours in whole hours, up to what this table has free; a start too late for
+// two hours just runs to closing.
+const FLOOR_CLOSE_MIN = 27 * 60;
+function endOptions(start: string, longest: number | undefined): number[] {
+  if (!longest) return [];
+  if (slotMinutes(start) > FLOOR_CLOSE_MIN - FLOOR_SESSION_MIN) return [longest];
+  return [120, 180, 240, 300, 360].filter((d) => d <= longest);
 }
 
 function minutesLabel(min: number) {
@@ -479,11 +661,17 @@ function TableFloorView({
   bookings,
   onAct,
   onPrint,
+  onNotesSaved,
+  noteDrafts,
+  onDraftChange,
 }: {
   date: string;
   bookings: StaffBooking[];
   onAct: (path: string) => void;
   onPrint: (b: StaffBooking) => void;
+  onNotesSaved: () => void;
+  noteDrafts: Map<number, NoteDraft>;
+  onDraftChange: () => void;
 }) {
   const { t } = useI18n();
   const [tables, setTables] = useState<FloorTable[]>([]);
@@ -709,6 +897,13 @@ function TableFloorView({
                             </button>
                           )}
                         </div>
+                        <BookingNotes
+                          bookingId={b.id}
+                          saved={b.notes ?? ''}
+                          drafts={noteDrafts}
+                          onDraftChange={onDraftChange}
+                          onSaved={onNotesSaved}
+                        />
                       </div>
                     ))}
                   </section>
@@ -782,6 +977,11 @@ function ManualBookingForm({
   const [timeSlot, setTimeSlot] = useState('');
   const [guestName, setGuestName] = useState('');
   const [contact, setContact] = useState('');
+  const [durationMin, setDurationMin] = useState<number | ''>('');
+  const [partySize, setPartySize] = useState<number | ''>('');
+  const [notes, setNotes] = useState('');
+  // Bumped after a refusal: the form was open a while, so its times may be stale.
+  const [reload, setReload] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -791,24 +991,52 @@ function ManualBookingForm({
 
   useEffect(() => {
     setTimeSlot('');
+    setDurationMin('');
+    // Nothing from the previous date stays on offer while this one loads.
+    setAvailability([]);
+    if (!date) return;
+    let active = true;
     api
       .get<{ availability: TableAvailability[] }>(`/tables/availability?date=${date}`)
-      .then((r) => setAvailability(r.availability))
+      .then((r) => {
+        if (active) setAvailability(r.availability);
+      })
       .catch(() => {});
-  }, [date]);
+    return () => {
+      active = false;
+    };
+  }, [date, reload]);
 
-  const freeSlots =
-    tableId === '' ? [] : availability.find((a) => a.tableId === tableId)?.freeSlots ?? [];
+  const chosen = tableId === '' ? undefined : availability.find((a) => a.tableId === tableId);
+  const freeSlots = chosen?.freeSlots ?? [];
+  const walkInSlot = chosen?.walkInSlot ?? null;
+  // The ends this table can actually offer from this start: its next booking
+  // and closing time are already in maxDuration. The server checks again.
+  const ends = timeSlot ? endOptions(timeSlot, chosen?.maxDuration?.[timeSlot]) : [];
+  const fewest = chosen?.minParty ?? (chosen ? defaultMinParty(chosen.capacity) : 1);
+  const parties = chosen
+    ? Array.from({ length: chosen.capacity - fewest + 1 }, (_, i) => fewest + i)
+    : [];
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      await api.post('/staff/bookings', { tableId, date, timeSlot, guestName, contact });
+      await api.post('/staff/bookings', {
+        tableId,
+        date,
+        timeSlot,
+        guestName,
+        contact,
+        durationMin: durationMin === '' ? undefined : durationMin,
+        partySize: partySize === '' ? undefined : partySize,
+        notes: notes.trim() || undefined,
+      });
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create booking.');
+      setReload((n) => n + 1);
     } finally {
       setBusy(false);
     }
@@ -835,6 +1063,8 @@ function ManualBookingForm({
             onChange={(e) => {
               setTableId(e.target.value === '' ? '' : Number(e.target.value));
               setTimeSlot('');
+              setDurationMin('');
+              setPartySize('');
             }}
           >
             <option value="">—</option>
@@ -847,11 +1077,52 @@ function ManualBookingForm({
         </label>
         <label className="field inline">
           {t('staff.start')}
-          <select value={timeSlot} onChange={(e) => setTimeSlot(e.target.value)}>
+          <select
+            value={timeSlot}
+            onChange={(e) => {
+              setTimeSlot(e.target.value);
+              setDurationMin(e.target.value ? endOptions(e.target.value, chosen?.maxDuration?.[e.target.value])[0] ?? '' : '');
+            }}
+          >
             <option value="">—</option>
+            {walkInSlot && (
+              <option value={walkInSlot}>
+                {walkInSlot} ({t('staff.nowSlot')})
+              </option>
+            )}
             {freeSlots.map((s) => (
               <option key={s} value={s}>
                 {s}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field inline">
+          {t('staff.end')}
+          <select
+            value={durationMin}
+            disabled={ends.length === 0}
+            onChange={(e) => setDurationMin(Number(e.target.value))}
+          >
+            {ends.length === 0 && <option value="">—</option>}
+            {ends.map((d) => (
+              <option key={d} value={d}>
+                {t('staff.endOption', { end: minutesLabel(slotMinutes(timeSlot) + d), hours: d / 60 })}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field inline">
+          {t('staff.people')}
+          <select
+            value={partySize === '' ? fewest : partySize}
+            disabled={parties.length === 0}
+            onChange={(e) => setPartySize(Number(e.target.value))}
+          >
+            {parties.length === 0 && <option value="">—</option>}
+            {parties.map((n) => (
+              <option key={n} value={n}>
+                {n}
               </option>
             ))}
           </select>
@@ -870,9 +1141,18 @@ function ManualBookingForm({
             onChange={(e) => setContact(e.target.value)}
           />
         </label>
+        <label className="field inline">
+          {t('staff.notes')}
+          <input
+            maxLength={2000}
+            placeholder={t('staff.notesPh')}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </label>
         <button
           className="primary"
-          disabled={busy || tableId === '' || !timeSlot || !guestName || contact.trim().length < 3}
+          disabled={busy || !date || tableId === '' || !timeSlot || !guestName || contact.trim().length < 3}
         >
           {busy ? t('bk.processing') : t('staff.createBtn')}
         </button>

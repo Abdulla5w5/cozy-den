@@ -53,6 +53,15 @@ export const createBookingSchema = z.object({
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 
+// What staff keep on a booking, for staff eyes only. Empty clears it.
+export const staffNotes = z
+  .string()
+  .trim()
+  .max(2000)
+  // Postgres text cannot hold a NUL, and would answer with a 500.
+  .refine((v) => !v.includes('\u0000'), 'Notes cannot contain that character.');
+export const staffNotesSchema = z.object({ notes: staffNotes });
+
 // Staff manual entry (phone/WhatsApp bookings): no payment step, contact may be
 // a phone number or an email.
 export const staffCreateBookingSchema = z.object({
@@ -65,6 +74,7 @@ export const staffCreateBookingSchema = z.object({
   contact: z.string().trim().min(3).max(200),
   durationMin: durationMin.optional(),
   partySize: partySize.optional(),
+  notes: staffNotes.optional(),
 });
 
 export type StaffCreateBookingInput = z.infer<typeof staffCreateBookingSchema>;

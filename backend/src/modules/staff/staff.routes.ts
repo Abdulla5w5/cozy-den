@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validate';
 import { ApiError } from '../../middleware/error';
 import { requireAdmin, requireStaff } from '../../middleware/auth';
-import { getBookingsForDate, confirmBooking, completeBooking } from './staff.service';
+import { getBookingsForDate, confirmBooking, completeBooking, setBookingNotes } from './staff.service';
 import { getCustomers, getMonthlyAnalytics } from './analytics.service';
 import { listTeam, grantStaff, revokeStaff, grantAdmin, revokeAdmin } from './team.service';
 import {
@@ -31,7 +31,7 @@ import {
   updateCode,
   updatePriceSet,
 } from '../promo/codes.service';
-import { staffCreateBookingSchema } from '../bookings/bookings.schema';
+import { staffCreateBookingSchema, staffNotesSchema } from '../bookings/bookings.schema';
 import {
   addAvailability,
   deleteAvailabilityAsStaff,
@@ -84,6 +84,24 @@ staffRouter.post(
 
 const codeSchema = z.object({ code: z.string().trim().min(4).max(32) });
 const idParam = z.object({ id: z.coerce.number().int().positive() });
+
+// PUT /api/staff/bookings/:id/notes — staff's own notes on a booking.
+staffRouter.put(
+  '/bookings/:id/notes',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(staffNotesSchema),
+  async (req, res, next) => {
+    try {
+      if (!(await setBookingNotes(Number(req.params.id), req.body.notes))) {
+        throw new ApiError(404, 'No such booking.');
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // POST /api/staff/confirm  { code } — the guest turned up.
 staffRouter.post('/confirm', requireStaff, validate(codeSchema, 'body'), async (req, res, next) => {

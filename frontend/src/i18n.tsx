@@ -1244,6 +1244,23 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.contactPh': { en: 'Phone or email', ar: 'تلفون أو إيميل' },
   'staff.source': { en: 'Source', ar: 'المصدر' },
   'staff.start': { en: 'Start time', ar: 'وقت البداية' },
+  'staff.nowSlot': { en: 'now', ar: 'الحين' },
+  'staff.endOption': { en: '{end} ({hours}h)', ar: '{end} ({hours} ساعة)' },
+  'staff.end': { en: 'End time', ar: 'وقت النهاية' },
+  'staff.people': { en: 'People', ar: 'عدد الأشخاص' },
+  'staff.notes': { en: 'Notes', ar: 'ملاحظات' },
+  'staff.notesHas': { en: 'Notes ●', ar: 'ملاحظات ●' },
+  'staff.notesPh': { en: 'For staff only', ar: 'للموظفين فقط' },
+  'staff.notesDraft': { en: 'Notes ✎ unsaved', ar: 'ملاحظات ✎ غير محفوظة' },
+  'staff.notesDiscard': { en: 'Discard', ar: 'تجاهل' },
+  'staff.notesEmpty': { en: '(empty)', ar: '(فاضية)' },
+  'staff.notesChanged': {
+    en: 'Someone else changed this note while you were typing. Saved note now:',
+    ar: 'أحد ثاني غيّر هالملاحظة وانت تكتب. الملاحظة المحفوظة الحين:',
+  },
+  'staff.notesSave': { en: 'Save notes', ar: 'حفظ الملاحظات' },
+  'staff.notesSaved': { en: 'Saved', ar: 'تم الحفظ' },
+  'staff.notesFailed': { en: 'Could not save. Try again.', ar: 'ما قدرنا نحفظ. حاولوا مرة ثانية.' },
   'staff.createBtn': { en: 'Create booking', ar: 'إنشاء الحجز' },
 };
 

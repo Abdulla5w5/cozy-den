@@ -8929,3 +8929,49 @@ a.ev-ticket:active {
   margin: 0;
   padding: 0.15rem 0.5rem;
 }
+
+/* Staff notes on a booking. */
+.booking-notes {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 8px;
+}
+.booking-notes textarea {
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+}
+.booking-notes-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.booking-notes-changed {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.booking-notes-changed q {
+  font-weight: 700;
+}
+.booking-notes-actions .is-error {
+  color: var(--bad);
+}
+.booking-notes-actions .link:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.booking-notes-row td {
+  background: var(--surface-low);
+}
+/* The bookings table scrolls sideways on small screens; the notes stay in view. */
+.booking-notes-row .booking-notes {
+  position: sticky;
+  inset-inline-start: 0;
+  max-width: min(560px, calc(100vw - 96px));
+  margin-top: 0;
+}

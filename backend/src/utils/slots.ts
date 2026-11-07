@@ -79,6 +79,20 @@ export function slotHasStarted(date: string, slot: string, now: number = Date.no
   return slotStartsAt(date, slot) <= now;
 }
 
+/**
+ * The half hour running right now on this service date, or null when none is:
+ * 21:00 from 21:00 until 21:30, and 01:00 on the night that started on `date`.
+ * A walk-in sits down part-way through one, so staff may enter it at that time.
+ */
+export function currentSlot(date: string, now: number = Date.now()): string | null {
+  return (
+    START_TIMES.find((s) => {
+      const start = slotStartsAt(date, s);
+      return start <= now && now < start + STEP_MIN * 60_000;
+    }) ?? null
+  );
+}
+
 /** A start too late to fit a full session; it runs to closing instead. */
 export function isLateStart(start: string): boolean {
   return toMinutes(start) > CLOSE_MIN - SESSION_MIN;

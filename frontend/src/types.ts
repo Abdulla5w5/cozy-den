@@ -14,6 +14,8 @@ export interface TableAvailability {
   takenSlots: string[];
   /** Starts already over, per the server's clock. Hidden, not shown as taken. */
   pastSlots?: string[];
+  /** The half hour running now, if free. Staff only: for walk-ins. */
+  walkInSlot?: string | null;
   /** Start time -> longest bookable length in minutes, given this table's day. */
   maxDuration: Record<string, number>;
 }
@@ -150,6 +152,7 @@ export interface StaffBooking {
   totalCents: number;
   durationMin?: number;
   partySize?: number;
+  notes?: string;
   hostName?: string | null;
   hostFeeCents?: number;
   items: { name: string; quantity: number }[];

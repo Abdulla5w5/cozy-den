@@ -7,6 +7,7 @@ import {
   overlaps,
   toMinutes,
   slotHasStarted,
+  currentSlot,
 } from '../../utils/slots';
 import { getTableFee, TableFee } from '../../utils/pricing';
 
@@ -38,6 +39,11 @@ export interface TableAvailability {
    * that is simply over as "taken".
    */
   pastSlots: string[];
+  /**
+   * The half hour running now, when this table is free for a sitting from it.
+   * Only staff may book it, for a walk-in; customers are offered freeSlots.
+   */
+  walkInSlot: string | null;
   /**
    * Start time -> the longest booking that still fits there, in minutes. The
    * form uses this to bound its end-time picker, so a customer is never offered
@@ -78,6 +84,7 @@ export async function getAvailability(
   // One clock reading for the whole response, so every table agrees on what
   // "now" is even if building the list straddles a slot boundary.
   const now = Date.now();
+  const running = currentSlot(date, now);
 
   const byTable = new Map<number, { start: string; duration: number }[]>();
   for (const b of booked) {
@@ -91,15 +98,15 @@ export async function getAvailability(
     const takenSlots: string[] = [];
     const pastSlots: string[] = [];
     const maxDuration: Record<string, number> = {};
+    let walkInSlot: string | null = null;
 
     for (const s of START_TIMES) {
-      if (slotHasStarted(date, s, now)) {
-        pastSlots.push(s);
-        continue;
-      }
+      const started = slotHasStarted(date, s, now);
+      if (started) pastSlots.push(s);
+      if (started && s !== running) continue;
       const shortest = minDurationFor(s);
       if (existing.some((b) => overlaps(s, shortest, b.start, b.duration))) {
-        takenSlots.push(s);
+        if (!started) takenSlots.push(s);
         continue;
       }
       // Room runs out at whichever comes first: closing, the six-hour ceiling,
@@ -113,7 +120,8 @@ export async function getAvailability(
       // Report the longest length actually on offer, not the raw gap: sittings
       // come in fixed lengths, so a 5.5-hour gap still only sells 5 hours.
       const fits = allowedDurations(s).filter((d) => d <= room);
-      freeSlots.push(s);
+      if (started) walkInSlot = s;
+      else freeSlots.push(s);
       maxDuration[s] = fits.length ? fits[fits.length - 1] : shortest;
     }
 
@@ -125,6 +133,7 @@ export async function getAvailability(
       freeSlots,
       takenSlots,
       pastSlots,
+      walkInSlot,
       maxDuration,
     };
   });
