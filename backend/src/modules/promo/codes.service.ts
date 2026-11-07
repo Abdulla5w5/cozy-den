@@ -94,6 +94,12 @@ export async function findActiveCode(code: string): Promise<PromoCode | null> {
   return rows[0] ? toCode(rows[0]) : null;
 }
 
+/** A code as it stands, on or off: what an existing booking was priced with. */
+export async function findCode(code: string): Promise<PromoCode | null> {
+  const { rows } = await query<Row>(`${CODE_SELECT} WHERE c.code = $1`, [normalizeCode(code)]);
+  return rows[0] ? toCode(rows[0]) : null;
+}
+
 /** The newest active newcomer code, for the site banner; null when off. */
 export async function activeNewcomerCode(): Promise<PromoCode | null> {
   const { rows } = await query<Row>(

@@ -26,6 +26,7 @@ interface Pass {
   // Staff only:
   isTonight?: boolean;
   payAtCounter?: boolean;
+  counterCents?: number;
   guestName?: string;
   guestPhone?: string | null;
   guestEmail?: string | null;
@@ -190,7 +191,13 @@ export function CheckIn() {
             {!pass.payAtCounter && (
               <>
                 <dt>{t('ci.amount')}</dt>
-                <dd>{money(pass.totalCents ?? 0)}</dd>
+                <dd>{money((pass.totalCents ?? 0) + (pass.counterCents ?? 0))}</dd>
+              </>
+            )}
+            {!!pass.counterCents && (
+              <>
+                <dt>{t('ci.byHand')}</dt>
+                <dd>{money(pass.counterCents)}</dd>
               </>
             )}
           </dl>

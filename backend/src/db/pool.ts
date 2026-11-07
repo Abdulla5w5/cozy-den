@@ -16,7 +16,9 @@ databaseUrl?.searchParams.delete('sslmode');
 // Five concurrent PostgreSQL sessions are enough to keep the CPU busy; extra
 // requests wait in pg's queue instead of creating ten Node/TLS/Postgres client
 // stacks during a burst. This is a concurrency bound, not a user limit.
-const sharedPoolConfig: PoolConfig = { max: 5 };
+// A request that cannot get a session after 30 seconds fails instead of waiting
+// forever, so one mistake cannot freeze every request behind it.
+const sharedPoolConfig: PoolConfig = { max: 5, connectionTimeoutMillis: 30_000 };
 
 export const pool = new Pool(
   databaseUrl

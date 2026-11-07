@@ -137,7 +137,7 @@ const FREE_FOR_WINDOW = `
              AND booking_window(a.avail_date, a.time_slot, a.duration_min)
                  @> booking_window($1::date, $2, $3))
   AND NOT EXISTS (SELECT 1 FROM bookings b
-                   WHERE b.host_id = h.user_id AND b.status <> 'cancelled'
+                   WHERE b.host_id = h.user_id AND b.status NOT IN ('cancelled', 'order_complete')
                      AND booking_window(b.booking_date, b.time_slot, b.duration_min)
                          && booking_window($1::date, $2, $3)
                      AND NOT (b.status = 'pending_payment'
@@ -506,7 +506,7 @@ export async function listHostAvailability(
   }>(
     `SELECT a.id, to_char(a.avail_date, 'YYYY-MM-DD') AS d, a.time_slot, a.duration_min,
             EXISTS (SELECT 1 FROM bookings b
-                     WHERE b.host_id = a.host_id AND b.status <> 'cancelled'
+                     WHERE b.host_id = a.host_id AND b.status NOT IN ('cancelled', 'order_complete')
                        AND booking_window(b.booking_date, b.time_slot, b.duration_min)
                            && booking_window(a.avail_date, a.time_slot, a.duration_min)) AS booked
        FROM host_availability a

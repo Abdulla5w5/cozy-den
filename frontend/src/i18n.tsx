@@ -456,6 +456,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'ci.kind.event': { en: 'Event seats', ar: 'مقاعد فعالية' },
   'ci.kind.wanted': { en: 'Wanted Board seat', ar: 'مقعد لوحة الطلبات' },
   'ci.paid': { en: 'Paid ✓', ar: 'مدفوع ✓' },
+  'ci.byHand': { en: 'Taken by hand', ar: 'محصّل يدوياً' },
   'ci.payAtCounter': { en: 'Not paid online — collect at the counter', ar: 'ما انّدفع أونلاين — حصّلوا عند الكاونتر' },
   'ci.otherNight': {
     en: 'This pass is for {date}, not tonight.',
@@ -1238,6 +1239,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'receipt.date': { en: 'Date', ar: 'التاريخ' },
   'receipt.time': { en: 'Time', ar: 'الوقت' },
   'receipt.fee': { en: 'Holding fee', ar: 'رسوم الحجز' },
+  'receipt.counter': { en: 'Paid at the counter', ar: 'مدفوع عند الكاونتر' },
   'receipt.total': { en: 'Total', ar: 'الإجمالي' },
   'receipt.thanks': { en: 'Thank you — enjoy your session!', ar: 'شكرًا لكم — استمتعوا بوقتكم!' },
   'staff.contact': { en: 'Contact', ar: 'التواصل' },
@@ -1246,6 +1248,80 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.start': { en: 'Start time', ar: 'وقت البداية' },
   'staff.nowSlot': { en: 'now', ar: 'الحين' },
   'staff.endOption': { en: '{end} ({hours}h)', ar: '{end} ({hours} ساعة)' },
+  'staff.counterBtn': { en: 'Collect', ar: 'تحصيل' },
+  'staff.counterRecorded': {
+    en: 'Amount recorded. The total is in the bookings list.',
+    ar: 'تم تسجيل المبلغ. الإجمالي موجود في قائمة الحجوزات.',
+  },
+  'staff.counterBad': {
+    en: 'Enter an amount like 3.50, keeping the total within KD 10,000.',
+    ar: 'اكتبوا مبلغ مثل 3.50، والإجمالي ما يتعدى 10,000 د.ك.',
+  },
+  'staff.counterTagBack': { en: '- {amount} by hand', ar: '- {amount} يدوياً' },
+  'staff.counterSoFar': {
+    en: 'Collected by hand so far: {amount}',
+    ar: 'المحصّل يدوياً لين الحين: {amount}',
+  },
+  'staff.counterLabel': {
+    en: 'Amount you just took by hand (KD)',
+    ar: 'المبلغ اللي حصّلتوه يدوياً الحين (د.ك)',
+  },
+  'staff.counterHint': {
+    en: 'The site does not charge this. It adds to the total above and counts in monthly revenue. Use a minus for money handed back or to correct a mistake.',
+    ar: 'الموقع ما يخصم هالمبلغ. ينضاف للإجمالي فوق وينحسب في إيرادات الشهر. استخدموا سالب للمبلغ المرجّع أو لتصحيح خطأ.',
+  },
+  'staff.counterSave': { en: 'Add amount', ar: 'إضافة المبلغ' },
+  'staff.counterSaved': { en: 'Added', ar: 'تمت الإضافة' },
+  'staff.counterFailed': { en: 'Could not save. Try again.', ar: 'ما قدرنا نحفظ. حاولوا مرة ثانية.' },
+  'staff.counterTag': { en: '+ {amount} by hand', ar: '+ {amount} يدوياً' },
+  'staff.revenueCounter': {
+    en: 'Of which taken by hand',
+    ar: 'منها محصّل يدوياً',
+  },
+  'staff.changeBtn': { en: 'Change', ar: 'تعديل' },
+  'staff.changeTitle': { en: 'Change this booking', ar: 'تعديل الحجز' },
+  'staff.changeSave': { en: 'Save changes', ar: 'حفظ التعديل' },
+  'staff.changeCancel': { en: 'Cancel', ar: 'إلغاء' },
+  'staff.changeOk': { en: 'OK', ar: 'تمام' },
+  'staff.changeSaved': { en: 'Booking changed.', ar: 'تم تعديل الحجز.' },
+  'staff.changeFailed': { en: 'Could not change this booking.', ar: 'ما قدرنا نعدّل الحجز.' },
+  'staff.changeHost': {
+    en: 'This booking has a game host, so its time cannot be changed here.',
+    ar: 'هالحجز فيه مضيف ألعاب، فما يمكن تغيير وقته من هني.',
+  },
+  'staff.changePrice': {
+    en: 'New price {total}. Paid online: {paid}.',
+    ar: 'السعر الجديد {total}. المدفوع أونلاين: {paid}.',
+  },
+  'staff.changePriceCounter': {
+    en: 'New price {total}. Paid online: {paid}. Already taken at the counter: {counter}.',
+    ar: 'السعر الجديد {total}. المدفوع أونلاين: {paid}. المحصّل عند الكاونتر: {counter}.',
+  },
+  'staff.changeDue': {
+    en: 'Collect {amount} by hand at the counter, then record it below.',
+    ar: 'حصّلوا {amount} يدوياً عند الكاونتر، وبعدين سجّلوها تحت.',
+  },
+  'staff.changeSettled': { en: 'Nothing more to collect.', ar: 'ما في شي ثاني يتحصّل.' },
+  'staff.changeOver': {
+    en: 'The customer has paid {amount} more than the new price. Nothing is refunded automatically.',
+    ar: 'العميل دفع {amount} زيادة عن السعر الجديد. ما يتم أي استرجاع تلقائي.',
+  },
+  'staff.changeNoCode': {
+    en: "This booking's price code no longer exists, so work out any difference by hand. Paid online: {paid}. Taken at the counter: {counter}.",
+    ar: 'كود السعر لهالحجز ما عاد موجود، فاحسبوا أي فرق يدوياً. المدفوع أونلاين: {paid}. المحصّل عند الكاونتر: {counter}.',
+  },
+  'staff.changeNoPrice': {
+    en: 'Booking changed, but the price difference could not be worked out. Check it by hand.',
+    ar: 'تم تعديل الحجز، بس ما قدرنا نحسب فرق السعر. راجعوه يدوياً.',
+  },
+  'staff.changeTrimmed': {
+    en: 'This table only has room until {end}, so the booking would end earlier.',
+    ar: 'هالطاولة فاضية لين {end} بس، فالحجز راح يخلص أبكر.',
+  },
+  'staff.doneConfirm': {
+    en: 'Mark this booking done? The table becomes free straight away, and this cannot be undone.',
+    ar: 'تأكيد إنهاء الحجز؟ الطاولة تصير فاضية على طول، وما يمكن التراجع.',
+  },
   'staff.end': { en: 'End time', ar: 'وقت النهاية' },
   'staff.people': { en: 'People', ar: 'عدد الأشخاص' },
   'staff.notes': { en: 'Notes', ar: 'ملاحظات' },

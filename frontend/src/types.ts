@@ -153,6 +153,7 @@ export interface StaffBooking {
   durationMin?: number;
   partySize?: number;
   notes?: string;
+  counterCents?: number;
   hostName?: string | null;
   hostFeeCents?: number;
   items: { name: string; quantity: number }[];
@@ -162,6 +163,7 @@ export interface MonthlyAnalytics {
   month: string;
   bookingsCount: number;
   revenueCents: number;
+  counterCents: number;
   popularGames: { title: string; bookings: number }[];
   peakSlots: { timeSlot: string; bookings: number }[];
   tableUtilization: { label: string; capacity: number; bookings: number }[];

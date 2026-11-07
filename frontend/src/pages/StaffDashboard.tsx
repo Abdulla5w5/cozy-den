@@ -176,6 +176,15 @@ function TodayTab() {
   const [showForm, setShowForm] = useState(false);
   const [printing, setPrinting] = useState<StaffBooking | null>(null);
   const [notesOpen, setNotesOpen] = useState<number | null>(null);
+  const [changeOpen, setChangeOpen] = useState<number | null>(null);
+  // What the last change means for the customer. Outlives the form, which goes
+  // away when a booking moves to another table.
+  const [changeNotice, setChangeNotice] = useState<{
+    text: string;
+    bookingId: number;
+    recorded?: boolean;
+  } | null>(null);
+  const [collectOpen, setCollectOpen] = useState<number | null>(null);
   // Unsaved notes, by booking. They outlive the box: it closes, the filter
   // changes, or the booking moves from Upcoming to Now while someone is typing.
   const noteDrafts = useRef(new Map<number, NoteDraft>());
@@ -226,6 +235,21 @@ function TodayTab() {
     setError(null);
     fetchBookings();
   }, [fetchBookings]);
+
+  // Money recorded from any box settles the "collect" notice for that booking.
+  const onMoneyRecorded = useCallback(
+    (bookingId: number) => {
+      setChangeNotice((n) =>
+        n?.bookingId === bookingId ? { ...n, text: t('staff.counterRecorded'), recorded: true } : n,
+      );
+    },
+    [t],
+  );
+
+  // The notice is about a booking on the date it was made on.
+  useEffect(() => {
+    setChangeNotice(null);
+  }, [date]);
 
   useEffect(() => {
     load();
@@ -290,6 +314,7 @@ function TodayTab() {
   }, [printing]);
 
   const shown = filter === 'all' ? bookings : bookings.filter((b) => b.status === filter);
+  const noticeBooking = bookings.find((b) => b.id === changeNotice?.bookingId);
   const outstanding = bookings.filter((b) => b.status === 'arrived').length;
 
   return (
@@ -343,6 +368,22 @@ function TodayTab() {
 
       {error && <div className="alert error">{error}</div>}
 
+      {changeNotice && (
+        <div className="alert booking-change-notice" role="status">
+          {changeNotice.text}{' '}
+          <button type="button" className="link" onClick={() => setChangeNotice(null)}>
+            {t('staff.changeOk')}
+          </button>
+          {!changeNotice.recorded && noticeBooking && (
+            <CounterMoney
+              bookingId={noticeBooking.id}
+              saved={noticeBooking.counterCents ?? 0}
+              onRecorded={onMoneyRecorded}
+              onRefresh={fetchBookings}
+            />
+          )}
+        </div>
+      )}
       <TableFloorView
         date={date}
         bookings={bookings}
@@ -351,6 +392,12 @@ function TodayTab() {
         onNotesSaved={fetchBookings}
         noteDrafts={noteDrafts.current}
         onDraftChange={onDraftChange}
+        onChanged={(text, bookingId) => {
+          setChangeNotice({ text, bookingId });
+          fetchBookings();
+        }}
+        onMoneyRecorded={onMoneyRecorded}
+        onRefresh={fetchBookings}
       />
 
       <div className="table-scroll">
@@ -406,7 +453,16 @@ function TodayTab() {
               <td>
                 <span className="pill">{t(`source.${b.source}`)}</span>
               </td>
-              <td>{money(b.totalCents)}</td>
+              <td>
+                {money(b.totalCents)}
+                {!!b.counterCents && (
+                  <div className="counter-money-tag">
+                    {t(b.counterCents < 0 ? 'staff.counterTagBack' : 'staff.counterTag', {
+                      amount: money(Math.abs(b.counterCents)),
+                    })}
+                  </div>
+                )}
+              </td>
               <td>
                 <span className={`status ${b.status}`}>{t(`status.${b.status}`)}</span>
               </td>
@@ -417,7 +473,12 @@ function TodayTab() {
                   </button>
                 )}
                 {b.status === 'arrived' && (
-                  <button className="link" onClick={() => act(`/staff/bookings/${b.id}/complete`)}>
+                  <button
+                    className="link"
+                    onClick={() => {
+                      if (window.confirm(t('staff.doneConfirm'))) act(`/staff/bookings/${b.id}/complete`);
+                    }}
+                  >
                     {t('staff.completeBtn')}
                   </button>
                 )}
@@ -426,6 +487,24 @@ function TodayTab() {
                 {(b.status === 'arrived' || b.status === 'order_complete') && (
                   <button className="link" onClick={() => setPrinting(b)}>
                     {t('staff.printBtn')}
+                  </button>
+                )}
+                {canCollect(b) && (
+                  <button
+                    className="link"
+                    aria-expanded={collectOpen === b.id}
+                    onClick={() => setCollectOpen(collectOpen === b.id ? null : b.id)}
+                  >
+                    {t('staff.counterBtn')}
+                  </button>
+                )}
+                {canChange(b) && (
+                  <button
+                    className="link"
+                    aria-expanded={changeOpen === b.id}
+                    onClick={() => setChangeOpen(changeOpen === b.id ? null : b.id)}
+                  >
+                    {t('staff.changeBtn')}
                   </button>
                 )}
                 <button
@@ -441,6 +520,35 @@ function TodayTab() {
                 </button>
               </td>
             </tr>
+            {collectOpen === b.id && canCollect(b) && (
+              <tr className="booking-notes-row">
+                <td colSpan={11}>
+                  <CounterMoney
+                    bookingId={b.id}
+                    saved={b.counterCents ?? 0}
+                    onRecorded={onMoneyRecorded}
+                    onRefresh={fetchBookings}
+                  />
+                </td>
+              </tr>
+            )}
+            {changeOpen === b.id && canChange(b) && (
+              <tr className="booking-notes-row">
+                <td colSpan={11}>
+                  <ChangeBooking
+                    bookingId={b.id}
+                    guestName={b.guestName}
+                    onRefresh={fetchBookings}
+                    onClose={() => setChangeOpen(null)}
+                    onChanged={(text, bookingId) => {
+                      setChangeOpen(null);
+                      setChangeNotice({ text, bookingId });
+                      fetchBookings();
+                    }}
+                  />
+                </td>
+              </tr>
+            )}
             {notesOpen === b.id && (
               <tr className="booking-notes-row">
                 <td colSpan={11}>
@@ -461,6 +569,428 @@ function TodayTab() {
         </div>
       {printing && <Receipt booking={printing} date={date} />}
     </section>
+  );
+}
+
+const canChange = (b: StaffBooking) => b.status === 'pending' || b.status === 'arrived';
+const canCollect = (b: StaffBooking) => canChange(b) || b.status === 'order_complete';
+
+/** "3.50", "3.500", "٣٫٥" or "-2" as 1/100 KD; null if it is not an amount. */
+function parseCounterAmount(typed: string): number | null {
+  const value = typed
+    .trim()
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace('٫', '.');
+  // Dinars are often written with three decimals, but only hundredths are kept.
+  if (!/^-?\d+(\.\d{1,2}0?)?$/.test(value)) return null;
+  return Math.round(parseFloat(value) * 100);
+}
+
+/**
+ * Money taken by hand for a booking. Nothing here touches a card or the gateway:
+ * staff enter what they just took, it is added to the booking's running total,
+ * and that counts towards revenue. A minus takes money back off, for cash handed
+ * back or a mistake. The server refuses if the total moved since this was drawn.
+ */
+function CounterMoney({
+  bookingId,
+  saved,
+  onRecorded,
+  onRefresh,
+}: {
+  bookingId: number;
+  saved: number;
+  onRecorded: (bookingId: number) => void;
+  onRefresh: () => void;
+}) {
+  const { t, money } = useI18n();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  // A total sent whose answer never came. It may well have been saved, so if the
+  // refreshed total shows exactly that, it was: adding again would count it twice.
+  const unconfirmed = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (unconfirmed.current === null || saved !== unconfirmed.current) return;
+    unconfirmed.current = null;
+    setText('');
+    setMessage({ ok: true, text: t('staff.counterSaved') });
+    onRecorded(bookingId);
+  }, [saved, bookingId, onRecorded, t]);
+
+  const entered = text.trim() === '' ? null : parseCounterAmount(text);
+  const invalid = text.trim() !== '' && entered === null;
+  const newTotal = entered === null ? null : saved + entered;
+  const outOfRange = newTotal !== null && Math.abs(newTotal) > 1000000;
+
+  async function save() {
+    if (entered === null || entered === 0 || newTotal === null || outOfRange) return;
+    setBusy(true);
+    setMessage(null);
+    unconfirmed.current = null;
+    try {
+      await api.put(`/staff/bookings/${bookingId}/counter`, { counterCents: newTotal, expectedCents: saved });
+      setText('');
+      setMessage({ ok: true, text: t('staff.counterSaved') });
+      onRecorded(bookingId);
+    } catch (e) {
+      // A refusal saved nothing. Anything else may have saved: the refresh will say.
+      if (!(e instanceof ApiError) || e.status >= 500) unconfirmed.current = newTotal;
+      // What was typed stays on screen, with the reason.
+      setMessage({ ok: false, text: e instanceof Error ? e.message : t('staff.counterFailed') });
+    } finally {
+      setBusy(false);
+      onRefresh();
+    }
+  }
+
+  return (
+    <div className="counter-money">
+      <strong>{t('staff.counterSoFar', { amount: money(saved) })}</strong>
+      <label className="field">
+        {t('staff.counterLabel')}
+        <input
+          inputMode="decimal"
+          dir="ltr"
+          placeholder="0.00"
+          value={text}
+          readOnly={busy}
+          aria-invalid={invalid || outOfRange}
+          onChange={(e) => {
+            setText(e.target.value);
+            setMessage(null);
+          }}
+        />
+      </label>
+      <small className="muted">{t('staff.counterHint')}</small>
+      <div className="booking-notes-actions">
+        <button
+          type="button"
+          className="link"
+          disabled={busy || entered === null || entered === 0 || outOfRange}
+          onClick={save}
+        >
+          {busy ? t('bk.processing') : t('staff.counterSave')}
+        </button>
+        {(invalid || outOfRange) && <small className="is-error">{t('staff.counterBad')}</small>}
+        {message && <small className={message.ok ? 'muted' : 'is-error'}>{message.text}</small>}
+      </div>
+    </div>
+  );
+}
+
+interface ChangeOptions {
+  booking: {
+    tableId: number;
+    timeSlot: string;
+    durationMin: number;
+    partySize: number;
+    hasHost: boolean;
+  };
+  tables: TableAvailability[];
+}
+interface PriceChange {
+  paidCents: number;
+  counterCents: number;
+  newTotalCents: number | null;
+  differenceCents: number | null;
+}
+
+/**
+ * Change a booking: another table, a later start, a longer sitting, more or
+ * fewer people. The choices come from the server, leaving this booking out so it
+ * does not block itself; it checks everything again when saving, and refuses if
+ * someone else changed the booking first. Nothing is charged or refunded: the
+ * form says what the difference is, for the counter.
+ */
+function ChangeBooking({
+  bookingId,
+  guestName,
+  onRefresh,
+  onClose,
+  onChanged,
+}: {
+  bookingId: number;
+  guestName: string;
+  onRefresh: () => void;
+  onClose: () => void;
+  onChanged: (notice: string, bookingId: number) => void;
+}) {
+  const { t, money } = useI18n();
+  const [options, setOptions] = useState<ChangeOptions | null>(null);
+  const [tableId, setTableId] = useState(0);
+  const [timeSlot, setTimeSlot] = useState('');
+  const [durationMin, setDurationMin] = useState(0);
+  const [partySize, setPartySize] = useState(0);
+  const [price, setPrice] = useState<PriceChange | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [reload, setReload] = useState(0);
+  // What staff last chose themselves. A table with less room may trim what is on
+  // screen, but going back to one with room restores it.
+  const wanted = useRef({ timeSlot: '', durationMin: 0 });
+  const seenBooking = useRef('');
+
+  useEffect(() => {
+    let active = true;
+    api
+      .get<ChangeOptions>(`/staff/bookings/${bookingId}/options`)
+      .then((r) => {
+        if (!active) return;
+        setOptions(r);
+        // First load, or the booking changed under this form: show it as it is
+        // now. After any other refusal, what staff picked stays on screen.
+        const key = JSON.stringify(r.booking);
+        if (key !== seenBooking.current) {
+          seenBooking.current = key;
+          wanted.current = {
+            timeSlot: r.booking.timeSlot,
+            durationMin: r.booking.durationMin,
+          };
+          setTableId(r.booking.tableId);
+          setTimeSlot(r.booking.timeSlot);
+          setDurationMin(r.booking.durationMin);
+          setPartySize(r.booking.partySize);
+        }
+      })
+      .catch((e) => {
+        if (active) setError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [bookingId, reload]);
+
+  const original = options?.booking;
+  const table = options?.tables.find((tb) => tb.tableId === tableId);
+
+  /** A start this table can take: free, running now, or the booking's own. */
+  const startsOn = (tb: TableAvailability) =>
+    [
+      original && tb.maxDuration[original.timeSlot] ? original.timeSlot : null,
+      tb.walkInSlot,
+      ...tb.freeSlots,
+    ]
+      .filter((s, i, all): s is string => !!s && all.indexOf(s) === i)
+      .sort((a, b) => slotMinutes(a) - slotMinutes(b));
+
+  /** The lengths on offer. An older length no longer sold stays on its own table. */
+  const endsOn = (tb: TableAvailability, slot: string) => {
+    const ends = slot ? endOptions(slot, tb.maxDuration[slot]) : [];
+    const keeps =
+      original &&
+      tb.tableId === original.tableId &&
+      slot === original.timeSlot &&
+      !ends.includes(original.durationMin);
+    return keeps ? [original.durationMin, ...ends] : ends;
+  };
+
+  /** A host's time cannot change, so only tables with room for all of it qualify. */
+  const fitsHost = (tb: TableAvailability) =>
+    !original?.hasHost ||
+    tb.tableId === original.tableId ||
+    (tb.maxDuration[original.timeSlot] ?? 0) >= original.durationMin;
+
+  /** Fit the length staff wanted onto this table and start, trimming only if it must. */
+  function applyWanted(tb: TableAvailability, slot: string) {
+    const ends = endsOn(tb, slot);
+    const want = wanted.current.durationMin;
+    setDurationMin(
+      ends.includes(want) ? want : ends.filter((d) => d <= want).pop() ?? ends[0] ?? want,
+    );
+  }
+
+  function pickTable(id: number) {
+    const next = options?.tables.find((tb) => tb.tableId === id);
+    if (!next) return;
+    setTableId(id);
+    const slot = startsOn(next).includes(wanted.current.timeSlot) ? wanted.current.timeSlot : '';
+    setTimeSlot(slot);
+    applyWanted(next, slot);
+  }
+
+  function pickStart(slot: string) {
+    wanted.current.timeSlot = slot;
+    setTimeSlot(slot);
+    if (table) applyWanted(table, slot);
+  }
+
+  const starts = table ? startsOn(table) : [];
+  const ends = table ? endsOn(table, timeSlot) : [];
+  const parties = table ? Array.from({ length: table.capacity }, (_, i) => i + 1) : [];
+  const trimmed = !!timeSlot && durationMin < wanted.current.durationMin;
+
+  const changes: Record<string, number | string> = {};
+  if (original) {
+    if (tableId !== original.tableId) changes.tableId = tableId;
+    if (timeSlot !== original.timeSlot) changes.timeSlot = timeSlot;
+    if (durationMin !== original.durationMin) changes.durationMin = durationMin;
+    if (partySize !== original.partySize) changes.partySize = partySize;
+  }
+  const changeKey = JSON.stringify(changes);
+  const complete = !!timeSlot && ends.includes(durationMin) && parties.includes(partySize);
+  const hasChanges = changeKey !== '{}';
+
+  // The price effect of what is on screen, before anything is saved.
+  useEffect(() => {
+    setPrice(null);
+    if (!hasChanges || !complete) return;
+    let active = true;
+    api
+      .post<{ priceChange: PriceChange | null }>(`/staff/bookings/${bookingId}/change-preview`, changes)
+      .then((r) => {
+        if (active) setPrice(r.priceChange);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId, changeKey, complete]);
+
+  const priceLine = (p: PriceChange | null) => {
+    if (!p) return null;
+    const paid = money(p.paidCents);
+    const counter = money(p.counterCents);
+    if (p.differenceCents === null || p.newTotalCents === null) {
+      return t('staff.changeNoCode', { paid, counter });
+    }
+    if (p.differenceCents === 0 && p.counterCents === 0) return null;
+    const due = p.differenceCents - p.counterCents;
+    const facts = t(p.counterCents ? 'staff.changePriceCounter' : 'staff.changePrice', {
+      total: money(p.newTotalCents),
+      paid,
+      counter,
+    });
+    const action =
+      due > 0
+        ? t('staff.changeDue', { amount: money(due) })
+        : due === 0
+          ? t('staff.changeSettled')
+          : t('staff.changeOver', { amount: money(-due) });
+    return `${facts} ${action}`;
+  };
+
+  async function save() {
+    if (!original) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.put<{ priceChange: PriceChange | null; priceUnknown?: boolean }>(
+        `/staff/bookings/${bookingId}`,
+        {
+          ...changes,
+          expected: {
+            tableId: original.tableId,
+            timeSlot: original.timeSlot,
+            durationMin: original.durationMin,
+            partySize: original.partySize,
+          },
+        },
+      );
+      const line = r.priceUnknown ? t('staff.changeNoPrice') : priceLine(r.priceChange);
+      onChanged(`${guestName}: ${line ?? t('staff.changeSaved')}`, bookingId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('staff.changeFailed'));
+      // Someone may have taken that time or changed this booking: look again.
+      setReload((n) => n + 1);
+      onRefresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!options) {
+    return (
+      <div className="booking-change">
+        {error ? <div className="alert error">{error}</div> : <p className="muted">{t('loading')}</p>}
+      </div>
+    );
+  }
+  const line = priceLine(price);
+
+  return (
+    <div className="booking-change">
+      <strong>{t('staff.changeTitle')}</strong>
+      {error && <div className="alert error">{error}</div>}
+      <div className="row">
+        <label className="field inline">
+          {t('bk.table')}
+          <select value={tableId} onChange={(e) => pickTable(Number(e.target.value))}>
+            {options.tables.map((tb) => (
+              <option key={tb.tableId} value={tb.tableId} disabled={!fitsHost(tb) || tb.capacity < partySize}>
+                {tb.label} ({tb.capacity})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field inline">
+          {t('staff.start')}
+          <select
+            value={timeSlot}
+            disabled={options.booking.hasHost}
+            onChange={(e) => pickStart(e.target.value)}
+          >
+            <option value="">—</option>
+            {starts.map((s) => (
+              <option key={s} value={s}>
+                {s === table?.walkInSlot && s !== original?.timeSlot ? `${s} (${t('staff.nowSlot')})` : s}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field inline">
+          {t('staff.end')}
+          <select
+            value={durationMin}
+            disabled={options.booking.hasHost || ends.length === 0}
+            onChange={(e) => {
+              wanted.current.durationMin = Number(e.target.value);
+              setDurationMin(Number(e.target.value));
+            }}
+          >
+            {!ends.includes(durationMin) && <option value={durationMin}>—</option>}
+            {ends.map((d) => (
+              <option key={d} value={d}>
+                {timeSlot &&
+                  t('staff.endOption', { end: minutesLabel(slotMinutes(timeSlot) + d), hours: d / 60 })}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field inline">
+          {t('staff.people')}
+          <select
+            value={partySize}
+            onChange={(e) => setPartySize(Number(e.target.value))}
+          >
+            {!parties.includes(partySize) && <option value={partySize}>{partySize}</option>}
+            {parties.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {options.booking.hasHost && <p className="muted">{t('staff.changeHost')}</p>}
+      {trimmed && (
+        <p className="booking-change-price">
+          {t('staff.changeTrimmed', { end: minutesLabel(slotMinutes(timeSlot) + durationMin) })}
+        </p>
+      )}
+      {line && <p className="booking-change-price">{line}</p>}
+      <div className="booking-notes-actions">
+        <button type="button" className="link" disabled={busy || !hasChanges || !complete} onClick={save}>
+          {busy ? t('bk.processing') : t('staff.changeSave')}
+        </button>
+        <button type="button" className="link" disabled={busy} onClick={onClose}>
+          {t('staff.changeCancel')}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -664,6 +1194,9 @@ function TableFloorView({
   onNotesSaved,
   noteDrafts,
   onDraftChange,
+  onChanged,
+  onMoneyRecorded,
+  onRefresh,
 }: {
   date: string;
   bookings: StaffBooking[];
@@ -672,8 +1205,12 @@ function TableFloorView({
   onNotesSaved: () => void;
   noteDrafts: Map<number, NoteDraft>;
   onDraftChange: () => void;
+  onChanged: (notice: string, bookingId: number) => void;
+  onMoneyRecorded: (bookingId: number) => void;
+  onRefresh: () => void;
 }) {
   const { t } = useI18n();
+  const [changing, setChanging] = useState<number | null>(null);
   const [tables, setTables] = useState<FloorTable[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -721,7 +1258,8 @@ function TableFloorView({
   const isPast = date < clock.date;
 
   function phaseOf(b: StaffBooking): Phase {
-    if (isPast) return 'earlier';
+    // Marked done: over, whatever the clock says. The table is free again.
+    if (b.status === 'order_complete' || isPast) return 'earlier';
     if (!isToday) return 'upcoming';
     const start = slotMinutes(b.timeSlot);
     const end = start + (b.durationMin ?? FLOOR_SESSION_MIN);
@@ -887,7 +1425,14 @@ function TableFloorView({
                             </button>
                           )}
                           {b.status === 'arrived' && (
-                            <button className="link" onClick={() => onAct(`/staff/bookings/${b.id}/complete`)}>
+                            <button
+                              className="link"
+                              onClick={() => {
+                                if (window.confirm(t('staff.doneConfirm'))) {
+                                  onAct(`/staff/bookings/${b.id}/complete`);
+                                }
+                              }}
+                            >
                               {t('staff.completeBtn')}
                             </button>
                           )}
@@ -896,7 +1441,36 @@ function TableFloorView({
                               {t('staff.printBtn')}
                             </button>
                           )}
+                          {canChange(b) && (
+                            <button
+                              className="link"
+                              aria-expanded={changing === b.id}
+                              onClick={() => setChanging(changing === b.id ? null : b.id)}
+                            >
+                              {t('staff.changeBtn')}
+                            </button>
+                          )}
                         </div>
+                        {changing === b.id && canChange(b) && (
+                          <ChangeBooking
+                            bookingId={b.id}
+                            guestName={b.guestName}
+                            onRefresh={onRefresh}
+                            onClose={() => setChanging(null)}
+                            onChanged={(notice, id) => {
+                              setChanging(null);
+                              onChanged(notice, id);
+                            }}
+                          />
+                        )}
+                        {canCollect(b) && (
+                          <CounterMoney
+                            bookingId={b.id}
+                            saved={b.counterCents ?? 0}
+                            onRecorded={onMoneyRecorded}
+                            onRefresh={onRefresh}
+                          />
+                        )}
                         <BookingNotes
                           bookingId={b.id}
                           saved={b.notes ?? ''}
@@ -950,9 +1524,12 @@ function Receipt({ booking, date }: { booking: StaffBooking; date: string }) {
       {booking.hostName
         ? row(t('host.onBooking', { name: booking.hostName }), money(booking.hostFeeCents ?? 0))
         : null}
+      {booking.counterCents
+        ? row(t('receipt.counter'), money(booking.counterCents))
+        : null}
       <div className="receipt-row total">
         <span>{t('receipt.total')}</span>
-        <strong>{money(booking.totalCents)}</strong>
+        <strong>{money(booking.totalCents + (booking.counterCents ?? 0))}</strong>
       </div>
       <p className="receipt-thanks">{t('receipt.thanks')}</p>
     </div>,
@@ -1194,6 +1771,10 @@ function AnalyticsTab() {
             <div className="kpi">
               <span>{t('staff.revenue')}</span>
               <strong>{money(data.revenueCents)}</strong>
+            </div>
+            <div className="kpi">
+              <span>{t('staff.revenueCounter')}</span>
+              <strong>{money(data.counterCents)}</strong>
             </div>
           </div>
 

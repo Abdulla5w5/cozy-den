@@ -8930,6 +8930,54 @@ a.ev-ticket:active {
   padding: 0.15rem 0.5rem;
 }
 
+/* Staff changing a booking. */
+.booking-change {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: min(720px, calc(100vw - 96px));
+  margin-top: 8px;
+  position: sticky;
+  inset-inline-start: 0;
+}
+.booking-change .row {
+  flex-wrap: wrap;
+  margin: 8px 0 0;
+}
+.booking-change-price {
+  margin: 8px 0 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.booking-change-notice {
+  margin-bottom: 12px;
+  border: 2px solid var(--ink);
+  background: var(--surface-low);
+}
+/* Money staff take by hand: set apart, because the site does not charge it. */
+.counter-money {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: min(420px, calc(100vw - 96px));
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 2px dashed var(--ink);
+  border-radius: 10px;
+  position: sticky;
+  inset-inline-start: 0;
+}
+.counter-money input {
+  width: 100%;
+}
+.counter-money .muted {
+  display: block;
+  font-weight: 400;
+}
+.counter-money-tag {
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* Staff notes on a booking. */
 .booking-notes {
   grid-column: 1 / -1;

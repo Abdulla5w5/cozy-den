@@ -38,7 +38,7 @@ export async function getCustomers(sort: CustomerSort = 'recent', limit = 200): 
        SELECT DISTINCT ON (phone) id, phone FROM users WHERE phone IS NOT NULL ORDER BY phone, id
      ),
      counted AS (
-       SELECT b.total_cents, b.booking_date, b.created_at, b.guest_name, b.guest_email, b.guest_phone,
+       SELECT b.total_cents + b.counter_cents AS total_cents, b.booking_date, b.created_at, b.guest_name, b.guest_email, b.guest_phone,
               COALESCE(b.user_id, by_email.id, by_phone.id) AS user_id
          FROM bookings b
          LEFT JOIN users by_email ON by_email.email = lower(b.guest_email)
@@ -95,7 +95,10 @@ export async function getCustomers(sort: CustomerSort = 'recent', limit = 200): 
 export interface MonthlyAnalytics {
   month: string; // 'YYYY-MM'
   bookingsCount: number;
+  /** Online payments plus money taken by hand. */
   revenueCents: number;
+  /** The part of revenue taken by hand at the counter. */
+  counterCents: number;
   popularGames: { title: string; bookings: number }[];
   peakSlots: { timeSlot: string; bookings: number }[];
   tableUtilization: { label: string; capacity: number; bookings: number }[];
@@ -112,8 +115,10 @@ export async function getMonthlyAnalytics(month: string): Promise<MonthlyAnalyti
   const start = `${month}-01`;
 
   const totals = (
-    await query<{ bookings_count: string; revenue_cents: string | null }>(
-      `SELECT COUNT(*) AS bookings_count, COALESCE(SUM(total_cents), 0) AS revenue_cents
+    await query<{ bookings_count: string; revenue_cents: string | null; counter_cents: string | null }>(
+      `SELECT COUNT(*) AS bookings_count,
+              COALESCE(SUM(total_cents + counter_cents), 0) AS revenue_cents,
+              COALESCE(SUM(counter_cents), 0) AS counter_cents
          FROM bookings
         WHERE status NOT IN ('cancelled', 'pending_payment') AND source <> 'event'
           AND booking_date >= $1::date
@@ -173,6 +178,7 @@ export async function getMonthlyAnalytics(month: string): Promise<MonthlyAnalyti
   return {
     month,
     bookingsCount: parseInt(totals.bookings_count, 10),
+    counterCents: parseInt(totals.counter_cents ?? '0', 10),
     revenueCents: parseInt(totals.revenue_cents ?? '0', 10),
     popularGames: popularGames.map((r) => ({ title: r.title, bookings: parseInt(r.bookings, 10) })),
     peakSlots: peakSlots.map((r) => ({ timeSlot: r.time_slot, bookings: parseInt(r.bookings, 10) })),

@@ -21,7 +21,7 @@ const partySize = z.number().int().min(1).max(100);
 // Guest checkout: table only — no game pre-selection, no food/drink ordering.
 // Payment is the flat table-holding fee (server-priced).
 export const createBookingSchema = z.object({
-  tableId: z.number().int().positive(),
+  tableId: z.number().int().positive().max(2147483647),
   date: isoDate(),
   timeSlot: z
     .string()
@@ -65,7 +65,7 @@ export const staffNotesSchema = z.object({ notes: staffNotes });
 // Staff manual entry (phone/WhatsApp bookings): no payment step, contact may be
 // a phone number or an email.
 export const staffCreateBookingSchema = z.object({
-  tableId: z.number().int().positive(),
+  tableId: z.number().int().positive().max(2147483647),
   date: isoDate(),
   timeSlot: z
     .string()
@@ -78,6 +78,40 @@ export const staffCreateBookingSchema = z.object({
 });
 
 export type StaffCreateBookingInput = z.infer<typeof staffCreateBookingSchema>;
+
+// Money taken by hand for a booking: the new running total, and the total the
+// form started from, so two staff cannot lose each other's entries.
+export const counterMoneySchema = z.object({
+  counterCents: z.number().int().min(-1000000).max(1000000),
+  expectedCents: z.number().int().min(-1000000).max(1000000),
+});
+
+// Staff changing a booking: only what is changing is sent, with the booking as
+// the form loaded it. If it no longer matches, someone else changed it first.
+export const changeBookingSchema = z
+  .object({
+    tableId: z.number().int().positive().max(2147483647).optional(),
+    timeSlot: z
+      .string()
+      .refine(isValidStart, 'timeSlot must be a valid 30-minute start time within opening hours')
+      .optional(),
+    durationMin: durationMin.optional(),
+    partySize: partySize.optional(),
+    expected: z
+      .object({
+        tableId: z.number().int(),
+        timeSlot: z.string(),
+        durationMin: z.number().int(),
+        partySize: z.number().int(),
+      })
+      .optional(),
+  })
+  .refine(
+    (c) => [c.tableId, c.timeSlot, c.durationMin, c.partySize].some((v) => v !== undefined),
+    'Nothing to change.',
+  );
+
+export type BookingChanges = z.infer<typeof changeBookingSchema>;
 
 export const codeParamSchema = z.object({
   code: z.string().trim().min(4).max(32),

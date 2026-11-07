@@ -1,4 +1,5 @@
-import { query } from '../../db/pool';
+import type { PoolClient } from 'pg';
+import { query, withTransaction } from '../../db/pool';
 import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
@@ -15,9 +16,10 @@ import {
 } from '../../payment/ledger';
 import { mailer, formatReceiptEmail, formatStaffBookingAlert } from '../../notifications/mailer';
 import { bookingAlertRecipients } from '../../notifications/staffRecipients';
-import { CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
+import { BookingChanges, CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
 import { normalizeKuwaitiPhone } from '../../utils/phone';
-import { resolvePromoCode } from '../promo/codes.service';
+import { findCode, resolvePromoCode } from '../promo/codes.service';
+import { getAvailability } from '../tables/tables.service';
 import { hashRetryToken } from '../../utils/retryToken';
 import { assignHost, hostEmailForBooking, hostFeeCents, HostKind } from '../hosts/hosts.service';
 import { ensureCheckinToken, newCheckinToken } from '../checkin/checkin.service';
@@ -72,14 +74,17 @@ function todayIso(): string {
 async function assertTableExists(
   tableId: number,
   { activeOnly = true }: { activeOnly?: boolean } = {},
+  // Inside a transaction, pass its client: asking the pool for a second session
+  // while holding one can leave every session waiting on the others.
+  db: Pick<PoolClient, 'query'> | null = null,
 ): Promise<{ capacity: number; minParty: number | null }> {
   // A retired table is hidden from availability, but a stale page or a
   // hand-made request could still name it — so customers are refused here.
   // Staff entering a booking by hand may still use one.
-  const { rows } = await query<{ id: number; capacity: number; min_party: number | null }>(
-    `SELECT id, capacity, min_party FROM tables WHERE id = $1 ${activeOnly ? 'AND is_active' : ''}`,
-    [tableId],
-  );
+  const sql = `SELECT id, capacity, min_party FROM tables WHERE id = $1 ${activeOnly ? 'AND is_active' : ''}`;
+  const { rows } = db
+    ? await db.query<{ id: number; capacity: number; min_party: number | null }>(sql, [tableId])
+    : await query<{ id: number; capacity: number; min_party: number | null }>(sql, [tableId]);
   if (!rows[0]) throw new ApiError(404, 'Table not found.');
   return { capacity: rows[0].capacity, minParty: rows[0].min_party };
 }
@@ -1096,4 +1101,247 @@ export async function getBookingsByEmail(email: string, userId: number): Promise
       ? view
       : { ...view, verificationCode: '', guestPhone: null, checkinToken: null };
   });
+}
+
+// ---------- Staff changing a booking ----------
+
+interface ChangeableRow {
+  id: number;
+  table_id: number;
+  date: string;
+  time_slot: string;
+  duration_min: number;
+  party_size: number;
+  status: string;
+  source: string;
+  host_id: number | null;
+  total_cents: number;
+  promo_code: string | null;
+  first_quote_cents: number | null;
+  counter_cents: number;
+}
+
+const CHANGEABLE_SELECT = `SELECT id, table_id, to_char(booking_date, 'YYYY-MM-DD') AS date, time_slot,
+         duration_min, party_size, status, source, host_id, total_cents, promo_code, first_quote_cents, counter_cents
+    FROM bookings WHERE id = $1`;
+
+/** Why this booking cannot be changed at all, or null when it can. */
+function changeRefusal(row: ChangeableRow): string | null {
+  if (row.source === 'event') return 'This is an event hold. Change it from the Events tab.';
+  if (row.status === 'pending_payment') return 'The customer is still paying for this booking.';
+  if (row.status !== 'pending' && row.status !== 'arrived') {
+    return 'This booking is finished, so it cannot be changed.';
+  }
+  if (row.date < todayIso()) return 'This booking is from an earlier day.';
+  return null;
+}
+
+interface Sitting {
+  tableId: number;
+  timeSlot: string;
+  durationMin: number;
+  partySize: number;
+  billedSeats: number;
+}
+
+/**
+ * The booking as it would be after these changes, checked against the same rules
+ * as a new one, apart from the table's minimum party: staff record who actually
+ * came, even if fewer than the table asks for. The database still has the final
+ * say on overlaps.
+ */
+async function resolveChanges(
+  row: ChangeableRow,
+  changes: BookingChanges,
+  db: Pick<PoolClient, 'query'> | null = null,
+): Promise<Sitting> {
+  const refusal = changeRefusal(row);
+  if (refusal) throw new ApiError(409, refusal);
+
+  const tableId = changes.tableId ?? row.table_id;
+  const timeSlot = changes.timeSlot ?? row.time_slot;
+  const durationMin = changes.durationMin ?? row.duration_min;
+  const partySize = changes.partySize ?? row.party_size;
+  const newTime = timeSlot !== row.time_slot;
+  const newLength = durationMin !== row.duration_min;
+
+  // A host's fee and free times depend on when and how long.
+  if (row.host_id !== null && (newTime || newLength)) {
+    throw new ApiError(409, 'This booking has a game host, so its time cannot be changed here.');
+  }
+  // Late arrivals move to the half hour running now, and no earlier.
+  if (newTime && slotHasStarted(row.date, timeSlot) && timeSlot !== currentSlot(row.date)) {
+    throw new ApiError(400, 'That start time has passed. Pick the current half hour or later.');
+  }
+  if ((newTime || newLength) && !isValidDuration(timeSlot, durationMin)) {
+    throw new ApiError(400, 'That length is not available for the start time you picked.');
+  }
+  // A table already retired may keep its booking, but none can move onto it.
+  const table = await assertTableExists(tableId, { activeOnly: tableId !== row.table_id }, db);
+  if (partySize > table.capacity) throw new ApiError(400, `That table seats ${table.capacity}.`);
+
+  return {
+    tableId,
+    timeSlot,
+    durationMin,
+    partySize,
+    billedSeats: Math.max(partySize, minSeatsFor(table.capacity, table.minParty)),
+  };
+}
+
+export interface PriceChange {
+  paidCents: number;
+  /** Already taken by hand for this booking. */
+  counterCents: number;
+  /** Null when the booking's price code has been deleted: nothing to compare with. */
+  newTotalCents: number | null;
+  differenceCents: number | null;
+}
+
+async function quoteOptionsFor(row: ChangeableRow) {
+  const promo = row.promo_code ? await findCode(row.promo_code) : null;
+  return {
+    codeMissing: !!row.promo_code && !promo,
+    options: { hourly: promo?.hourly ?? null, percentOff: promo?.percentOff ?? 0 },
+  };
+}
+
+/** Today's price for the booking as it stands, at its own code's prices. */
+async function quoteCurrent(row: ChangeableRow): Promise<number> {
+  const { options } = await quoteOptionsFor(row);
+  const table = await assertTableExists(row.table_id, { activeOnly: false });
+  const seats = Math.max(row.party_size, minSeatsFor(table.capacity, table.minParty));
+  const quote = await quoteBooking(row.date, row.time_slot, row.duration_min, seats, options);
+  return quote.totalCents;
+}
+
+/**
+ * What the booking now costs against what it cost as paid for, at the booking's
+ * own code. Always measured from the booking as paid, however many changes came
+ * in between. That baseline is priced at the rates of the first change, so a rate
+ * edited before then does not show as a difference, but one edited between two
+ * changes does. Null for a booking nothing was paid on. Nothing is charged or
+ * refunded here: the total stays what was paid, and staff settle at the counter.
+ */
+async function priceChangeFor(
+  row: ChangeableRow,
+  after: Sitting,
+  firstQuoteCents: number | null,
+): Promise<PriceChange | null> {
+  if (row.total_cents <= 0) return null;
+  const { codeMissing, options } = await quoteOptionsFor(row);
+  if (codeMissing) {
+    return {
+      paidCents: row.total_cents,
+      counterCents: row.counter_cents,
+      newTotalCents: null,
+      differenceCents: null,
+    };
+  }
+  const base = firstQuoteCents ?? (await quoteCurrent(row));
+  const now = await quoteBooking(row.date, after.timeSlot, after.durationMin, after.billedSeats, options);
+  const differenceCents = now.totalCents - base;
+  return {
+    paidCents: row.total_cents,
+    counterCents: row.counter_cents,
+    newTotalCents: row.total_cents + differenceCents,
+    differenceCents,
+  };
+}
+
+/** The booking's sitting and what staff may move it to: for the change form. */
+export async function bookingChangeOptions(id: number) {
+  const { rows } = await query<ChangeableRow>(CHANGEABLE_SELECT, [id]);
+  const row = rows[0];
+  if (!row) throw new ApiError(404, 'No booking matches.');
+  const refusal = changeRefusal(row);
+  if (refusal) throw new ApiError(409, refusal);
+  const { tables } = await getAvailability(row.date, {
+    exceptBookingId: row.id,
+    keepSlot: row.time_slot,
+    alsoTableId: row.table_id,
+  });
+  return {
+    booking: {
+      tableId: row.table_id,
+      timeSlot: row.time_slot,
+      durationMin: row.duration_min,
+      partySize: row.party_size,
+      hasHost: row.host_id !== null,
+    },
+    tables,
+  };
+}
+
+/** What a change would do, without making it. */
+export async function previewBookingChange(id: number, changes: BookingChanges) {
+  const { rows } = await query<ChangeableRow>(CHANGEABLE_SELECT, [id]);
+  const row = rows[0];
+  if (!row) throw new ApiError(404, 'No booking matches.');
+  const after = await resolveChanges(row, changes);
+  return { priceChange: await priceChangeFor(row, after, row.first_quote_cents) };
+}
+
+/**
+ * Move a booking to another table or time, or change how many came. The row is
+ * locked while it is checked and written, so two staff cannot combine into a
+ * sitting neither of them checked. The exclusion constraint refuses any overlap.
+ */
+export async function changeBooking(id: number, changes: BookingChanges, staffId: number) {
+  // Priced before the transaction: everything inside it must use its own client.
+  const { rows: before } = await query<ChangeableRow>(CHANGEABLE_SELECT, [id]);
+  if (!before[0]) throw new ApiError(404, 'No booking matches.');
+  const firstQuote =
+    before[0].total_cents > 0 && before[0].first_quote_cents === null && changeRefusal(before[0]) === null
+      ? await quoteCurrent(before[0])
+      : null;
+
+  let row: ChangeableRow;
+  let after: Sitting;
+  try {
+    ({ row, after } = await withTransaction(async (client) => {
+      const { rows } = await client.query<ChangeableRow>(`${CHANGEABLE_SELECT} FOR UPDATE`, [id]);
+      const locked = rows[0];
+      if (!locked) throw new ApiError(404, 'No booking matches.');
+      const seen = changes.expected;
+      if (
+        seen &&
+        (seen.tableId !== locked.table_id ||
+          seen.timeSlot !== locked.time_slot ||
+          seen.durationMin !== locked.duration_min ||
+          seen.partySize !== locked.party_size)
+      ) {
+        throw new ApiError(409, 'Someone else just changed this booking. Check it and try again.');
+      }
+      const sitting = await resolveChanges(locked, changes, client);
+      await client.query(
+        `UPDATE bookings
+            SET table_id = $2, time_slot = $3, duration_min = $4, party_size = $5,
+                first_quote_cents = COALESCE(first_quote_cents, $6)
+          WHERE id = $1`,
+        [id, sitting.tableId, sitting.timeSlot, sitting.durationMin, sitting.partySize, firstQuote],
+      );
+      return { row: locked, after: sitting };
+    }));
+  } catch (err) {
+    const e = err as { code?: string; constraint?: string };
+    if (e.code === '23P01' && e.constraint === 'bookings_no_overlap') {
+      throw new ApiError(409, ALREADY_BOOKED);
+    }
+    // Two moves crossing each other: nothing was saved by this one.
+    if (e.code === '40P01') throw new ApiError(409, 'Someone else was changing this table. Please try again.');
+    throw err;
+  }
+  console.log(
+    `[booking-change] booking=${id} staff=${staffId} ` +
+      `table ${row.table_id}->${after.tableId} start ${row.time_slot}->${after.timeSlot} ` +
+      `length ${row.duration_min}->${after.durationMin} people ${row.party_size}->${after.partySize}`,
+  );
+  // The change is saved by now: a failure from here on must not report otherwise.
+  try {
+    return { priceChange: await priceChangeFor(row, after, row.first_quote_cents ?? firstQuote) };
+  } catch (err) {
+    console.error('[booking-change] saved, but could not work out the price change', err);
+    return { priceChange: null, priceUnknown: true };
+  }
 }

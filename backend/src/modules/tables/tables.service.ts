@@ -60,11 +60,28 @@ export interface TableAvailability {
  * remainder to closing for a late seating — clears every live booking on that
  * table. Anything longer is offered only up to the next booking's start, so
  * back-to-back sessions still work while overlaps cannot be selected.
+ *
+ * For staff changing a booking: `exceptBookingId` leaves that booking out, so it
+ * does not block itself, and `keepSlot` is its own start, which stays in
+ * maxDuration even once it has passed, so it can move table mid-session.
  */
 export async function getAvailability(
   date: string,
+  {
+    exceptBookingId,
+    keepSlot,
+    alsoTableId,
+  }: { exceptBookingId?: number; keepSlot?: string; alsoTableId?: number } = {},
 ): Promise<{ tables: TableAvailability[]; fee: TableFee }> {
   const tables = await getTables();
+  // A booking on a table since retired can still be edited where it stands.
+  if (alsoTableId !== undefined && !tables.some((t) => t.id === alsoTableId)) {
+    const { rows } = await query<TableRow>(
+      'SELECT id, label, capacity, min_party FROM tables WHERE id = $1',
+      [alsoTableId],
+    );
+    tables.push(...rows);
+  }
   // Returned with availability so the booking form always shows the price for
   // the date being viewed, rather than a figure baked into the build.
   const fee = await getTableFee(date);
@@ -77,8 +94,9 @@ export async function getAvailability(
     `SELECT table_id, time_slot, duration_min
        FROM bookings
       WHERE booking_date = $1
-        AND status <> 'cancelled'`,
-    [date]
+        AND status NOT IN ('cancelled', 'order_complete')
+        AND id IS DISTINCT FROM $2`,
+    [date, exceptBookingId ?? null]
   );
 
   // One clock reading for the whole response, so every table agrees on what
@@ -103,7 +121,7 @@ export async function getAvailability(
     for (const s of START_TIMES) {
       const started = slotHasStarted(date, s, now);
       if (started) pastSlots.push(s);
-      if (started && s !== running) continue;
+      if (started && s !== running && s !== keepSlot) continue;
       const shortest = minDurationFor(s);
       if (existing.some((b) => overlaps(s, shortest, b.start, b.duration))) {
         if (!started) takenSlots.push(s);
@@ -120,8 +138,8 @@ export async function getAvailability(
       // Report the longest length actually on offer, not the raw gap: sittings
       // come in fixed lengths, so a 5.5-hour gap still only sells 5 hours.
       const fits = allowedDurations(s).filter((d) => d <= room);
-      if (started) walkInSlot = s;
-      else freeSlots.push(s);
+      if (!started) freeSlots.push(s);
+      else if (s === running) walkInSlot = s;
       maxDuration[s] = fits.length ? fits[fits.length - 1] : shortest;
     }
 

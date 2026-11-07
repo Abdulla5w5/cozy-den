@@ -3,7 +3,13 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validate';
 import { ApiError } from '../../middleware/error';
 import { requireAdmin, requireStaff } from '../../middleware/auth';
-import { getBookingsForDate, confirmBooking, completeBooking, setBookingNotes } from './staff.service';
+import {
+  getBookingsForDate,
+  confirmBooking,
+  completeBooking,
+  setBookingNotes,
+  setCounterMoney,
+} from './staff.service';
 import { getCustomers, getMonthlyAnalytics } from './analytics.service';
 import { listTeam, grantStaff, revokeStaff, grantAdmin, revokeAdmin } from './team.service';
 import {
@@ -31,7 +37,12 @@ import {
   updateCode,
   updatePriceSet,
 } from '../promo/codes.service';
-import { staffCreateBookingSchema, staffNotesSchema } from '../bookings/bookings.schema';
+import {
+  changeBookingSchema,
+  counterMoneySchema,
+  staffCreateBookingSchema,
+  staffNotesSchema,
+} from '../bookings/bookings.schema';
 import {
   addAvailability,
   deleteAvailabilityAsStaff,
@@ -44,7 +55,13 @@ import {
   upcomingSessions,
 } from '../hosts/hosts.service';
 import { linkish } from '../../utils/catalogue';
-import { createStaffBooking, getBookingById } from '../bookings/bookings.service';
+import {
+  bookingChangeOptions,
+  changeBooking,
+  createStaffBooking,
+  getBookingById,
+  previewBookingChange,
+} from '../bookings/bookings.service';
 import { isoDate, isoMonth } from '../../utils/dates';
 import { isValidStart } from '../../utils/slots';
 
@@ -83,7 +100,7 @@ staffRouter.post(
 );
 
 const codeSchema = z.object({ code: z.string().trim().min(4).max(32) });
-const idParam = z.object({ id: z.coerce.number().int().positive() });
+const idParam = z.object({ id: z.coerce.number().int().positive().max(2147483647) });
 
 // PUT /api/staff/bookings/:id/notes — staff's own notes on a booking.
 staffRouter.put(
@@ -97,6 +114,72 @@ staffRouter.put(
         throw new ApiError(404, 'No such booking.');
       }
       res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// PUT /api/staff/bookings/:id/counter — money taken by hand, as a running total.
+staffRouter.put(
+  '/bookings/:id/counter',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(counterMoneySchema),
+  async (req, res, next) => {
+    try {
+      await setCounterMoney(
+        Number(req.params.id),
+        req.body.counterCents,
+        req.body.expectedCents,
+        req.user!.sub,
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /api/staff/bookings/:id/options — what this booking can be moved to.
+staffRouter.get(
+  '/bookings/:id/options',
+  requireStaff,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      res.json(await bookingChangeOptions(Number(req.params.id)));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// POST /api/staff/bookings/:id/change-preview — the price effect, changing nothing.
+staffRouter.post(
+  '/bookings/:id/change-preview',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(changeBookingSchema),
+  async (req, res, next) => {
+    try {
+      res.json(await previewBookingChange(Number(req.params.id), req.body));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// PUT /api/staff/bookings/:id — change the table, time, length or party.
+staffRouter.put(
+  '/bookings/:id',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(changeBookingSchema),
+  async (req, res, next) => {
+    try {
+      res.json(await changeBooking(Number(req.params.id), req.body, req.user!.sub));
     } catch (err) {
       next(err);
     }

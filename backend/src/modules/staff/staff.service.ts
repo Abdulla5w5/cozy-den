@@ -15,7 +15,37 @@ export interface TodayBooking {
   durationMin: number;
   partySize: number;
   notes: string;
+  counterCents: number;
   items: { name: string; quantity: number }[];
+}
+
+/** Record what has been taken by hand for a booking, as a running total. */
+export async function setCounterMoney(
+  id: number,
+  counterCents: number,
+  expectedCents: number,
+  staffId: number,
+): Promise<void> {
+  const { rowCount } = await query(
+    `UPDATE bookings SET counter_cents = $2
+      WHERE id = $1 AND counter_cents = $3 AND source <> 'event'
+        AND status IN ('pending', 'arrived', 'order_complete')`,
+    [id, counterCents, expectedCents],
+  );
+  if (rowCount) {
+    console.log(`[counter-money] booking=${id} staff=${staffId} ${expectedCents}->${counterCents}`);
+    return;
+  }
+  const { rows } = await query<{ counter_cents: number; status: string; source: string }>(
+    'SELECT counter_cents, status, source FROM bookings WHERE id = $1',
+    [id],
+  );
+  if (!rows[0]) throw new ApiError(404, 'No booking matches.');
+  const { status, source } = rows[0];
+  if (source === 'event' || !['pending', 'arrived', 'order_complete'].includes(status)) {
+    throw new ApiError(409, 'Money cannot be recorded on this booking.');
+  }
+  throw new ApiError(409, 'Someone else just updated this amount. Check it and try again.');
 }
 
 /** Set a booking's staff notes; empty clears them. False if there is no such booking. */
@@ -43,12 +73,13 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     duration_min: number;
     party_size: number;
     staff_notes: string | null;
+    counter_cents: number;
     host_fee_cents: number;
     host_name: string | null;
   }>(
     `SELECT b.id, b.verification_code, b.time_slot, b.guest_name, b.guest_email, b.guest_phone,
             b.table_id, t.label AS table_label, b.status, b.source, b.total_cents,
-            b.duration_min, b.party_size, b.staff_notes, b.host_fee_cents, h.display_name AS host_name
+            b.duration_min, b.party_size, b.staff_notes, b.counter_cents, b.host_fee_cents, h.display_name AS host_name
        FROM bookings b
        JOIN tables t ON t.id = b.table_id
        LEFT JOIN hosts h ON h.user_id = b.host_id
@@ -101,6 +132,7 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     durationMin: r.duration_min,
     partySize: r.party_size,
     notes: r.staff_notes ?? '',
+    counterCents: r.counter_cents,
     hostName: r.host_name,
     hostFeeCents: r.host_fee_cents,
     items: itemsByBooking.get(r.id) ?? [],
@@ -144,5 +176,13 @@ export async function confirmBooking(where: { id?: number; code?: string }): Pro
 
 /** Staff marks the session finished. */
 export async function completeBooking(id: number): Promise<number> {
+  // Done frees the table, and cannot be undone: never for a day still to come.
+  const { rows } = await query<{ upcoming: boolean }>(
+    `SELECT to_char(booking_date, 'YYYY-MM-DD') > $2 AS upcoming FROM bookings WHERE id = $1`,
+    [id, new Date().toISOString().slice(0, 10)],
+  );
+  if (rows[0]?.upcoming) {
+    throw new ApiError(409, 'This booking is on a later day, so it cannot be marked done yet.');
+  }
   return transition({ id }, 'arrived', 'order_complete', 'arrived');
 }

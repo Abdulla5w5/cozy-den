@@ -70,6 +70,8 @@ export interface StaffPass extends PublicPass {
   isTonight: boolean;
   /** Entered by staff by phone: nothing has been paid online. */
   payAtCounter: boolean;
+  /** Taken by hand so far. Staff only: never in the public pass. */
+  counterCents: number;
   guestName: string;
   guestPhone: string | null;
   guestEmail: string | null;
@@ -103,13 +105,14 @@ async function find(token: string): Promise<Found | null> {
     guest_email: string | null;
     verification_code: string;
     total_cents: number;
+    counter_cents: number;
     host_name: string | null;
     checked_in_at: Date | null;
     source: string;
   }>(
     `SELECT b.id, b.source, t.label, to_char(b.booking_date, 'YYYY-MM-DD') AS d, b.time_slot,
             b.duration_min, b.party_size, b.status, b.guest_name, b.guest_phone,
-            b.guest_email, b.verification_code, b.total_cents, h.display_name AS host_name,
+            b.guest_email, b.verification_code, b.total_cents, b.counter_cents, h.display_name AS host_name,
             b.checked_in_at
        FROM bookings b
        JOIN tables t ON t.id = b.table_id
@@ -132,7 +135,9 @@ async function find(token: string): Promise<Found | null> {
       people: r.party_size,
       // A booking staff typed in by phone has taken no payment.
       paid: r.source === 'online',
-      payAtCounter: r.source !== 'online',
+      // Once staff have taken money by hand, the pass stops asking for it.
+      payAtCounter: r.source !== 'online' && r.counter_cents <= 0,
+      counterCents: r.counter_cents,
       isTonight: r.d === currentServiceDate(),
       checkedIn: r.status !== 'pending',
       status: r.status,
@@ -184,6 +189,7 @@ async function find(token: string): Promise<Found | null> {
       people: r.seats,
       paid: r.amount_cents > 0,
       payAtCounter: false,
+      counterCents: 0,
       isTonight: r.d === currentServiceDate(),
       checkedIn: r.status === 'attended',
       status: r.status,
@@ -233,6 +239,7 @@ async function find(token: string): Promise<Found | null> {
       people: r.seats,
       paid: true,
       payAtCounter: false,
+      counterCents: 0,
       // A listing without a date cannot be on the wrong night.
       isTonight: r.d === null || r.d === currentServiceDate(),
       checkedIn: r.checked_in_at !== null,
