@@ -3,7 +3,7 @@ import { FormEvent, Fragment, useCallback, useEffect, useRef, useState } from 'r
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
-import { MonthlyAnalytics, StaffBooking, Table, TableAvailability, TeamMember } from '../types';
+import { MonthlyAnalytics, SHARE_PARTY_MAX, SHARE_PARTY_MIN, StaffBooking, Table, TableAvailability, TeamMember } from '../types';
 import { EventsTab, PromoTab, GamesTab, MenuTab } from './StaffContent';
 import { SupportTab } from './StaffSupport';
 import { StaffWanted } from './StaffWanted';
@@ -449,7 +449,10 @@ function TodayTab() {
                   b.guestContact
                 )}
               </td>
-              <td>{b.tableLabel}</td>
+              <td>
+                {b.tableLabel}
+                {b.half && <span className="half-tag">{t('staff.halfTag', { n: b.half })}</span>}
+              </td>
               <td>
                 <span className="pill">{t(`source.${b.source}`)}</span>
               </td>
@@ -688,6 +691,7 @@ interface ChangeOptions {
     durationMin: number;
     partySize: number;
     hasHost: boolean;
+    half: 1 | 2 | null;
   };
   tables: TableAvailability[];
 }
@@ -724,6 +728,8 @@ function ChangeBooking({
   const [timeSlot, setTimeSlot] = useState('');
   const [durationMin, setDurationMin] = useState(0);
   const [partySize, setPartySize] = useState(0);
+  // Which part of the table: null for the whole, or half 1 or 2 of a shared one.
+  const [half, setHalf] = useState<1 | 2 | null>(null);
   const [price, setPrice] = useState<PriceChange | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -753,6 +759,7 @@ function ChangeBooking({
           setTimeSlot(r.booking.timeSlot);
           setDurationMin(r.booking.durationMin);
           setPartySize(r.booking.partySize);
+          setHalf(r.booking.half);
         }
       })
       .catch((e) => {
@@ -766,22 +773,32 @@ function ChangeBooking({
   const original = options?.booking;
   const table = options?.tables.find((tb) => tb.tableId === tableId);
 
-  /** A start this table can take: free, running now, or the booking's own. */
-  const startsOn = (tb: TableAvailability) =>
-    [
+  /** The open times of one part of a table: the whole, or one half. */
+  const partOf = (tb: TableAvailability, part: 1 | 2 | null) => {
+    const h = part === null ? undefined : tb.halves?.find((x) => x.half === part);
+    return h ? { ...tb, ...h, walkInSlot: h.walkInSlot ?? null } : tb;
+  };
+
+  /** A start this part can take: free, running now, or the booking's own. */
+  const startsOn = (whole: TableAvailability, part: 1 | 2 | null = half) => {
+    const tb = partOf(whole, part);
+    return [
       original && tb.maxDuration[original.timeSlot] ? original.timeSlot : null,
       tb.walkInSlot,
       ...tb.freeSlots,
     ]
       .filter((s, i, all): s is string => !!s && all.indexOf(s) === i)
       .sort((a, b) => slotMinutes(a) - slotMinutes(b));
+  };
 
   /** The lengths on offer. An older length no longer sold stays on its own table. */
-  const endsOn = (tb: TableAvailability, slot: string) => {
+  const endsOn = (whole: TableAvailability, slot: string, part: 1 | 2 | null = half) => {
+    const tb = partOf(whole, part);
     const ends = slot ? endOptions(slot, tb.maxDuration[slot]) : [];
     const keeps =
       original &&
       tb.tableId === original.tableId &&
+      part === original.half &&
       slot === original.timeSlot &&
       !ends.includes(original.durationMin);
     return keeps ? [original.durationMin, ...ends] : ends;
@@ -794,21 +811,28 @@ function ChangeBooking({
     (tb.maxDuration[original.timeSlot] ?? 0) >= original.durationMin;
 
   /** Fit the length staff wanted onto this table and start, trimming only if it must. */
-  function applyWanted(tb: TableAvailability, slot: string) {
-    const ends = endsOn(tb, slot);
+  function applyWanted(tb: TableAvailability, slot: string, part: 1 | 2 | null = half) {
+    const ends = endsOn(tb, slot, part);
     const want = wanted.current.durationMin;
     setDurationMin(
       ends.includes(want) ? want : ends.filter((d) => d <= want).pop() ?? ends[0] ?? want,
     );
   }
 
-  function pickTable(id: number) {
+  function pickTable(id: number, part: 1 | 2 | null = next_part(id)) {
     const next = options?.tables.find((tb) => tb.tableId === id);
     if (!next) return;
     setTableId(id);
-    const slot = startsOn(next).includes(wanted.current.timeSlot) ? wanted.current.timeSlot : '';
+    setHalf(part);
+    const slot = startsOn(next, part).includes(wanted.current.timeSlot) ? wanted.current.timeSlot : '';
     setTimeSlot(slot);
-    applyWanted(next, slot);
+    applyWanted(next, slot, part);
+  }
+
+  /** A half carries over to another shareable table; a small one is whole. */
+  function next_part(id: number): 1 | 2 | null {
+    const next = options?.tables.find((tb) => tb.tableId === id);
+    return next?.halves ? half : null;
   }
 
   function pickStart(slot: string) {
@@ -819,15 +843,19 @@ function ChangeBooking({
 
   const starts = table ? startsOn(table) : [];
   const ends = table ? endsOn(table, timeSlot) : [];
-  const parties = table ? Array.from({ length: table.capacity }, (_, i) => i + 1) : [];
+  // A half holds a small group; staff may record fewer, as with any table.
+  const parties = table
+    ? Array.from({ length: half !== null ? SHARE_PARTY_MAX : table.capacity }, (_, i) => i + 1)
+    : [];
   const trimmed = !!timeSlot && durationMin < wanted.current.durationMin;
 
-  const changes: Record<string, number | string> = {};
+  const changes: Record<string, number | string | null> = {};
   if (original) {
     if (tableId !== original.tableId) changes.tableId = tableId;
     if (timeSlot !== original.timeSlot) changes.timeSlot = timeSlot;
     if (durationMin !== original.durationMin) changes.durationMin = durationMin;
     if (partySize !== original.partySize) changes.partySize = partySize;
+    if (half !== original.half) changes.half = half as number;
   }
   const changeKey = JSON.stringify(changes);
   const complete = !!timeSlot && ends.includes(durationMin) && parties.includes(partySize);
@@ -887,6 +915,7 @@ function ChangeBooking({
             timeSlot: original.timeSlot,
             durationMin: original.durationMin,
             partySize: original.partySize,
+            half: original.half,
           },
         },
       );
@@ -920,12 +949,33 @@ function ChangeBooking({
           {t('bk.table')}
           <select value={tableId} onChange={(e) => pickTable(Number(e.target.value))}>
             {options.tables.map((tb) => (
-              <option key={tb.tableId} value={tb.tableId} disabled={!fitsHost(tb) || tb.capacity < partySize}>
+              <option
+                key={tb.tableId}
+                value={tb.tableId}
+                disabled={!fitsHost(tb) || (half === null || !tb.halves ? tb.capacity : SHARE_PARTY_MAX) < partySize}
+              >
                 {tb.label} ({tb.capacity})
               </option>
             ))}
           </select>
         </label>
+        {table?.halves && (
+          <label className="field inline">
+            {t('staff.part')}
+            <select
+              value={half ?? 0}
+              onChange={(e) => pickTable(tableId, (Number(e.target.value) || null) as 1 | 2 | null)}
+            >
+              <option value={0}>{t('staff.partWhole')}</option>
+              <option value={1} disabled={options.booking.hasHost || partySize > SHARE_PARTY_MAX}>
+                {t('staff.halfTag', { n: 1 })}
+              </option>
+              <option value={2} disabled={options.booking.hasHost || partySize > SHARE_PARTY_MAX}>
+                {t('staff.halfTag', { n: 2 })}
+              </option>
+            </select>
+          </label>
+        )}
         <label className="field inline">
           {t('staff.start')}
           <select
@@ -936,7 +986,9 @@ function ChangeBooking({
             <option value="">—</option>
             {starts.map((s) => (
               <option key={s} value={s}>
-                {s === table?.walkInSlot && s !== original?.timeSlot ? `${s} (${t('staff.nowSlot')})` : s}
+                {table && s === partOf(table, half).walkInSlot && s !== original?.timeSlot
+                  ? `${s} (${t('staff.nowSlot')})`
+                  : s}
               </option>
             ))}
           </select>
@@ -1299,7 +1351,15 @@ function TableFloorView({
     const party = (byTable.get(tableId) ?? []).find(isSeated)?.partySize;
     return party ? seatsLabel(party) : null;
   };
-  const selectedSeats = selected ? seatedNow(selected.tableId) : null;
+  // Both halves seated: say how many at each, as the table top does.
+  const halvesSeated = (tableId: number) => {
+    const seated = (byTable.get(tableId) ?? []).filter(isSeated);
+    const at = (h: 1 | 2) => seated.find((b) => b.half === h)?.partySize ?? 0;
+    return seated.some((b) => b.half) && seated.every((b) => b.half)
+      ? t('staff.splitSeats', { a: at(1), b: at(2) })
+      : null;
+  };
+  const selectedSeats = selected ? halvesSeated(selected.tableId) ?? seatedNow(selected.tableId) : null;
   const phases: Phase[] = ['now', 'upcoming', 'earlier'];
 
   return (
@@ -1341,9 +1401,30 @@ function TableFloorView({
                   ? t('staff.allDone')
                   : t('staff.freeAllDay');
             const stillDue = list.filter((b) => phaseOf(b) !== 'earlier').length;
+            // Booked by halves (and not as a whole right now): draw each half
+            // in its own state, with who is sitting at each.
+            const byHalves =
+              list.some((b) => b.half && phaseOf(b) !== 'earlier') && !(live && live.half == null);
+            const halfState = (h: 1 | 2) => {
+              const part = list.filter((b) => b.half === h || b.half == null);
+              const seated = part.find(isSeated);
+              const due = part.find((b) => phaseOf(b) === 'upcoming' || isHeldNow(b));
+              return {
+                accent: seated ? '#f47700' : due ? '#1177ee' : '#2d7055',
+                seats: seated?.partySize ?? 0,
+              };
+            };
+            const halfA = byHalves ? halfState(1) : null;
+            const halfB = byHalves ? halfState(2) : null;
             return {
               className,
-              seatsText: seatedNow(tb.tableId),
+              halfAccents: halfA && halfB ? [halfA.accent, halfB.accent] : undefined,
+              seatsText:
+                halfA && halfB
+                  ? halfA.seats || halfB.seats
+                    ? t('staff.splitSeats', { a: halfA.seats, b: halfB.seats })
+                    : null
+                  : seatedNow(tb.tableId),
               accent: live ? '#f47700' : next ? '#1177ee' : '#2d7055',
               ariaLabel: `${tb.label}: ${t('staff.bookingsCount', { n: list.length })}. ${summary}`,
               badge: live ? (
@@ -1410,7 +1491,10 @@ function TableFloorView({
                           </small>
                         </div>
                         <div className="table-day-who">
-                          <strong>{b.guestName}</strong>
+                          <strong>
+                            {b.guestName}
+                            {b.half && <span className="half-tag">{t('staff.halfTag', { n: b.half })}</span>}
+                          </strong>
                           <small>
                             {b.partySize ? `${seatsLabel(b.partySize)} · ` : ''}
                             {b.hostName ? `${t('host.onBooking', { name: b.hostName })} · ` : ''}
@@ -1557,6 +1641,7 @@ function ManualBookingForm({
   const [durationMin, setDurationMin] = useState<number | ''>('');
   const [partySize, setPartySize] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
+  const [shareHalf, setShareHalf] = useState(false);
   // Bumped after a refusal: the form was open a while, so its times may be stale.
   const [reload, setReload] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -1584,15 +1669,21 @@ function ManualBookingForm({
     };
   }, [date, reload]);
 
-  const chosen = tableId === '' ? undefined : availability.find((a) => a.tableId === tableId);
+  const table = tableId === '' ? undefined : availability.find((a) => a.tableId === tableId);
+  // Half of a big table, for a small group: its own open times.
+  const sharing = shareHalf && !!table?.share;
+  const chosen = table && sharing ? { ...table, ...table.share! } : table;
   const freeSlots = chosen?.freeSlots ?? [];
   const walkInSlot = chosen?.walkInSlot ?? null;
   // The ends this table can actually offer from this start: its next booking
   // and closing time are already in maxDuration. The server checks again.
   const ends = timeSlot ? endOptions(timeSlot, chosen?.maxDuration?.[timeSlot]) : [];
-  const fewest = chosen?.minParty ?? (chosen ? defaultMinParty(chosen.capacity) : 1);
+  const fewest = sharing
+    ? SHARE_PARTY_MIN
+    : chosen?.minParty ?? (chosen ? defaultMinParty(chosen.capacity) : 1);
+  const most = sharing ? SHARE_PARTY_MAX : chosen?.capacity ?? 0;
   const parties = chosen
-    ? Array.from({ length: chosen.capacity - fewest + 1 }, (_, i) => fewest + i)
+    ? Array.from({ length: Math.max(0, most - fewest + 1) }, (_, i) => fewest + i)
     : [];
 
   async function submit(e: FormEvent) {
@@ -1609,6 +1700,7 @@ function ManualBookingForm({
         durationMin: durationMin === '' ? undefined : durationMin,
         partySize: partySize === '' ? undefined : partySize,
         notes: notes.trim() || undefined,
+        share: sharing || undefined,
       });
       onCreated();
     } catch (err) {
@@ -1642,6 +1734,7 @@ function ManualBookingForm({
               setTimeSlot('');
               setDurationMin('');
               setPartySize('');
+              setShareHalf(false);
             }}
           >
             <option value="">—</option>
@@ -1652,6 +1745,23 @@ function ManualBookingForm({
             ))}
           </select>
         </label>
+        {table?.share && (
+          <label className="field inline">
+            {t('staff.part')}
+            <select
+              value={shareHalf ? 'half' : 'whole'}
+              onChange={(e) => {
+                setShareHalf(e.target.value === 'half');
+                setTimeSlot('');
+                setDurationMin('');
+                setPartySize('');
+              }}
+            >
+              <option value="whole">{t('staff.partWhole')}</option>
+              <option value="half">{t('staff.partShared')}</option>
+            </select>
+          </label>
+        )}
         <label className="field inline">
           {t('staff.start')}
           <select

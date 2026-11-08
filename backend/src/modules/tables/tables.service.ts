@@ -10,6 +10,7 @@ import {
   currentSlot,
 } from '../../utils/slots';
 import { getTableFee, TableFee } from '../../utils/pricing';
+import { isShareable } from '../../utils/share';
 
 export interface TableRow {
   id: number;
@@ -50,6 +51,21 @@ export interface TableAvailability {
    * a length that would collide with the next booking on that table.
    */
   maxDuration: Record<string, number>;
+  /**
+   * On a table of 6+ seats: booking half of it, to share with another small
+   * group. A start is open if either half is free; `otherHalfBooked` lists the
+   * open starts where the other half is already taken, which customers are told.
+   */
+  share?: PartSlots & { otherHalfBooked: string[] };
+  /** Each half on its own, for staff moving a booking onto a particular half. */
+  halves?: (PartSlots & { half: 1 | 2 })[];
+}
+
+export interface PartSlots {
+  freeSlots: string[];
+  takenSlots: string[];
+  walkInSlot: string | null;
+  maxDuration: Record<string, number>;
 }
 
 /**
@@ -71,7 +87,8 @@ export async function getAvailability(
     exceptBookingId,
     keepSlot,
     alsoTableId,
-  }: { exceptBookingId?: number; keepSlot?: string; alsoTableId?: number } = {},
+    withHalves = false,
+  }: { exceptBookingId?: number; keepSlot?: string; alsoTableId?: number; withHalves?: boolean } = {},
 ): Promise<{ tables: TableAvailability[]; fee: TableFee }> {
   const tables = await getTables();
   // A booking on a table since retired can still be edited where it stands.
@@ -90,8 +107,9 @@ export async function getAvailability(
     table_id: number;
     time_slot: string;
     duration_min: number;
+    half: 1 | 2 | null;
   }>(
-    `SELECT table_id, time_slot, duration_min
+    `SELECT table_id, time_slot, duration_min, half
        FROM bookings
       WHERE booking_date = $1
         AND status NOT IN ('cancelled', 'order_complete')
@@ -104,23 +122,23 @@ export async function getAvailability(
   const now = Date.now();
   const running = currentSlot(date, now);
 
-  const byTable = new Map<number, { start: string; duration: number }[]>();
+  type Held = { start: string; duration: number; half: 1 | 2 | null };
+  const byTable = new Map<number, Held[]>();
   for (const b of booked) {
     if (!byTable.has(b.table_id)) byTable.set(b.table_id, []);
-    byTable.get(b.table_id)!.push({ start: b.time_slot, duration: b.duration_min });
+    byTable.get(b.table_id)!.push({ start: b.time_slot, duration: b.duration_min, half: b.half });
   }
 
-  const mapped = tables.map((t) => {
-    const existing = byTable.get(t.id) ?? [];
+  const pastSlots = START_TIMES.filter((s) => slotHasStarted(date, s, now));
+
+  /** The starts open for one part of a table, given the bookings that block it. */
+  const slotsFor = (existing: Held[]): PartSlots => {
     const freeSlots: string[] = [];
     const takenSlots: string[] = [];
-    const pastSlots: string[] = [];
     const maxDuration: Record<string, number> = {};
     let walkInSlot: string | null = null;
-
     for (const s of START_TIMES) {
-      const started = slotHasStarted(date, s, now);
-      if (started) pastSlots.push(s);
+      const started = pastSlots.includes(s);
       if (started && s !== running && s !== keepSlot) continue;
       const shortest = minDurationFor(s);
       if (existing.some((b) => overlaps(s, shortest, b.start, b.duration))) {
@@ -128,7 +146,7 @@ export async function getAvailability(
         continue;
       }
       // Room runs out at whichever comes first: closing, the six-hour ceiling,
-      // or the next booking on this table.
+      // or the next booking on this part of the table.
       const sMin = toMinutes(s);
       const nextStart = existing
         .map((b) => toMinutes(b.start))
@@ -142,18 +160,45 @@ export async function getAvailability(
       else if (s === running) walkInSlot = s;
       maxDuration[s] = fits.length ? fits[fits.length - 1] : shortest;
     }
+    return { freeSlots, takenSlots, walkInSlot, maxDuration };
+  };
 
-    return {
+  const mapped = tables.map((t) => {
+    const existing = byTable.get(t.id) ?? [];
+    // The whole table is blocked by anything on it, either half included.
+    const whole = slotsFor(existing);
+    const row: TableAvailability = {
       tableId: t.id,
       label: t.label,
       capacity: t.capacity,
       minParty: t.min_party,
-      freeSlots,
-      takenSlots,
+      ...whole,
       pastSlots,
-      walkInSlot,
-      maxDuration,
     };
+    if (isShareable(t.capacity)) {
+      // A half is blocked by a whole-table booking or one on the same half.
+      const halves = ([1, 2] as const).map((half) => ({
+        half,
+        ...slotsFor(existing.filter((b) => b.half === null || b.half === half)),
+      }));
+      const open = (s: string) => halves.filter((h) => h.maxDuration[s] !== undefined);
+      const freeSlots = START_TIMES.filter((s) => halves.some((h) => h.freeSlots.includes(s)));
+      const maxDuration: Record<string, number> = {};
+      for (const s of START_TIMES) {
+        const free = open(s);
+        if (free.length) maxDuration[s] = Math.max(...free.map((h) => h.maxDuration[s]));
+      }
+      // Which half is booked when is staff detail: customers get only `share`.
+      if (withHalves) row.halves = halves;
+      row.share = {
+        freeSlots,
+        takenSlots: START_TIMES.filter((s) => !pastSlots.includes(s) && !freeSlots.includes(s)),
+        walkInSlot: halves.find((h) => h.walkInSlot)?.walkInSlot ?? null,
+        maxDuration,
+        otherHalfBooked: freeSlots.filter((s) => halves.filter((h) => h.freeSlots.includes(s)).length === 1),
+      };
+    }
+    return row;
   });
   return { tables: mapped, fee };
 }

@@ -18,7 +18,23 @@ export interface TableAvailability {
   walkInSlot?: string | null;
   /** Start time -> longest bookable length in minutes, given this table's day. */
   maxDuration: Record<string, number>;
+  /** Half of a 6+ seat table, shared with another small group. A start is open
+   *  if either half is; `otherHalfBooked` lists those where the other is taken. */
+  share?: PartSlots & { otherHalfBooked: string[] };
+  /** Each half on its own: for staff moving a booking onto a particular half. */
+  halves?: (PartSlots & { half: 1 | 2 })[];
 }
+
+export interface PartSlots {
+  freeSlots: string[];
+  takenSlots: string[];
+  walkInSlot?: string | null;
+  maxDuration: Record<string, number>;
+}
+
+/** Mirrors backend/src/utils/share.ts. */
+export const SHARE_PARTY_MIN = 2;
+export const SHARE_PARTY_MAX = 3;
 
 export interface Game {
   id: number;
@@ -154,6 +170,8 @@ export interface StaffBooking {
   partySize?: number;
   notes?: string;
   counterCents?: number;
+  /** 1 or 2 for half of a shared table; null for the whole table. */
+  half?: 1 | 2 | null;
   hostName?: string | null;
   hostFeeCents?: number;
   items: { name: string; quantity: number }[];

@@ -508,3 +508,11 @@
   background: #242934;
   color: var(--tertiary);
 }
+
+/* Staff floor, dark: the "seated now" booking card kept its light cream fill
+   under light text. A warm dark tint keeps it standing out, and readable. */
+[data-theme='dark'] .table-day-group.now .table-day-row {
+  border-color: var(--primary);
+  background: #2e2014;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.7);
+}

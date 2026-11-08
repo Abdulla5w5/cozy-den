@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { STAFF_WHATSAPP, STAFF_WHATSAPP_URL } from '../community';
 import { useI18n } from '../i18n';
-import { Booking, formatHours, TableAvailability } from '../types';
+import { Booking, formatHours, SHARE_PARTY_MAX, SHARE_PARTY_MIN, TableAvailability } from '../types';
 import { CafeFloorPlan, tablePhoto } from '../components/CafeFloorPlan';
 import { isKuwaitPhone } from '../phone';
 import { checkoutToken } from '../checkoutToken';
@@ -102,6 +102,7 @@ interface BookingDraft {
   guestPhone: string;
   durationMin: number;
   partySize: number;
+  share?: boolean;
   promoCode?: string;
   hostKind?: HostKind;
 }
@@ -265,6 +266,8 @@ export function BookingFlow() {
   // Two, not one: the smallest table on the floor seats four and so takes a
   // party of two, which makes one an opening state no table would accept.
   const [partySize, setPartySize] = useState<number>(draft?.partySize ?? 2);
+  // Half of a big table, shared with another small group.
+  const [share, setShare] = useState<boolean>(draft?.share ?? false);
   // A private game host for the sitting, if the customer adds one.
   const [host, setHost] = useState<HostChoice | null>(null);
   // Back from a failed payment: Pay waits while the chosen option is checked again.
@@ -374,6 +377,9 @@ export function BookingFlow() {
   }, [step]);
 
   const selectedTable = availability.find((tb) => tb.tableId === tableId) || null;
+  // What the customer is booking on that table: the whole of it, or a half.
+  const sharing = share && !!selectedTable?.share;
+  const view = selectedTable && sharing ? { ...selectedTable, ...selectedTable.share! } : selectedTable;
 
   // What this table can still give us from the chosen start, and therefore what
   // lengths the form may offer. `maxDuration` comes from the server, which knows
@@ -382,7 +388,7 @@ export function BookingFlow() {
   const late = timeSlot ? isLateStart(timeSlot) : false;
   const floorMin = timeSlot ? minDurationFor(timeSlot) : SESSION_MIN;
   const roomMin = timeSlot
-    ? Math.min(selectedTable?.maxDuration?.[timeSlot] ?? floorMin, maxDurationFor(timeSlot))
+    ? Math.min(view?.maxDuration?.[timeSlot] ?? floorMin, maxDurationFor(timeSlot))
     : floorMin;
   const durationChoices = late ? [floorMin] : BOOKING_LENGTHS.filter((d) => d <= roomMin);
 
@@ -406,14 +412,15 @@ export function BookingFlow() {
         ? Math.round((normalPerSeat * (100 - promo.percentOff)) / 100)
         : normalPerSeat;
   const promoApplies = perSeatCents < normalPerSeat;
-  const minParty = selectedTable ? minSeatsFor(selectedTable) : 1;
+  // A shared half has no table minimum: just a small group.
+  const minParty = sharing ? SHARE_PARTY_MIN : selectedTable ? minSeatsFor(selectedTable) : 1;
   // Too small a party for this table: the server would refuse the booking, so
   // the panel blocks it here and names the tables that would take them.
   const partyTooSmall = partySize < minParty;
   const fittingTables = availability
     .filter((tb) => partySize <= tb.capacity && partySize >= minSeatsFor(tb))
     .map((tb) => tb.label);
-  const seats = Math.max(minParty, partySize);
+  const seats = sharing ? partySize : Math.max(minParty, partySize);
   const seatsTotalCents = perSeatCents * seats;
   // A host is per hour for the whole group, on top of the seats.
   const hostFeeCents = host && !late ? hostFee(host.hourlyCents, durationMin) : 0;
@@ -433,9 +440,27 @@ export function BookingFlow() {
     // the table's minimum is left alone on purpose: quietly raising it would
     // charge for seats nobody asked for, so the panel says so instead and
     // offers the tables that do fit.
-    const most = selectedTable ? Math.min(selectedTable.capacity, MAX_PARTY) : MAX_PARTY;
+    const most = sharing
+      ? SHARE_PARTY_MAX
+      : selectedTable
+        ? Math.min(selectedTable.capacity, MAX_PARTY)
+        : MAX_PARTY;
     if (partySize > most) setPartySize(most);
-  }, [selectedTable, partySize]);
+    if (sharing && partySize < SHARE_PARTY_MIN) setPartySize(SHARE_PARTY_MIN);
+  }, [selectedTable, partySize, sharing]);
+
+  // Whole table or half: a different set of open times, and a host is only for
+  // a whole table.
+  useEffect(() => {
+    if (sharing) setHost(null);
+    // Back from a payment: the customer's own unpaid hold may be what makes that
+    // time look taken. Keep it; paying again releases the hold first.
+    const restored = draft?.share && timeSlot === draft.timeSlot && tableId === draft.tableId;
+    if (!restored && timeSlot && view && !view.freeSlots.includes(timeSlot) && view.walkInSlot !== timeSlot) {
+      setTimeSlot(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharing]);
 
   useEffect(() => {
     // A different table can have a different availability pattern. Always show
@@ -444,7 +469,10 @@ export function BookingFlow() {
   }, [tableId, date]);
 
   function selectTable(nextTableId: number) {
-    if (tableId !== nextTableId) setTimeSlot(null);
+    if (tableId !== nextTableId) {
+      setTimeSlot(null);
+      setShare(false);
+    }
     setTableId(nextTableId);
     if (slotListRef.current) slotListRef.current.scrollTop = 0;
 
@@ -562,7 +590,8 @@ export function BookingFlow() {
         partySize,
         promoCode: promoApplies ? promo?.code : undefined,
         retryToken: checkoutToken(),
-        hostKind: host && !late ? host.kind : undefined,
+        hostKind: host && !late && !sharing ? host.kind : undefined,
+        share: sharing || undefined,
       });
       if (res.redirectUrl) {
         // Redirect gateway (Tap): hand the browser to the hosted payment page.
@@ -578,7 +607,8 @@ export function BookingFlow() {
           durationMin,
           partySize,
           promoCode: promoApplies ? promo?.code : undefined,
-          hostKind: host && !late ? host.kind : undefined,
+          hostKind: host && !late && !sharing ? host.kind : undefined,
+          share: sharing || undefined,
         });
         window.location.assign(res.redirectUrl);
         return; // keep the spinner up while the browser navigates away
@@ -683,7 +713,11 @@ export function BookingFlow() {
                 onRetry={() => setAvailabilityRetry((n) => n + 1)}
                 decorate={(tb) => {
                   const avail = availability.find((a) => a.tableId === tb.tableId);
-                  const free = avail?.freeSlots ?? [];
+                  // A table with only a half left is still open to small groups.
+                  const free = [...new Set([...(avail?.freeSlots ?? []), ...(avail?.share?.freeSlots ?? [])])].sort(
+                    (a, b) => slotToMinutes(a) - slotToMinutes(b),
+                  );
+                  const halvesOnly = !avail?.freeSlots.length && !!avail?.share?.freeSlots.length;
                   const soldOut = free.length === 0;
                   return {
                     className: soldOut ? 'sold-out' : '',
@@ -696,7 +730,11 @@ export function BookingFlow() {
                       <>
                         <strong>{tb.label}</strong>
                         <small>
-                          {soldOut ? t('bk.noOpenSlots') : t('bk.openSlots', { n: free.length })}
+                          {soldOut
+                            ? t('bk.noOpenSlots')
+                            : halvesOnly
+                              ? t('bk.halvesOnly')
+                              : t('bk.openSlots', { n: free.length })}
                         </small>
                         {!soldOut && <em>{free.slice(0, 3).join(' · ')}</em>}
                       </>
@@ -743,13 +781,37 @@ export function BookingFlow() {
                     <h2>{selectedTable.label}</h2>
                     <div className="slot-panel-meta">
                       <span>♟ {t('bk.seats', { n: selectedTable.capacity })}</span>
-                      <span className={selectedTable.freeSlots.length ? 'open' : 'closed'}>
+                      <span className={view!.freeSlots.length ? 'open' : 'closed'}>
                         <i aria-hidden="true" />
-                        {selectedTable.freeSlots.length
-                          ? t('bk.openSlots', { n: selectedTable.freeSlots.length })
+                        {view!.freeSlots.length
+                          ? t('bk.openSlots', { n: view!.freeSlots.length })
                           : t('bk.noOpenSlots')}
                       </span>
                     </div>
+                    {selectedTable.share && (
+                      <div className="share-choice" role="radiogroup" aria-label={t('bk.shareAsk')}>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={!sharing}
+                          className={`share-option ${!sharing ? 'active' : ''}`}
+                          onClick={() => setShare(false)}
+                        >
+                          <strong>{t('bk.shareWhole')}</strong>
+                          <small>{t('bk.seats', { n: selectedTable.capacity })}</small>
+                        </button>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={sharing}
+                          className={`share-option ${sharing ? 'active' : ''}`}
+                          onClick={() => setShare(true)}
+                        >
+                          <strong>{t('bk.shareHalf')}</strong>
+                          <small>{t('bk.shareHalfSub', { min: SHARE_PARTY_MIN, max: SHARE_PARTY_MAX })}</small>
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="slot-panel-body">
@@ -767,7 +829,8 @@ export function BookingFlow() {
                         // is simply over. Leave it out rather than grey it.
                         .filter((slot) => !selectedTable.pastSlots?.includes(slot))
                         .map((slot) => {
-                        const free = selectedTable.freeSlots.includes(slot);
+                        const free = view!.freeSlots.includes(slot);
+                        const halfLeft = sharing && free && !!selectedTable.share?.otherHalfBooked.includes(slot);
                         const active = timeSlot === slot;
                         return (
                           <button
@@ -778,11 +841,11 @@ export function BookingFlow() {
                             aria-pressed={active}
                             // Without this the button reads as "14:00Open",
                             // the two child elements run together.
-                            aria-label={`${slot} — ${free ? t('bk.open') : t('bk.taken')}`}
+                            aria-label={`${slot} — ${free ? (halfLeft ? t('bk.halfLeft') : t('bk.open')) : t('bk.taken')}`}
                             onClick={() => setTimeSlot(slot)}
                           >
                             <span>{slot}</span>
-                            <small>{free ? t('bk.open') : t('bk.taken')}</small>
+                            <small>{free ? (halfLeft ? t('bk.halfLeft') : t('bk.open')) : t('bk.taken')}</small>
                           </button>
                         );
                       })}
@@ -816,9 +879,15 @@ export function BookingFlow() {
                           value={partySize}
                           onChange={(e) => setPartySize(Number(e.target.value))}
                         >
-                          {Array.from(
-                            { length: Math.min(selectedTable.capacity, MAX_PARTY) },
-                            (_, i) => i + 1,
+                          {(sharing
+                            ? Array.from(
+                                { length: SHARE_PARTY_MAX - SHARE_PARTY_MIN + 1 },
+                                (_, i) => SHARE_PARTY_MIN + i,
+                              )
+                            : Array.from(
+                                { length: Math.min(selectedTable.capacity, MAX_PARTY) },
+                                (_, i) => i + 1,
+                              )
                           ).map(
                             (n) => (
                               <option key={n} value={n}>
@@ -835,9 +904,11 @@ export function BookingFlow() {
                             seats: selectedTable.capacity,
                             n: minParty,
                           })}{' '}
-                          {fittingTables.length > 0
-                            ? t('bk.tryTables', { tables: fittingTables.join(', ') })
-                            : t('bk.tryFewerTables')}
+                          {selectedTable.share && partySize >= SHARE_PARTY_MIN && partySize <= SHARE_PARTY_MAX
+                            ? t('bk.tryShare')
+                            : fittingTables.length > 0
+                              ? t('bk.tryTables', { tables: fittingTables.join(', ') })
+                              : t('bk.tryFewerTables')}
                         </p>
                       ) : (
                         <p className="sitting-note">
@@ -846,6 +917,14 @@ export function BookingFlow() {
                         </p>
                       )}
                       {late && <p className="sitting-note">{t('bk.lateSeatingHint')}</p>}
+                      {sharing && (
+                        <p className="sitting-note share-note" role="status">
+                          {selectedTable.share?.otherHalfBooked.includes(timeSlot)
+                            ? t('bk.shareOtherBooked')
+                            : t('bk.shareOtherFree')}
+                        </p>
+                      )}
+                      {!sharing && (
                       <HostPicker
                         date={date}
                         timeSlot={timeSlot}
@@ -854,6 +933,7 @@ export function BookingFlow() {
                         selected={host}
                         onSelect={chooseHost}
                       />
+                      )}
                     </div>
                   )}
 
@@ -864,7 +944,7 @@ export function BookingFlow() {
                         {partyTooSmall
                           ? t('bk.minParty', { n: minParty })
                           : timeSlot
-                            ? `${selectedTable.label} · ${timeSlot}–${endLabel(timeSlot, durationMin)} · ${money(totalCents)}`
+                            ? `${selectedTable.label}${sharing ? ` (${t('bk.sharedTag')})` : ''} · ${timeSlot}–${endLabel(timeSlot, durationMin)} · ${money(totalCents)}`
                             : t('bk.chooseTime')}
                       </strong>
                     </div>
@@ -900,7 +980,8 @@ export function BookingFlow() {
           <div className="summary">
             <h3>{t('bk.summary')}</h3>
             <p>
-              {selectedTable?.label} · {date} ·{' '}
+              {selectedTable?.label}
+              {sharing ? ` (${t('bk.sharedTag')})` : ''} · {date} ·{' '}
               {timeSlot && `${timeSlot}–${endLabel(timeSlot, durationMin)}`} ·{' '}
               {partySize === 1 ? t('bk.onePerson') : t('bk.people', { n: partySize })}
             </p>

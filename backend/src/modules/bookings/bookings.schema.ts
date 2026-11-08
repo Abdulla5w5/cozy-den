@@ -46,6 +46,8 @@ export const createBookingSchema = z.object({
   // the option, the server assigns the person. Priced per hour
   // for the whole group, checked in the service.
   hostKind: z.enum(['normal', 'clocktower']).optional(),
+  // Book half of a big table, to share it with another small group.
+  share: z.boolean().optional(),
   // Only the direct (mock) provider uses a client token. The redirect gateway
   // (Tap) collects payment on its own hosted page, so this is optional.
   paymentToken: z.string().min(1).max(200).optional(),
@@ -75,6 +77,7 @@ export const staffCreateBookingSchema = z.object({
   durationMin: durationMin.optional(),
   partySize: partySize.optional(),
   notes: staffNotes.optional(),
+  share: z.boolean().optional(),
 });
 
 export type StaffCreateBookingInput = z.infer<typeof staffCreateBookingSchema>;
@@ -97,17 +100,20 @@ export const changeBookingSchema = z
       .optional(),
     durationMin: durationMin.optional(),
     partySize: partySize.optional(),
+    // 1 or 2 for a half of a shared table, null for the whole table.
+    half: z.union([z.literal(1), z.literal(2), z.null()]).optional(),
     expected: z
       .object({
         tableId: z.number().int(),
         timeSlot: z.string(),
         durationMin: z.number().int(),
         partySize: z.number().int(),
+        half: z.number().int().nullable().optional(),
       })
       .optional(),
   })
   .refine(
-    (c) => [c.tableId, c.timeSlot, c.durationMin, c.partySize].some((v) => v !== undefined),
+    (c) => [c.tableId, c.timeSlot, c.durationMin, c.partySize, c.half].some((v) => v !== undefined),
     'Nothing to change.',
   );
 

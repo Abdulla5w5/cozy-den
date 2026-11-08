@@ -110,7 +110,7 @@ async function find(token: string): Promise<Found | null> {
     checked_in_at: Date | null;
     source: string;
   }>(
-    `SELECT b.id, b.source, t.label, to_char(b.booking_date, 'YYYY-MM-DD') AS d, b.time_slot,
+    `SELECT b.id, b.source, t.label || CASE WHEN b.half IS NOT NULL THEN ' (shared)' ELSE '' END AS label, to_char(b.booking_date, 'YYYY-MM-DD') AS d, b.time_slot,
             b.duration_min, b.party_size, b.status, b.guest_name, b.guest_phone,
             b.guest_email, b.verification_code, b.total_cents, b.counter_cents, h.display_name AS host_name,
             b.checked_in_at

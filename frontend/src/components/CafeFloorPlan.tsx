@@ -141,6 +141,8 @@ export interface TableDecoration {
   /** The seat text on the table top. Left out, it is the table's capacity (what
    *  a customer choosing a table needs); null hides it. */
   seatsText?: string | null;
+  /** A table booked by halves: each half's colour, drawn side by side. */
+  halfAccents?: [string, string];
 }
 
 interface Props {
@@ -286,13 +288,16 @@ export function CafeFloorPlan({
               '--table-y': `${placement.y}%`,
               '--table-angle': `${placement.angle ?? 0}deg`,
               '--table-accent': deco.accent ?? placement.color,
+              ...(deco.halfAccents
+                ? { '--half-a': deco.halfAccents[0], '--half-b': deco.halfAccents[1] }
+                : {}),
             } as CSSProperties;
             return (
               <button
                 key={tb.tableId}
                 type="button"
                 style={style}
-                className={`floor-table floor-table-${placement.shape} ${selected ? 'selected' : ''} ${deco.className ?? ''} ${tipAbove ? 'tip-above' : ''}`}
+                className={`floor-table floor-table-${placement.shape} ${selected ? 'selected' : ''} ${deco.className ?? ''} ${tipAbove ? 'tip-above' : ''} ${deco.halfAccents ? 'floor-table-split' : ''}`}
                 aria-pressed={selected}
                 aria-label={deco.ariaLabel}
                 onClick={() => onSelect(tb.tableId)}

@@ -5,6 +5,7 @@ import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
 import { billableSeats, MAX_PARTY, minSeatsFor, quoteBooking } from '../../utils/pricing';
 import { currentSlot, isValidDuration, minDurationFor, slotHasStarted } from '../../utils/slots';
+import { isShareable, SHARE_PARTY_MAX, SHARE_PARTY_MIN } from '../../utils/share';
 import { paymentProvider } from '../../payment';
 import { TAP_CHARGE_EXPIRY_MINUTES } from '../../payment/constants';
 import {
@@ -90,6 +91,23 @@ async function assertTableExists(
 }
 
 /**
+ * Insert a booking for the whole table, or for whichever half of it is free.
+ * Each half is tried in turn and the database decides: it refuses any overlap,
+ * so two groups racing for the last half cannot both get it.
+ */
+async function insertSitting(p: InsertParams, share: boolean): Promise<number> {
+  if (!share) return insertBooking(p);
+  for (const half of [1, 2] as const) {
+    try {
+      return await insertBooking({ ...p, half });
+    } catch (err) {
+      if (!(err instanceof ApiError && err.message === ALREADY_BOOKED)) throw err;
+    }
+  }
+  throw new ApiError(409, ALREADY_BOOKED);
+}
+
+/**
  * Settle the customer's chosen length and headcount against what this table on
  * this evening can actually take.
  *
@@ -108,11 +126,23 @@ function resolveSitting(
   { capacity, minParty }: { capacity: number; minParty: number | null },
   durationMin?: number,
   partySize?: number,
-  { maxParty = Infinity }: { maxParty?: number } = {},
+  { maxParty = Infinity, share = false }: { maxParty?: number; share?: boolean } = {},
 ): { durationMin: number; partySize: number; billedSeats: number } {
   const duration = durationMin ?? minDurationFor(timeSlot);
   if (!isValidDuration(timeSlot, duration)) {
     throw new ApiError(400, 'That length is not available for the start time you picked.');
+  }
+  // Half a big table, for a small group: charged per person, with no table minimum.
+  if (share) {
+    if (!isShareable(capacity)) throw new ApiError(400, 'This table cannot be shared.');
+    const group = partySize ?? SHARE_PARTY_MIN;
+    if (group < SHARE_PARTY_MIN || group > SHARE_PARTY_MAX) {
+      throw new ApiError(
+        400,
+        `A shared half is for ${SHARE_PARTY_MIN} or ${SHARE_PARTY_MAX} people.`,
+      );
+    }
+    return { durationMin: duration, partySize: group, billedSeats: group };
   }
   const party = partySize ?? minSeatsFor(capacity, minParty);
   if (party > capacity) {
@@ -153,6 +183,8 @@ interface InsertParams {
   durationMin: number;
   partySize: number;
   staffNotes?: string | null;
+  /** 1 or 2 for half of a shared table; absent for the whole table. */
+  half?: 1 | 2 | null;
   /** Customer bookings only; staff-entered ones never see the terms. */
   termsAccepted?: boolean;
   /** The group promo code the price was worked out with, if any. */
@@ -202,11 +234,11 @@ async function insertBooking(p: InsertParams): Promise<number> {
            (table_id, booking_date, time_slot, guest_name, guest_email, guest_phone,
             verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
             duration_min, party_size, terms_accepted_at, promo_code, newcomer_discount, user_id,
-            retry_token_hash, host_id, host_fee_cents, checkin_token, host_kind, staff_notes)
+            retry_token_hash, host_id, host_fee_cents, checkin_token, host_kind, staff_notes, half)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,
-                 CASE WHEN $14 THEN now() END, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+                 CASE WHEN $14 THEN now() END, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
          RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true, p.userId ?? null, p.retryTokenHash ?? null, p.hostId ?? null, p.hostFeeCents ?? 0, newCheckinToken(), p.hostKind ?? null, p.staffNotes || null]
+        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true, p.userId ?? null, p.retryTokenHash ?? null, p.hostId ?? null, p.hostFeeCents ?? 0, newCheckinToken(), p.hostKind ?? null, p.staffNotes || null, p.half ?? null]
       );
       return rows[0].id;
     } catch (err) {
@@ -264,8 +296,12 @@ export async function createBooking(
   }
   const table = await assertTableExists(input.tableId);
 
+  if (input.share && input.hostKind) {
+    throw new ApiError(400, 'A game host is for a whole table, not a shared half.');
+  }
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
     maxParty: MAX_PARTY,
+    share: input.share === true,
   });
   const promo = await resolvePromoCode(
     input.promoCode,
@@ -302,7 +338,7 @@ export async function createBooking(
     : null;
   const hostFee = host ? hostFeeCents(host.hourlyCents, sitting.durationMin) : 0;
   const feeCents = quote.totalCents + hostFee;
-  const bookingId = await insertBooking({
+  const bookingId = await insertSitting({
     tableId: input.tableId,
     date: input.date,
     timeSlot: input.timeSlot,
@@ -330,7 +366,7 @@ export async function createBooking(
     hostFeeCents: hostFee,
     feeCents,
     totalCents: feeCents,
-  });
+  }, input.share === true);
 
   const charge = await paymentProvider.charge({
     amountCents: feeCents,
@@ -490,8 +526,12 @@ export async function startBookingCheckout(
   });
   if (alreadyPaid) return { code: alreadyPaid.verificationCode, booking: alreadyPaid };
 
+  if (input.share && input.hostKind) {
+    throw new ApiError(400, 'A game host is for a whole table, not a shared half.');
+  }
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
     maxParty: MAX_PARTY,
+    share: input.share === true,
   });
   const promo = await resolvePromoCode(
     input.promoCode,
@@ -528,7 +568,7 @@ export async function startBookingCheckout(
     : null;
   const hostFee = host ? hostFeeCents(host.hourlyCents, sitting.durationMin) : 0;
   const feeCents = quote.totalCents + hostFee;
-  const bookingId = await insertBooking({
+  const bookingId = await insertSitting({
     tableId: input.tableId,
     date: input.date,
     timeSlot: input.timeSlot,
@@ -556,7 +596,7 @@ export async function startBookingCheckout(
     hostFeeCents: hostFee,
     feeCents,
     totalCents: feeCents,
-  });
+  }, input.share === true);
 
   const { rows } = await query<{ verification_code: string }>(
     'SELECT verification_code FROM bookings WHERE id = $1',
@@ -921,12 +961,14 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     throw new ApiError(400, 'That start time has passed. Pick the current half hour or later.');
   }
   const table = await assertTableExists(input.tableId, { activeOnly: false });
-  const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize);
+  const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
+    share: input.share === true,
+  });
   // Staff type whatever the customer gave them. A Kuwait number goes in the
   // phone column, like an online booking's; anything else stays as before.
   const phone = normalizeKuwaitiPhone(input.contact);
 
-  const bookingId = await insertBooking({
+  const bookingId = await insertSitting({
     tableId: input.tableId,
     date: input.date,
     timeSlot: input.timeSlot,
@@ -940,7 +982,7 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     durationMin: sitting.durationMin,
     partySize: sitting.partySize,
     staffNotes: input.notes,
-  });
+  }, input.share === true);
 
   const view = await getBookingById(bookingId);
   if (!view) throw new ApiError(500, 'Booking vanished after creation.');
@@ -948,7 +990,8 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
 }
 
 const BOOKING_SELECT = `
-  SELECT b.id, b.table_id, t.label AS table_label,
+  SELECT b.id, b.table_id,
+         t.label || CASE WHEN b.half IS NOT NULL THEN ' (shared)' ELSE '' END AS table_label,
          to_char(b.booking_date, 'YYYY-MM-DD') AS booking_date,
          b.time_slot, b.guest_name, b.guest_email, b.guest_phone, b.verification_code, b.status,
          b.source, b.table_fee_cents, b.total_cents, b.created_at,
@@ -1119,10 +1162,11 @@ interface ChangeableRow {
   promo_code: string | null;
   first_quote_cents: number | null;
   counter_cents: number;
+  half: 1 | 2 | null;
 }
 
 const CHANGEABLE_SELECT = `SELECT id, table_id, to_char(booking_date, 'YYYY-MM-DD') AS date, time_slot,
-         duration_min, party_size, status, source, host_id, total_cents, promo_code, first_quote_cents, counter_cents
+         duration_min, party_size, status, source, host_id, total_cents, promo_code, first_quote_cents, counter_cents, half
     FROM bookings WHERE id = $1`;
 
 /** Why this booking cannot be changed at all, or null when it can. */
@@ -1141,8 +1185,13 @@ interface Sitting {
   timeSlot: string;
   durationMin: number;
   partySize: number;
+  half: 1 | 2 | null;
   billedSeats: number;
 }
+
+/** Seats charged: the party on a shared half, otherwise never below the table's minimum. */
+const seatsFor = (half: 1 | 2 | null, partySize: number, table: { capacity: number; minParty: number | null }) =>
+  half !== null ? partySize : Math.max(partySize, minSeatsFor(table.capacity, table.minParty));
 
 /**
  * The booking as it would be after these changes, checked against the same rules
@@ -1162,6 +1211,7 @@ async function resolveChanges(
   const timeSlot = changes.timeSlot ?? row.time_slot;
   const durationMin = changes.durationMin ?? row.duration_min;
   const partySize = changes.partySize ?? row.party_size;
+  let half = changes.half !== undefined ? changes.half : row.half;
   const newTime = timeSlot !== row.time_slot;
   const newLength = durationMin !== row.duration_min;
 
@@ -1179,13 +1229,25 @@ async function resolveChanges(
   // A table already retired may keep its booking, but none can move onto it.
   const table = await assertTableExists(tableId, { activeOnly: tableId !== row.table_id }, db);
   if (partySize > table.capacity) throw new ApiError(400, `That table seats ${table.capacity}.`);
+  // A half moved to a table that cannot be shared becomes that whole table.
+  if (changes.half === undefined && half !== null && !isShareable(table.capacity)) half = null;
+  // Half a big table: a small group, never with a host. Staff may record fewer
+  // than two, as with a table's minimum, but not more than a half holds.
+  if (half !== null) {
+    if (row.host_id !== null) throw new ApiError(409, 'A game host is for a whole table, not a shared half.');
+    if (!isShareable(table.capacity)) throw new ApiError(400, 'This table cannot be shared.');
+    if (partySize > SHARE_PARTY_MAX) {
+      throw new ApiError(400, `A shared half is for up to ${SHARE_PARTY_MAX} people.`);
+    }
+  }
 
   return {
     tableId,
     timeSlot,
     durationMin,
     partySize,
-    billedSeats: Math.max(partySize, minSeatsFor(table.capacity, table.minParty)),
+    half,
+    billedSeats: seatsFor(half, partySize, table),
   };
 }
 
@@ -1210,7 +1272,7 @@ async function quoteOptionsFor(row: ChangeableRow) {
 async function quoteCurrent(row: ChangeableRow): Promise<number> {
   const { options } = await quoteOptionsFor(row);
   const table = await assertTableExists(row.table_id, { activeOnly: false });
-  const seats = Math.max(row.party_size, minSeatsFor(table.capacity, table.minParty));
+  const seats = seatsFor(row.half, row.party_size, table);
   const quote = await quoteBooking(row.date, row.time_slot, row.duration_min, seats, options);
   return quote.totalCents;
 }
@@ -1260,6 +1322,7 @@ export async function bookingChangeOptions(id: number) {
     exceptBookingId: row.id,
     keepSlot: row.time_slot,
     alsoTableId: row.table_id,
+    withHalves: true,
   });
   return {
     booking: {
@@ -1267,6 +1330,7 @@ export async function bookingChangeOptions(id: number) {
       timeSlot: row.time_slot,
       durationMin: row.duration_min,
       partySize: row.party_size,
+      half: row.half,
       hasHost: row.host_id !== null,
     },
     tables,
@@ -1309,7 +1373,8 @@ export async function changeBooking(id: number, changes: BookingChanges, staffId
         (seen.tableId !== locked.table_id ||
           seen.timeSlot !== locked.time_slot ||
           seen.durationMin !== locked.duration_min ||
-          seen.partySize !== locked.party_size)
+          seen.partySize !== locked.party_size ||
+          (seen.half !== undefined && seen.half !== locked.half))
       ) {
         throw new ApiError(409, 'Someone else just changed this booking. Check it and try again.');
       }
@@ -1317,9 +1382,9 @@ export async function changeBooking(id: number, changes: BookingChanges, staffId
       await client.query(
         `UPDATE bookings
             SET table_id = $2, time_slot = $3, duration_min = $4, party_size = $5,
-                first_quote_cents = COALESCE(first_quote_cents, $6)
+                first_quote_cents = COALESCE(first_quote_cents, $6), half = $7
           WHERE id = $1`,
-        [id, sitting.tableId, sitting.timeSlot, sitting.durationMin, sitting.partySize, firstQuote],
+        [id, sitting.tableId, sitting.timeSlot, sitting.durationMin, sitting.partySize, firstQuote, sitting.half],
       );
       return { row: locked, after: sitting };
     }));
@@ -1335,7 +1400,8 @@ export async function changeBooking(id: number, changes: BookingChanges, staffId
   console.log(
     `[booking-change] booking=${id} staff=${staffId} ` +
       `table ${row.table_id}->${after.tableId} start ${row.time_slot}->${after.timeSlot} ` +
-      `length ${row.duration_min}->${after.durationMin} people ${row.party_size}->${after.partySize}`,
+      `length ${row.duration_min}->${after.durationMin} people ${row.party_size}->${after.partySize} ` +
+      `half ${row.half ?? 'whole'}->${after.half ?? 'whole'}`,
   );
   // The change is saved by now: a failure from here on must not report otherwise.
   try {
