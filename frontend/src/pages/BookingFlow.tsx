@@ -788,6 +788,9 @@ export function BookingFlow() {
                           : t('bk.noOpenSlots')}
                       </span>
                     </div>
+                  </div>
+
+                  <div className="slot-panel-body">
                     {selectedTable.share && (
                       <div className="share-choice" role="radiogroup" aria-label={t('bk.shareAsk')}>
                         <button
@@ -812,9 +815,6 @@ export function BookingFlow() {
                         </button>
                       </div>
                     )}
-                  </div>
-
-                  <div className="slot-panel-body">
                     <div className="slot-panel-title">
                       <div>
                         <strong>{t('bk.pickTime')}</strong>
@@ -942,7 +942,9 @@ export function BookingFlow() {
                       <span>{t('bk.selection')}</span>
                       <strong>
                         {partyTooSmall
-                          ? t('bk.minParty', { n: minParty })
+                          ? selectedTable.share && partySize >= SHARE_PARTY_MIN && partySize <= SHARE_PARTY_MAX
+                            ? t('bk.minPartyOrShare', { n: minParty })
+                            : t('bk.minParty', { n: minParty })
                           : timeSlot
                             ? `${selectedTable.label}${sharing ? ` (${t('bk.sharedTag')})` : ''} · ${timeSlot}–${endLabel(timeSlot, durationMin)} · ${money(totalCents)}`
                             : t('bk.chooseTime')}

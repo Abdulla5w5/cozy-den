@@ -9029,7 +9029,7 @@ a.ev-ticket:active {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 12px;
+  margin-bottom: 14px;
 }
 .share-option {
   display: flex;

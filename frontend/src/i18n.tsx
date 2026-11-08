@@ -275,8 +275,8 @@ const dict: Record<string, { en: string; ar: string }> = {
   'bk.shareWhole': { en: 'Whole table', ar: 'الطاولة كاملة' },
   'bk.shareHalf': { en: 'Share this table', ar: 'شارك هالطاولة' },
   'bk.shareHalfSub': {
-    en: 'Half the table, for {min}–{max} people. Another group may sit at the other half.',
-    ar: 'نص الطاولة، من {min} إلى {max} أشخاص. ممكن مجموعة ثانية تقعد بالنص الثاني.',
+    en: 'Half, for {min}–{max} people. Another group may use the other half.',
+    ar: 'النص، من {min} إلى {max} أشخاص. ممكن مجموعة ثانية تاخذ النص الثاني.',
   },
   'bk.halfLeft': { en: 'Half left', ar: 'باقي نص' },
   'bk.shareOtherBooked': {
@@ -292,6 +292,10 @@ const dict: Record<string, { en: string; ar: string }> = {
     ar: 'اختاروا "شارك هالطاولة" فوق عشان تحجزون نصها بدال.',
   },
   'bk.halvesOnly': { en: 'Only half left: share it', ar: 'باقي نص بس: شاركوها' },
+  'bk.minPartyOrShare': {
+    en: 'the whole table takes {n} or more, or choose "Share this table"',
+    ar: 'الطاولة كاملة من {n} أشخاص فأكثر، أو اختاروا "شارك هالطاولة"',
+  },
   'bk.sharedTag': { en: 'shared', ar: 'مشتركة' },
   'bk.perSeat': { en: '{amount} per person', ar: '{amount} للشخص' },
   'bk.minParty': { en: 'this table takes {n} or more', ar: 'هذي الطاولة من {n} أشخاص فأكثر' },
