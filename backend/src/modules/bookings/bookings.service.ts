@@ -658,6 +658,17 @@ export async function finalizeCharge(
     return { outcome: 'paid', code: payment.verificationCode };
   }
 
+  // Paid, settled, then cancelled by staff: the ledger already holds the
+  // capture, and any refund is done by hand. A Tap retry or a revisited return
+  // link is not money arriving late, so it changes nothing.
+  if (
+    payment.bookingStatus === 'cancelled' &&
+    payment.staffCancelled &&
+    payment.paymentState === 'captured'
+  ) {
+    return { outcome: 'paid', code: payment.verificationCode };
+  }
+
   // Cancelled bookings are deliberately re-checked. Tap may have captured in
   // the narrow interval around local expiry; ignoring that callback loses money.
   const status = await paymentProvider.retrieveCharge(chargeId);

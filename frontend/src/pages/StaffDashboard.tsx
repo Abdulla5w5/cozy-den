@@ -510,6 +510,18 @@ function TodayTab() {
                     {t('staff.changeBtn')}
                   </button>
                 )}
+                {canChange(b) && (
+                  <button
+                    className="link danger"
+                    onClick={() => {
+                      if (window.confirm(t('staff.cancelConfirm', { name: b.guestName }))) {
+                        act(`/staff/bookings/${b.id}/cancel`);
+                      }
+                    }}
+                  >
+                    {t('staff.cancelBtn')}
+                  </button>
+                )}
                 <button
                   className="link"
                   aria-expanded={notesOpen === b.id}
@@ -1532,6 +1544,19 @@ function TableFloorView({
                               onClick={() => setChanging(changing === b.id ? null : b.id)}
                             >
                               {t('staff.changeBtn')}
+                            </button>
+                          )}
+                          {canChange(b) && (
+                            <button
+                              className="link danger"
+                              onClick={() => {
+                                if (window.confirm(t('staff.cancelConfirm', { name: b.guestName }))) {
+                                  setChanging(null);
+                                  onAct(`/staff/bookings/${b.id}/cancel`);
+                                }
+                              }}
+                            >
+                              {t('staff.cancelBtn')}
                             </button>
                           )}
                         </div>

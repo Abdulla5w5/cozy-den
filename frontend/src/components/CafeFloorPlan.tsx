@@ -35,8 +35,8 @@ const ORANGE = '#f47700';
 // Keyed by the table's current name, so a rename in the database must be
 // mirrored here for the table to stay where it physically is.
 const FLOOR_PLACEMENTS: Record<string, FloorPlacement> = {
-  // The two green squares are the same kind of table and share one photograph.
-  'Small Table 1': { x: 79, y: 58, shape: 'square', color: GREEN, angle: 1, photo: '/tables/green-square.webp' },
+  // Small Table 1 has its own photograph; Small Table 2 keeps the green-square one.
+  'Small Table 1': { x: 79, y: 58, shape: 'square', color: GREEN, angle: 1, photo: '/tables/small-table-1.webp' },
   'Small Table 2': { x: 52, y: 39, shape: 'square', color: GREEN, angle: 0, photo: '/tables/green-square.webp' },
   'Small Table 3': { x: 65, y: 18, shape: 'square', color: RED, angle: -1, photo: '/tables/red-square.webp' },
   'Big Table 1': { x: 72, y: 82, shape: 'wide', color: GREEN, angle: 0, photo: '/tables/green-rectangle.webp' },

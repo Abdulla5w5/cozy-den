@@ -7,6 +7,7 @@ import {
   getBookingsForDate,
   confirmBooking,
   completeBooking,
+  cancelBooking,
   setBookingNotes,
   setCounterMoney,
 } from './staff.service';
@@ -209,6 +210,21 @@ staffRouter.post(
       next(err);
     }
   }
+);
+
+// POST /api/staff/bookings/:id/cancel — frees the table; refunds are by hand.
+staffRouter.post(
+  '/bookings/:id/cancel',
+  requireStaff,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      await cancelBooking(Number(req.params.id), req.user!.sub);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
 );
 
 // POST /api/staff/bookings/:id/complete — the session is finished.

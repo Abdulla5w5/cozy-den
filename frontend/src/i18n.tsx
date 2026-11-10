@@ -1344,6 +1344,11 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'This table only has room until {end}, so the booking would end earlier.',
     ar: 'هالطاولة فاضية لين {end} بس، فالحجز راح يخلص أبكر.',
   },
+  'staff.cancelBtn': { en: 'Cancel', ar: 'إلغاء' },
+  'staff.cancelConfirm': {
+    en: "Cancel {name}'s booking? The table becomes free straight away and this cannot be undone. Nothing is refunded automatically: refund any payment in Tap or by hand, and let the customer know. Its money stops counting in revenue.",
+    ar: 'تأكيد إلغاء حجز {name}؟ الطاولة تصير فاضية على طول وما يمكن التراجع. ما في استرجاع تلقائي للفلوس: رجّع أي دفعة من Tap أو باليد، وبلّغ العميل. فلوس هالحجز ما راح تنحسب في الإيرادات.',
+  },
   'staff.doneConfirm': {
     en: 'Mark this booking done? The table becomes free straight away, and this cannot be undone.',
     ar: 'تأكيد إنهاء الحجز؟ الطاولة تصير فاضية على طول، وما يمكن التراجع.',

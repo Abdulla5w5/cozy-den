@@ -27,6 +27,8 @@ export interface PaymentContext {
   totalCents: number;
   paymentState: PaymentState;
   requestedAmountMillis: number;
+  /** Cancelled from the staff dashboard after it was paid and settled. */
+  staffCancelled: boolean;
 }
 
 interface AttachPaymentInput {
@@ -105,10 +107,11 @@ export async function getPaymentContext(chargeId: string): Promise<PaymentContex
     total_cents: number;
     payment_state: PaymentState;
     requested_amount_millis: string | number;
+    staff_cancelled: boolean;
   }>(
     `SELECT p.id AS payment_id, p.booking_id, b.status AS booking_status,
             b.verification_code, b.total_cents, p.state AS payment_state,
-            p.requested_amount_millis
+            p.requested_amount_millis, b.staff_cancelled_at IS NOT NULL AS staff_cancelled
        FROM payments p
        JOIN bookings b ON b.id = p.booking_id
       WHERE p.provider = 'tap' AND p.provider_charge_id = $1`,
@@ -124,6 +127,7 @@ export async function getPaymentContext(chargeId: string): Promise<PaymentContex
     totalCents: row.total_cents,
     paymentState: row.payment_state,
     requestedAmountMillis: Number(row.requested_amount_millis),
+    staffCancelled: row.staff_cancelled,
   };
 }
 

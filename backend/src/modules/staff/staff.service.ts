@@ -169,13 +169,57 @@ async function transition(
   if (booking.status !== from) {
     throw new ApiError(409, `Booking is '${booking.status}', expected '${fromLabel}'.`);
   }
-  await query(`UPDATE bookings SET status = $1 WHERE id = $2`, [to, booking.id]);
+  // Guarded on the status just read: a Cancel landing between the two
+  // statements must not be undone by a Confirm or Mark done.
+  const { rowCount } = await query(
+    `UPDATE bookings SET status = $1 WHERE id = $2 AND status = $3`,
+    [to, booking.id, from],
+  );
+  if (!rowCount) {
+    throw new ApiError(409, 'This booking was just changed by someone else. Refresh and try again.');
+  }
   return booking.id;
 }
 
 /** Staff confirms the guest turned up. */
 export async function confirmBooking(where: { id?: number; code?: string }): Promise<number> {
   return transition(where, 'pending', 'arrived', 'pending');
+}
+
+/**
+ * Staff cancels a booking that is waiting for its guests or already seated.
+ * The table (and any host) frees straight away. Nothing is refunded and no
+ * one is emailed: staff refund in Tap or by hand, and tell the customer.
+ * One conditional UPDATE, so two staff pressing at once cancel it once.
+ */
+export async function cancelBooking(id: number, staffId: number): Promise<void> {
+  const { rows } = await query<{ status: string; total_cents: number; counter_cents: number }>(
+    `UPDATE bookings
+        SET status = 'cancelled', staff_cancelled_at = now(), staff_cancelled_by = $2
+      WHERE id = $1 AND status IN ('pending', 'arrived') AND source <> 'event'
+      RETURNING status, total_cents, counter_cents`,
+    [id, staffId],
+  );
+  if (rows[0]) {
+    console.log(
+      `[staff] booking ${id} cancelled by user ${staffId} ` +
+        `(paid online ${rows[0].total_cents}, by hand ${rows[0].counter_cents})`,
+    );
+    return;
+  }
+  const { rows: now } = await query<{ status: string; source: string }>(
+    'SELECT status, source FROM bookings WHERE id = $1',
+    [id],
+  );
+  if (!now[0]) throw new ApiError(404, 'No such booking.');
+  if (now[0].source === 'event') {
+    throw new ApiError(409, 'This is an event hold. Change it from the Events tab.');
+  }
+  if (now[0].status === 'cancelled') throw new ApiError(409, 'This booking is already cancelled.');
+  if (now[0].status === 'order_complete') {
+    throw new ApiError(409, 'This booking is already done, so it cannot be cancelled.');
+  }
+  throw new ApiError(409, 'This booking is still being paid for, so it cannot be cancelled yet.');
 }
 
 /** Staff marks the session finished. */

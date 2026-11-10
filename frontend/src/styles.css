@@ -2133,10 +2133,12 @@ table.data code {
   content: '';
   position: absolute;
   z-index: 30;
-  top: -28px;
-  left: -25px;
-  width: 86px;
-  height: 86px;
+  /* Kept to the corner, outside the content box, so it never covers the
+     green label beside it. */
+  top: -32px;
+  left: -32px;
+  width: 64px;
+  height: 64px;
   border: 3px solid var(--ink);
   background: var(--green);
   clip-path: polygon(50% 0, 62% 20%, 83% 8%, 82% 31%, 100% 39%, 80% 51%, 94% 72%, 70% 70%, 64% 96%, 48% 76%, 27% 94%, 29% 69%, 4% 67%, 23% 49%, 2% 33%, 29% 29%);
@@ -6948,6 +6950,11 @@ button.link {
   right: auto;
   left: 0.8rem;
 }
+/* In Arabic the close button moves to the left, so the star moves right. */
+[dir='rtl'] .promo-card::before {
+  left: auto;
+  right: -32px;
+}
 @media (max-width: 640px) {
   .promo-backdrop .promo-card.has-media {
     grid-template-columns: minmax(0, 1fr);
@@ -6963,8 +6970,20 @@ button.link {
   .promo-media img {
     max-height: 46dvh;
   }
+  /* This card scrolls on a phone, which clips anything outside it, so the
+     star sits just inside the corner, over the picture. */
+  .promo-card.has-media::before {
+    top: 8px;
+    left: 8px;
+    width: 48px;
+    height: 48px;
+  }
+  [dir='rtl'] .promo-card.has-media::before {
+    left: auto;
+    right: 8px;
+  }
   .promo-content {
-    padding: 1.4rem 1.4rem 1.6rem;
+    padding: 2.4rem 1.4rem 1.6rem;
   }
 }
 [data-theme='dark'] .promo-backdrop .promo-card {
