@@ -7,6 +7,7 @@ import { Home } from './pages/Home';
 import { PromoModal } from './components/PromoModal';
 import { VerifyBanner } from './components/VerifyBanner';
 import { NewcomerBanner } from './components/NewcomerBanner';
+import { NotificationBell } from './components/NotificationBell';
 
 // The home shell is eager; secondary and staff pages load only when visited.
 // This keeps staff/admin code out of every customer's initial browser heap and
@@ -182,6 +183,7 @@ export function App() {
           >
             {lang === 'en' ? 'عربي' : 'EN'}
           </button>
+          {loggedIn && <NotificationBell authKey={authTick} />}
           {loggedIn ? (
             <button className="cta button nav-cta" onClick={logout}>
               {t('nav.logout')}

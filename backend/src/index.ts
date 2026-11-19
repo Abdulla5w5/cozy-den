@@ -3,6 +3,7 @@ import { env } from './config/env';
 import { pool } from './db/pool';
 import { bootstrapStaff } from './modules/staff/team.service';
 import { startReconciler } from './modules/bookings/reconcile';
+import { startReminders } from './notifications/reminders';
 
 const app = createApp();
 
@@ -16,6 +17,8 @@ const server = app.listen(env.port, () => {
   // Safety net for redirect payments: confirms bookings that were paid but
   // never came back via redirect/webhook. No-op under the mock provider.
   startReconciler();
+  // Emails (and bell notices) a reminder 3 hours before each paid booking.
+  startReminders();
 });
 
 // Graceful shutdown so in-flight requests finish and the pool closes cleanly.

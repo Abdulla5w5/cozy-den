@@ -1393,7 +1393,10 @@ export async function changeBooking(id: number, changes: BookingChanges, staffId
       await client.query(
         `UPDATE bookings
             SET table_id = $2, time_slot = $3, duration_min = $4, party_size = $5,
-                first_quote_cents = COALESCE(first_quote_cents, $6), half = $7
+                first_quote_cents = COALESCE(first_quote_cents, $6), half = $7,
+                -- A new start time gets a new reminder (with the right time);
+                -- SET reads the old time_slot here.
+                reminder_sent_at = CASE WHEN time_slot <> $3 THEN NULL ELSE reminder_sent_at END
           WHERE id = $1`,
         [id, sitting.tableId, sitting.timeSlot, sitting.durationMin, sitting.partySize, firstQuote, sitting.half],
       );

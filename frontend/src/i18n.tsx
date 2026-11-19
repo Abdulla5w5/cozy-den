@@ -12,6 +12,20 @@ const dict: Record<string, { en: string; ar: string }> = {
   'nav.staff': { en: 'Staff', ar: 'الموظفون' },
   'nav.login': { en: 'Log in', ar: 'تسجيل دخول' },
   'nav.logout': { en: 'Log out', ar: 'تسجيل خروج' },
+  // ---- notifications (header bell) ----
+  'notif.title': { en: 'Notifications', ar: 'الإشعارات' },
+  'notif.unread': { en: '{n} unread', ar: '{n} غير مقروءة' },
+  'notif.empty': { en: 'Nothing new yet.', ar: 'ما في شي جديد.' },
+  'notif.failed': { en: 'Could not load notifications.', ar: 'ما قدرنا نجيب الإشعارات.' },
+  'notif.generic': { en: 'You have a new update.', ar: 'عندك تحديث جديد.' },
+  'notif.booking_reminder.title': {
+    en: 'Reminder: your table at {time}',
+    ar: 'تذكير: طاولتك الساعة {time}',
+  },
+  'notif.booking_reminder.body': {
+    en: '{table} at {time}. Show code {code} at the counter.',
+    ar: '{table} الساعة {time}. وَرّ الكود {code} عند الكاونتر.',
+  },
   'brand.home': { en: 'Cozy Den home', ar: 'الصفحة الرئيسية لكوزي دن' },
   'lang.switch': { en: 'Switch language', ar: 'غيّر اللغة' },
   'theme.dark': { en: 'Switch to dark mode', ar: 'فعّل الوضع الليلي' },

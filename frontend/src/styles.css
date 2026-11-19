@@ -9123,3 +9123,149 @@ a.ev-ticket:active {
   background: rgba(36, 36, 36, 0.78);
   color: #fff;
 }
+
+/* ---- Notification bell (header) ---- */
+.notif {
+  position: relative;
+}
+.notif-button {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--outline-variant);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.notif-button:hover,
+.notif-button[aria-expanded='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  inset-inline-end: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 60;
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(70vh, 460px);
+  overflow-y: auto;
+  background: var(--surface-container, var(--surface));
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: 0.75rem;
+}
+.notif-heading {
+  margin: 0 0 0.5rem;
+  font-weight: 800;
+}
+.notif-empty {
+  margin: 0.25rem 0;
+  color: var(--muted);
+}
+.notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.notif-item {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: start;
+  padding: 0.6rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid var(--outline-variant);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.notif-item:hover {
+  border-color: var(--primary);
+}
+.notif-item.is-new {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.notif-item-title {
+  font-weight: 700;
+}
+.notif-item-body {
+  font-size: 0.9rem;
+}
+.notif-item-time {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+[data-theme='dark'] .notif-button {
+  border-color: rgba(246, 239, 227, 0.72);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ink);
+  box-shadow: 2px 2px 0 rgba(246, 239, 227, 0.72);
+}
+@media (max-width: 720px) {
+  .notif-button {
+    width: 36px;
+    height: 36px;
+  }
+  /* On a phone the bell sits mid-row, so the list hangs from the bottom of
+     the (sticky) header, full width with the page's 16px gutter. */
+  .notif {
+    position: static;
+  }
+  .notif-panel {
+    top: calc(100% + 6px);
+    inset-inline: 16px;
+    width: auto;
+  }
+}
+
+/* Signed-in header fit. The side tracks were plain 1fr, and a flex row's
+   min-content is only its widest child, so the actions (theme, language, bell,
+   log out) could be wider than their track and slide under the last nav link.
+   The side tracks now never go below their content, and the signed-in nav
+   tightens its gaps, then scrolls, rather than overlapping. */
+@media (min-width: 1121px) {
+  .topbar {
+    grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
+    column-gap: 1rem;
+  }
+}
+/* From 800px the header is one row; the signed-in nav has the most links, so
+   it tightens and, if it must, scrolls instead of running under the buttons. */
+@media (min-width: 800px) {
+  .topbar .mainnav.authed {
+    gap: clamp(0.9rem, 1.6vw, 2.16rem);
+    /* Start-aligned so a scrolling row can reach its first link; when it fits,
+       the track is exactly its width and nothing moves. */
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    max-width: 100%;
+  }
+  .topbar .mainnav.authed::-webkit-scrollbar {
+    display: none;
+  }
+}
