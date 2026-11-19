@@ -9253,9 +9253,14 @@ a.ev-ticket:active {
     column-gap: 1rem;
   }
 }
-/* From 800px the header is one row; the signed-in nav has the most links, so
-   it tightens and, if it must, scrolls instead of running under the buttons. */
-@media (min-width: 800px) {
+/* Above phone width the signed-in nav has the most links, so it tightens and,
+   if it must, scrolls sideways (as it does on phones) instead of running under
+   the buttons or wrapping "Our Calendar" onto two lines. */
+@media (min-width: 721px) {
+  .topbar .mainnav.authed a {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
   .topbar .mainnav.authed {
     gap: clamp(0.9rem, 1.6vw, 2.16rem);
     /* Start-aligned so a scrolling row can reach its first link; when it fits,
