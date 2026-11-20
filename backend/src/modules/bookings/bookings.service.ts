@@ -76,8 +76,48 @@ function todayIso(): string {
 export const LATE_ENTRY_DAYS = 2;
 
 /** The earliest service date staff may enter a booking for (UTC date = service date). */
-function earliestLateEntryIso(now: number = Date.now()): string {
+export function earliestLateEntryIso(now: number = Date.now()): string {
   return new Date(now - LATE_ENTRY_DAYS * 864e5).toISOString().slice(0, 10);
+}
+
+/** A start already past that is not the half hour running now. */
+function isPastStart(date: string, slot: string, now: number = Date.now()): boolean {
+  return slotHasStarted(date, slot, now) && slot !== currentSlot(date, now);
+}
+
+const SAT_HERE_THEN =
+  'Another group sat at this table then (since marked done). Pick a later start or another table.';
+
+/**
+ * Whether a sitting marked done held this table (or this half) during the
+ * given window. The overlap constraint ignores done bookings, since Done frees
+ * the table for what comes next; for a time already past, the span the group
+ * actually held (start until marked done, to the half hour) still counts.
+ * Done bookings are not racing anyone, so a plain check is enough here.
+ */
+async function finishedSittingOverlaps(
+  db: Pick<PoolClient, 'query'> | null,
+  s: { tableId: number; date: string; timeSlot: string; durationMin: number; half: 1 | 2 | null; exceptId?: number },
+): Promise<boolean> {
+  const sql = `
+    SELECT 1
+      FROM bookings b
+     CROSS JOIN LATERAL (
+       SELECT booking_window(b.booking_date, b.time_slot, b.duration_min) AS bw,
+              -- Kuwait is a whole number of hours from UTC, so the half hour
+              -- floors the same either way.
+              (to_timestamp(floor(extract(epoch FROM b.done_at) / 1800) * 1800)
+                 AT TIME ZONE 'Asia/Kuwait') AS until
+     ) held
+     WHERE b.table_id = $1 AND b.booking_date = $2 AND b.status = 'order_complete'
+       AND b.done_at IS NOT NULL AND b.id IS DISTINCT FROM $6
+       AND ($5::smallint IS NULL OR b.half IS NULL OR b.half = $5::smallint)
+       AND held.until > lower(held.bw)
+       AND tsrange(lower(held.bw), LEAST(upper(held.bw), held.until)) && booking_window($2::date, $3, $4)
+     LIMIT 1`;
+  const params = [s.tableId, s.date, s.timeSlot, s.durationMin, s.half, s.exceptId ?? null];
+  const { rows } = db ? await db.query(sql, params) : await query(sql, params);
+  return rows.length > 0;
 }
 
 async function assertTableExists(
@@ -103,9 +143,13 @@ async function assertTableExists(
  * Each half is tried in turn and the database decides: it refuses any overlap,
  * so two groups racing for the last half cannot both get it.
  */
-async function insertSitting(p: InsertParams, share: boolean): Promise<number> {
+async function insertSitting(
+  p: InsertParams,
+  share: boolean,
+  halves: readonly (1 | 2)[] = [1, 2],
+): Promise<number> {
   if (!share) return insertBooking(p);
-  for (const half of [1, 2] as const) {
+  for (const half of halves) {
     try {
       return await insertBooking({ ...p, half });
     } catch (err) {
@@ -184,7 +228,8 @@ interface InsertParams {
   guestName: string;
   guestEmail: string | null;
   guestPhone: string | null;
-  status: 'pending_payment' | 'pending';
+  /** 'arrived' only for a staff entry made after the group sat down. */
+  status: 'pending_payment' | 'pending' | 'arrived';
   source: 'online' | 'staff_manual';
   feeCents: number;
   totalCents: number;
@@ -972,7 +1017,8 @@ async function releaseOwnNewcomerHolds(email: string): Promise<void> {
 
 /**
  * Staff manual entry for phone/WhatsApp bookings: no payment step, created
- * directly as 'pending' with source 'staff_manual'. Contact may be a phone
+ * directly as 'pending' with source 'staff_manual' ('arrived' when entered
+ * late, since the group has already sat down). Contact may be a phone
  * number or email — no receipt email is attempted.
  *
  * Unlike a customer, staff may start one in the half hour already running (a
@@ -993,8 +1039,7 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     );
   }
   // The running half hour is a walk-in, not a late entry.
-  const enteredLate =
-    slotHasStarted(input.date, input.timeSlot, now) && input.timeSlot !== currentSlot(input.date, now);
+  const enteredLate = isPastStart(input.date, input.timeSlot, now);
   const table = await assertTableExists(input.tableId, { activeOnly: false });
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
     share: input.share === true,
@@ -1003,6 +1048,23 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
   // phone column, like an online booking's; anything else stays as before.
   const phone = normalizeKuwaitiPhone(input.contact);
 
+  // A late start must also miss any group that sat there then and has since
+  // been marked done (the overlap rule no longer sees those).
+  let halvesFree: (1 | 2)[] = [1, 2];
+  if (enteredLate) {
+    const at = { tableId: input.tableId, date: input.date, timeSlot: input.timeSlot, durationMin: sitting.durationMin };
+    if (input.share === true) {
+      const free: (1 | 2)[] = [];
+      for (const half of [1, 2] as const) {
+        if (!(await finishedSittingOverlaps(null, { ...at, half }))) free.push(half);
+      }
+      if (free.length === 0) throw new ApiError(409, SAT_HERE_THEN);
+      halvesFree = free;
+    } else if (await finishedSittingOverlaps(null, { ...at, half: null })) {
+      throw new ApiError(409, SAT_HERE_THEN);
+    }
+  }
+
   const bookingId = await insertSitting({
     tableId: input.tableId,
     date: input.date,
@@ -1010,7 +1072,8 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     guestName: input.guestName,
     guestEmail: phone ? null : input.contact,
     guestPhone: phone,
-    status: 'pending',
+    // Entered after it started: the group is (or was) at the table already.
+    status: enteredLate ? 'arrived' : 'pending',
     source: 'staff_manual',
     feeCents: 0,
     totalCents: 0,
@@ -1018,7 +1081,7 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     partySize: sitting.partySize,
     staffNotes: input.notes,
     enteredLate,
-  }, input.share === true);
+  }, input.share === true, halvesFree);
 
   const view = await getBookingById(bookingId);
   if (!view) throw new ApiError(500, 'Booking vanished after creation.');
@@ -1199,10 +1262,12 @@ interface ChangeableRow {
   first_quote_cents: number | null;
   counter_cents: number;
   half: 1 | 2 | null;
+  entered_late: boolean;
 }
 
 const CHANGEABLE_SELECT = `SELECT id, table_id, to_char(booking_date, 'YYYY-MM-DD') AS date, time_slot,
-         duration_min, party_size, status, source, host_id, total_cents, promo_code, first_quote_cents, counter_cents, half
+         duration_min, party_size, status, source, host_id, total_cents, promo_code, first_quote_cents, counter_cents, half,
+         entered_late
     FROM bookings WHERE id = $1`;
 
 /** Why this booking cannot be changed at all, or null when it can. */
@@ -1212,8 +1277,22 @@ function changeRefusal(row: ChangeableRow): string | null {
   if (row.status !== 'pending' && row.status !== 'arrived') {
     return 'This booking is finished, so it cannot be changed.';
   }
-  if (row.date < todayIso()) return 'This booking is from an earlier day.';
+  // Staff may correct a booking from tonight or the two nights before: the
+  // same window as entering one late.
+  if (row.date < earliestLateEntryIso()) {
+    return `This booking is more than ${LATE_ENTRY_DAYS} days old, so it cannot be changed.`;
+  }
   return null;
+}
+
+/**
+ * Whether this booking's start may move to a time that has already passed. A
+ * booking entered late, or one from an earlier night, is being corrected after
+ * the fact, so any free start on its night is fair. Tonight's other bookings
+ * keep the walk-in rule: the half hour running now, and no earlier.
+ */
+function mayMoveToPastStart(row: ChangeableRow): boolean {
+  return row.entered_late || row.date < todayIso();
 }
 
 interface Sitting {
@@ -1255,8 +1334,14 @@ async function resolveChanges(
   if (row.host_id !== null && (newTime || newLength)) {
     throw new ApiError(409, 'This booking has a game host, so its time cannot be changed here.');
   }
-  // Late arrivals move to the half hour running now, and no earlier.
-  if (newTime && slotHasStarted(row.date, timeSlot) && timeSlot !== currentSlot(row.date)) {
+  // Late arrivals move to the half hour running now, and no earlier — unless
+  // the booking is being corrected after the fact (see mayMoveToPastStart).
+  if (
+    newTime &&
+    !mayMoveToPastStart(row) &&
+    slotHasStarted(row.date, timeSlot) &&
+    timeSlot !== currentSlot(row.date)
+  ) {
     throw new ApiError(400, 'That start time has passed. Pick the current half hour or later.');
   }
   if ((newTime || newLength) && !isValidDuration(timeSlot, durationMin)) {
@@ -1275,6 +1360,22 @@ async function resolveChanges(
     if (partySize > SHARE_PARTY_MAX) {
       throw new ApiError(400, `A shared half is for up to ${SHARE_PARTY_MAX} people.`);
     }
+  }
+
+  // Corrected after the fact onto a time already past (a new start, or any
+  // change to an earlier night's booking): it must also miss any group that sat
+  // there then and has since been marked done. A group moving table mid-session
+  // tonight keeps its start but only arrives at the new table now, so a group
+  // that used that table earlier is no obstacle.
+  const placementChanged =
+    newTime || newLength || tableId !== row.table_id || half !== row.half;
+  if (
+    placementChanged &&
+    (newTime || row.date < todayIso()) &&
+    isPastStart(row.date, timeSlot) &&
+    (await finishedSittingOverlaps(db, { tableId, date: row.date, timeSlot, durationMin, half, exceptId: row.id }))
+  ) {
+    throw new ApiError(409, SAT_HERE_THEN);
   }
 
   return {
@@ -1359,6 +1460,7 @@ export async function bookingChangeOptions(id: number) {
     keepSlot: row.time_slot,
     alsoTableId: row.table_id,
     withHalves: true,
+    late: mayMoveToPastStart(row),
   });
   return {
     booking: {

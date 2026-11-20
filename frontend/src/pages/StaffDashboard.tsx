@@ -801,12 +801,14 @@ function ChangeBooking({
     return h ? { ...tb, ...h, walkInSlot: h.walkInSlot ?? null } : tb;
   };
 
-  /** A start this part can take: free, running now, or the booking's own. */
+  /** A start this part can take: free, running now, the booking's own, or —
+   *  for a booking entered late or from an earlier night — one already passed. */
   const startsOn = (whole: TableAvailability, part: 1 | 2 | null = half) => {
     const tb = partOf(whole, part);
     return [
       original && tb.maxDuration[original.timeSlot] ? original.timeSlot : null,
       tb.walkInSlot,
+      ...(tb.lateSlots ?? []),
       ...tb.freeSlots,
     ]
       .filter((s, i, all): s is string => !!s && all.indexOf(s) === i)
@@ -1010,7 +1012,9 @@ function ChangeBooking({
               <option key={s} value={s}>
                 {table && s === partOf(table, half).walkInSlot && s !== original?.timeSlot
                   ? `${s} (${t('staff.nowSlot')})`
-                  : s}
+                  : table && s !== original?.timeSlot && partOf(table, half).lateSlots?.includes(s)
+                    ? `${s} (${t('staff.startedSlot')})`
+                    : s}
               </option>
             ))}
           </select>

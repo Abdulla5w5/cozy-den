@@ -1287,7 +1287,8 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.source': { en: 'Source', ar: 'المصدر' },
   'staff.start': { en: 'Start time', ar: 'وقت البداية' },
   'staff.nowSlot': { en: 'now', ar: 'الحين' },
-  'staff.lateGroup': { en: 'Already started', ar: 'بدأ قبل' },
+  'staff.lateGroup': { en: 'Already started', ar: 'بدأ بالفعل' },
+  'staff.startedSlot': { en: 'already started', ar: 'بدأ بالفعل' },
   'staff.lateOption': { en: 'entered late', ar: 'إدخال متأخر' },
   'staff.lateTag': { en: 'Entered late', ar: 'أُدخل متأخر' },
   'staff.lateNote': {

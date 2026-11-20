@@ -7,7 +7,9 @@ import {
   overlaps,
   toMinutes,
   slotHasStarted,
+  slotStartsAt,
   currentSlot,
+  STEP_MIN,
 } from '../../utils/slots';
 import { getTableFee, TableFee } from '../../utils/pricing';
 import { isShareable } from '../../utils/share';
@@ -71,6 +73,18 @@ export interface PartSlots {
    * free, for entering a booking after the group sat down.
    */
   lateSlots?: string[];
+}
+
+/**
+ * Minutes a sitting marked done actually held its table: from its start until
+ * it was marked done, rounded down to the half hour (a group that sat down in
+ * the half hour the table was freed is entered at that half hour, as a walk-in
+ * would be), and never more than it was booked for.
+ */
+export function heldUntilDone(date: string, slot: string, durationMin: number, doneAt: Date): number {
+  const start = slotStartsAt(date, slot);
+  const doneFloor = Math.floor(doneAt.getTime() / (STEP_MIN * 60_000)) * STEP_MIN * 60_000;
+  return Math.min(durationMin, Math.round((doneFloor - start) / 60_000));
 }
 
 /**
@@ -142,10 +156,37 @@ export async function getAvailability(
     byTable.get(b.table_id)!.push({ start: b.time_slot, duration: b.duration_min, half: b.half });
   }
 
+  // For starts already past (staff entering late): a sitting marked done still
+  // held its table from its start until it was marked done, to the half hour.
+  const doneByTable = new Map<number, Held[]>();
+  // An earlier night (service date = UTC date): everything there is a correction.
+  const pastNight = date < new Date(now).toISOString().slice(0, 10);
+  if (late) {
+    const { rows: done } = await query<{
+      table_id: number;
+      time_slot: string;
+      duration_min: number;
+      half: 1 | 2 | null;
+      done_at: Date;
+    }>(
+      `SELECT table_id, time_slot, duration_min, half, done_at
+         FROM bookings
+        WHERE booking_date = $1 AND status = 'order_complete' AND done_at IS NOT NULL
+          AND id IS DISTINCT FROM $2`,
+      [date, exceptBookingId ?? null],
+    );
+    for (const b of done) {
+      const held = heldUntilDone(date, b.time_slot, b.duration_min, b.done_at);
+      if (held <= 0) continue;
+      if (!doneByTable.has(b.table_id)) doneByTable.set(b.table_id, []);
+      doneByTable.get(b.table_id)!.push({ start: b.time_slot, duration: held, half: b.half });
+    }
+  }
+
   const pastSlots = START_TIMES.filter((s) => slotHasStarted(date, s, now));
 
   /** The starts open for one part of a table, given the bookings that block it. */
-  const slotsFor = (existing: Held[]): PartSlots => {
+  const slotsFor = (existing: Held[], done: Held[] = []): PartSlots => {
     const freeSlots: string[] = [];
     const takenSlots: string[] = [];
     const maxDuration: Record<string, number> = {};
@@ -155,14 +196,21 @@ export async function getAvailability(
       const started = pastSlots.includes(s);
       if (started && s !== running && s !== keepSlot && !late) continue;
       const shortest = minDurationFor(s);
-      if (existing.some((b) => overlaps(s, shortest, b.start, b.duration))) {
+      // A start already past also yields to sittings since marked done —
+      // except the booking's own start tonight: a group moving table mid-session
+      // only arrives at the new table now.
+      const blockers =
+        started && s !== running && !(s === keepSlot && !pastNight)
+          ? existing.concat(done)
+          : existing;
+      if (blockers.some((b) => overlaps(s, shortest, b.start, b.duration))) {
         if (!started) takenSlots.push(s);
         continue;
       }
       // Room runs out at whichever comes first: closing, the six-hour ceiling,
       // or the next booking on this part of the table.
       const sMin = toMinutes(s);
-      const nextStart = existing
+      const nextStart = blockers
         .map((b) => toMinutes(b.start))
         .filter((m) => m >= sMin)
         .reduce((lo, m) => Math.min(lo, m), Number.POSITIVE_INFINITY);
@@ -180,8 +228,9 @@ export async function getAvailability(
 
   const mapped = tables.map((t) => {
     const existing = byTable.get(t.id) ?? [];
+    const done = doneByTable.get(t.id) ?? [];
     // The whole table is blocked by anything on it, either half included.
-    const whole = slotsFor(existing);
+    const whole = slotsFor(existing, done);
     const row: TableAvailability = {
       tableId: t.id,
       label: t.label,
@@ -194,7 +243,10 @@ export async function getAvailability(
       // A half is blocked by a whole-table booking or one on the same half.
       const halves = ([1, 2] as const).map((half) => ({
         half,
-        ...slotsFor(existing.filter((b) => b.half === null || b.half === half)),
+        ...slotsFor(
+          existing.filter((b) => b.half === null || b.half === half),
+          done.filter((b) => b.half === null || b.half === half),
+        ),
       }));
       const open = (s: string) => halves.filter((h) => h.maxDuration[s] !== undefined);
       const freeSlots = START_TIMES.filter((s) => halves.some((h) => h.freeSlots.includes(s)));

@@ -60,6 +60,7 @@ import {
   bookingChangeOptions,
   changeBooking,
   createStaffBooking,
+  earliestLateEntryIso,
   getBookingById,
   previewBookingChange,
 } from '../bookings/bookings.service';
@@ -96,7 +97,8 @@ staffRouter.get(
   async (req, res, next) => {
     try {
       const { date } = req.query as unknown as { date: string };
-      const { tables } = await getAvailability(date, { late: true });
+      // Passed starts only where staff may still enter one (the last 2 nights).
+      const { tables } = await getAvailability(date, { late: date >= earliestLateEntryIso() });
       res.setHeader('Cache-Control', 'no-store');
       res.json({ date, availability: tables });
     } catch (err) {

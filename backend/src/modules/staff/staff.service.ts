@@ -177,7 +177,11 @@ async function transition(
   // Guarded on the status just read: a Cancel landing between the two
   // statements must not be undone by a Confirm or Mark done.
   const { rowCount } = await query(
-    `UPDATE bookings SET status = $1 WHERE id = $2 AND status = $3`,
+    // Marking done records when, so past times keep the span the group held.
+    `UPDATE bookings
+        SET status = $1,
+            done_at = CASE WHEN $1 = 'order_complete' THEN now() ELSE done_at END
+      WHERE id = $2 AND status = $3`,
     [to, booking.id, from],
   );
   if (!rowCount) {
