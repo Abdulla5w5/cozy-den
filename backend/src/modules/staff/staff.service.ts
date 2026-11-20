@@ -1,4 +1,4 @@
-import { query } from '../../db/pool';
+import { query, withTransaction, TABLE_LOCK } from '../../db/pool';
 import { ApiError } from '../../middleware/error';
 
 export interface TodayBooking {
@@ -176,14 +176,25 @@ async function transition(
   }
   // Guarded on the status just read: a Cancel landing between the two
   // statements must not be undone by a Confirm or Mark done.
-  const { rowCount } = await query(
-    // Marking done records when, so past times keep the span the group held.
-    `UPDATE bookings
+  // Marking done records when, so past times keep the span the group held.
+  const update = `UPDATE bookings
         SET status = $1,
             done_at = CASE WHEN $1 = 'order_complete' THEN now() ELSE done_at END
-      WHERE id = $2 AND status = $3`,
-    [to, booking.id, from],
-  );
+      WHERE id = $2 AND status = $3`;
+  // Done frees the table, so it waits for the table's lock: a late entry or
+  // correction checking for done groups there finishes its save first.
+  const { rowCount } =
+    to === 'order_complete'
+      ? await withTransaction(async (client) => {
+          const { rows: locked } = await client.query<{ table_id: number }>(
+            'SELECT table_id, pg_advisory_xact_lock($1, table_id) FROM bookings WHERE id = $2',
+            [TABLE_LOCK, booking.id],
+          );
+          // A Change may have moved it to another table meanwhile: then the
+          // lock held is the wrong one, and staff try again.
+          return client.query(`${update} AND table_id = $4`, [to, booking.id, from, locked[0]?.table_id]);
+        })
+      : await query(update, [to, booking.id, from]);
   if (!rowCount) {
     throw new ApiError(409, 'This booking was just changed by someone else. Refresh and try again.');
   }

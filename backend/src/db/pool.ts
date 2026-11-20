@@ -76,3 +76,14 @@ export async function withTransaction<T>(
     client.release(broken);
   }
 }
+
+/**
+ * Advisory-lock namespace for "one table at a time". Marking a group done takes
+ * it, and so does anything that checks for done groups before saving a booking
+ * onto a time already past (late entries, corrections). Without it, a group
+ * marked done between that check and the save would leave the overlap rule
+ * (which ignores done bookings) and let both through. Always taken per
+ * transaction (pg_advisory_xact_lock), so commit releases it, pooler or not.
+ */
+export const TABLE_LOCK = 7301;
+

@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { query, withTransaction } from '../../db/pool';
+import { query, withTransaction, TABLE_LOCK } from '../../db/pool';
 import { env } from '../../config/env';
 import { ApiError } from '../../middleware/error';
 import { generateVerificationCode } from '../../utils/code';
@@ -93,7 +93,8 @@ const SAT_HERE_THEN =
  * given window. The overlap constraint ignores done bookings, since Done frees
  * the table for what comes next; for a time already past, the span the group
  * actually held (start until marked done, to the half hour) still counts.
- * Done bookings are not racing anyone, so a plain check is enough here.
+ * Callers hold the table's lock (TABLE_LOCK) from this check until their save,
+ * so a group cannot be marked done in between.
  */
 async function finishedSittingOverlaps(
   db: Pick<PoolClient, 'query'> | null,
@@ -147,11 +148,12 @@ async function insertSitting(
   p: InsertParams,
   share: boolean,
   halves: readonly (1 | 2)[] = [1, 2],
+  db: Pick<PoolClient, 'query'> | null = null,
 ): Promise<number> {
-  if (!share) return insertBooking(p);
+  if (!share) return insertBooking(p, db);
   for (const half of halves) {
     try {
-      return await insertBooking({ ...p, half });
+      return await insertBooking({ ...p, half }, db);
     } catch (err) {
       if (!(err instanceof ApiError && err.message === ALREADY_BOOKED)) throw err;
     }
@@ -279,13 +281,19 @@ const ALREADY_BOOKED = 'That table is already booked for an overlapping session.
  *
  * The backoff is jittered so retrying clients do not simply collide again.
  */
-async function insertBooking(p: InsertParams): Promise<number> {
+async function insertBooking(
+  p: InsertParams,
+  // A transaction holding the table's lock. Each attempt runs in a savepoint,
+  // so a refused insert can be retried (or the other half tried) without
+  // losing the transaction or its lock.
+  db: Pick<PoolClient, 'query'> | null = null,
+): Promise<number> {
   const MAX_ATTEMPTS = 5;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const code = generateVerificationCode();
     try {
-      const { rows } = await query<{ id: number }>(
-        `INSERT INTO bookings
+      if (db) await db.query('SAVEPOINT insert_booking');
+      const sql = `INSERT INTO bookings
            (table_id, booking_date, time_slot, guest_name, guest_email, guest_phone,
             verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
             duration_min, party_size, terms_accepted_at, promo_code, newcomer_discount, user_id,
@@ -293,11 +301,15 @@ async function insertBooking(p: InsertParams): Promise<number> {
             entered_late)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,
                  CASE WHEN $14 THEN now() END, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
-         RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true, p.userId ?? null, p.retryTokenHash ?? null, p.hostId ?? null, p.hostFeeCents ?? 0, newCheckinToken(), p.hostKind ?? null, p.staffNotes || null, p.half ?? null, p.enteredLate === true]
-      );
+         RETURNING id`;
+      const values = [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true, p.userId ?? null, p.retryTokenHash ?? null, p.hostId ?? null, p.hostFeeCents ?? 0, newCheckinToken(), p.hostKind ?? null, p.staffNotes || null, p.half ?? null, p.enteredLate === true];
+      const { rows } = db
+        ? await db.query<{ id: number }>(sql, values)
+        : await query<{ id: number }>(sql, values);
+      if (db) await db.query('RELEASE SAVEPOINT insert_booking');
       return rows[0].id;
     } catch (err) {
+      if (db) await db.query('ROLLBACK TO SAVEPOINT insert_booking');
       const e = err as { code?: string; constraint?: string };
       if (e.code === '23P01' && e.constraint === 'bookings_no_overlap') {
         throw new ApiError(409, ALREADY_BOOKED);
@@ -1048,24 +1060,7 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
   // phone column, like an online booking's; anything else stays as before.
   const phone = normalizeKuwaitiPhone(input.contact);
 
-  // A late start must also miss any group that sat there then and has since
-  // been marked done (the overlap rule no longer sees those).
-  let halvesFree: (1 | 2)[] = [1, 2];
-  if (enteredLate) {
-    const at = { tableId: input.tableId, date: input.date, timeSlot: input.timeSlot, durationMin: sitting.durationMin };
-    if (input.share === true) {
-      const free: (1 | 2)[] = [];
-      for (const half of [1, 2] as const) {
-        if (!(await finishedSittingOverlaps(null, { ...at, half }))) free.push(half);
-      }
-      if (free.length === 0) throw new ApiError(409, SAT_HERE_THEN);
-      halvesFree = free;
-    } else if (await finishedSittingOverlaps(null, { ...at, half: null })) {
-      throw new ApiError(409, SAT_HERE_THEN);
-    }
-  }
-
-  const bookingId = await insertSitting({
+  const params: InsertParams = {
     tableId: input.tableId,
     date: input.date,
     timeSlot: input.timeSlot,
@@ -1081,7 +1076,29 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     partySize: sitting.partySize,
     staffNotes: input.notes,
     enteredLate,
-  }, input.share === true, halvesFree);
+  };
+
+  // A late start must also miss any group that sat there then and has since
+  // been marked done (the overlap rule no longer sees those). The table's lock
+  // is held from that check to the save, so Mark done cannot land in between.
+  const bookingId = !enteredLate
+    ? await insertSitting(params, input.share === true)
+    : await withTransaction(async (db) => {
+        await db.query('SELECT pg_advisory_xact_lock($1, $2)', [TABLE_LOCK, input.tableId]);
+        const at = { tableId: input.tableId, date: input.date, timeSlot: input.timeSlot, durationMin: sitting.durationMin };
+        let halvesFree: (1 | 2)[] = [1, 2];
+        if (input.share === true) {
+          const free: (1 | 2)[] = [];
+          for (const half of [1, 2] as const) {
+            if (!(await finishedSittingOverlaps(db, { ...at, half }))) free.push(half);
+          }
+          if (free.length === 0) throw new ApiError(409, SAT_HERE_THEN);
+          halvesFree = free;
+        } else if (await finishedSittingOverlaps(db, { ...at, half: null })) {
+          throw new ApiError(409, SAT_HERE_THEN);
+        }
+        return insertSitting(params, input.share === true, halvesFree, db);
+      });
 
   const view = await getBookingById(bookingId);
   if (!view) throw new ApiError(500, 'Booking vanished after creation.');
@@ -1428,6 +1445,9 @@ async function priceChangeFor(
   firstQuoteCents: number | null,
 ): Promise<PriceChange | null> {
   if (row.total_cents <= 0) return null;
+  // An earlier night is a correction to the record: the guests have left, so
+  // there is nothing to collect or hand back.
+  if (row.date < todayIso()) return null;
   const { codeMissing, options } = await quoteOptionsFor(row);
   if (codeMissing) {
     return {
@@ -1494,17 +1514,27 @@ export async function changeBooking(id: number, changes: BookingChanges, staffId
   const { rows: before } = await query<ChangeableRow>(CHANGEABLE_SELECT, [id]);
   if (!before[0]) throw new ApiError(404, 'No booking matches.');
   const firstQuote =
-    before[0].total_cents > 0 && before[0].first_quote_cents === null && changeRefusal(before[0]) === null
+    before[0].total_cents > 0 &&
+    before[0].first_quote_cents === null &&
+    before[0].date >= todayIso() &&
+    changeRefusal(before[0]) === null
       ? await quoteCurrent(before[0])
       : null;
 
   let row: ChangeableRow;
   let after: Sitting;
   try {
+    // The table it ends up on is locked first (as Mark done does), so a group
+    // there cannot be marked done between the check for done groups and the save.
+    const target = changes.tableId ?? before[0].table_id;
     ({ row, after } = await withTransaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock($1, $2)', [TABLE_LOCK, target]);
       const { rows } = await client.query<ChangeableRow>(`${CHANGEABLE_SELECT} FOR UPDATE`, [id]);
       const locked = rows[0];
       if (!locked) throw new ApiError(404, 'No booking matches.');
+      if (changes.tableId === undefined && locked.table_id !== target) {
+        throw new ApiError(409, 'Someone else just changed this booking. Check it and try again.');
+      }
       const seen = changes.expected;
       if (
         seen &&
