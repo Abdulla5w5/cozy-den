@@ -65,6 +65,7 @@ import {
 } from '../bookings/bookings.service';
 import { isoDate, isoMonth } from '../../utils/dates';
 import { isValidStart } from '../../utils/slots';
+import { getAvailability } from '../tables/tables.service';
 
 // Dashboard DATA endpoints. Auth (login/logout/me) lives in /api/auth.
 // Every route requires a signed-in user flagged as staff in the database.
@@ -84,6 +85,25 @@ staffRouter.get('/bookings', requireStaff, validate(dateQuery, 'query'), async (
     next(err);
   }
 });
+
+// GET /api/staff/availability?date=YYYY-MM-DD — the customer view plus, per
+// table, the free starts already passed (lateSlots), so staff can enter a
+// booking for a group that sat down before it was typed in.
+staffRouter.get(
+  '/availability',
+  requireStaff,
+  validate(z.object({ date: isoDate() }), 'query'),
+  async (req, res, next) => {
+    try {
+      const { date } = req.query as unknown as { date: string };
+      const { tables } = await getAvailability(date, { late: true });
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ date, availability: tables });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // POST /api/staff/bookings — manual entry for phone/WhatsApp bookings
 // (source: staff_manual, no payment step).

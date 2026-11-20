@@ -9274,3 +9274,15 @@ a.ev-ticket:active {
     display: none;
   }
 }
+
+/* Staff: a booking entered after it started. */
+.late-pill {
+  margin: 0.3rem 0 0;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+  white-space: nowrap;
+}
+.late-note {
+  margin: 0.5rem 0 0;
+}

@@ -66,6 +66,11 @@ export interface PartSlots {
   takenSlots: string[];
   walkInSlot: string | null;
   maxDuration: Record<string, number>;
+  /**
+   * Staff only (the `late` option): starts that have already passed and were
+   * free, for entering a booking after the group sat down.
+   */
+  lateSlots?: string[];
 }
 
 /**
@@ -88,7 +93,15 @@ export async function getAvailability(
     keepSlot,
     alsoTableId,
     withHalves = false,
-  }: { exceptBookingId?: number; keepSlot?: string; alsoTableId?: number; withHalves?: boolean } = {},
+    late = false,
+  }: {
+    exceptBookingId?: number;
+    keepSlot?: string;
+    alsoTableId?: number;
+    withHalves?: boolean;
+    /** Staff entering a booking late: also list the free starts already passed. */
+    late?: boolean;
+  } = {},
 ): Promise<{ tables: TableAvailability[]; fee: TableFee }> {
   const tables = await getTables();
   // A booking on a table since retired can still be edited where it stands.
@@ -136,10 +149,11 @@ export async function getAvailability(
     const freeSlots: string[] = [];
     const takenSlots: string[] = [];
     const maxDuration: Record<string, number> = {};
+    const lateSlots: string[] = [];
     let walkInSlot: string | null = null;
     for (const s of START_TIMES) {
       const started = pastSlots.includes(s);
-      if (started && s !== running && s !== keepSlot) continue;
+      if (started && s !== running && s !== keepSlot && !late) continue;
       const shortest = minDurationFor(s);
       if (existing.some((b) => overlaps(s, shortest, b.start, b.duration))) {
         if (!started) takenSlots.push(s);
@@ -158,9 +172,10 @@ export async function getAvailability(
       const fits = allowedDurations(s).filter((d) => d <= room);
       if (!started) freeSlots.push(s);
       else if (s === running) walkInSlot = s;
+      else if (late && s !== keepSlot) lateSlots.push(s);
       maxDuration[s] = fits.length ? fits[fits.length - 1] : shortest;
     }
-    return { freeSlots, takenSlots, walkInSlot, maxDuration };
+    return { freeSlots, takenSlots, walkInSlot, maxDuration, ...(late ? { lateSlots } : {}) };
   };
 
   const mapped = tables.map((t) => {
@@ -195,6 +210,9 @@ export async function getAvailability(
         takenSlots: START_TIMES.filter((s) => !pastSlots.includes(s) && !freeSlots.includes(s)),
         walkInSlot: halves.find((h) => h.walkInSlot)?.walkInSlot ?? null,
         maxDuration,
+        ...(late
+          ? { lateSlots: START_TIMES.filter((s) => halves.some((h) => h.lateSlots?.includes(s))) }
+          : {}),
         otherHalfBooked: freeSlots.filter((s) => halves.filter((h) => h.freeSlots.includes(s)).length === 1),
       };
     }

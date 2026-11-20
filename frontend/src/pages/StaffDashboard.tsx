@@ -38,6 +38,12 @@ interface Customer {
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
+/** Staff may enter a booking that already started, up to this many days back
+ *  (the server enforces the same limit). */
+const LATE_ENTRY_DAYS = 2;
+function earliestLateEntryIso() {
+  return new Date(Date.now() - LATE_ENTRY_DAYS * 864e5).toISOString().slice(0, 10);
+}
 function thisMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -346,9 +352,12 @@ function TodayTab() {
       {showForm && (
         <ManualBookingForm
           defaultDate={date}
-          onCreated={() => {
+          onCreated={(createdDate) => {
             setShowForm(false);
-            load();
+            // Show the day it was booked on: a late entry for last night would
+            // otherwise vanish from today's list and look like it failed.
+            if (createdDate !== date) setDate(createdDate);
+            else load();
           }}
         />
       )}
@@ -455,6 +464,7 @@ function TodayTab() {
               </td>
               <td>
                 <span className="pill">{t(`source.${b.source}`)}</span>
+                {b.enteredLate && <span className="pill late-pill">{t('staff.lateTag')}</span>}
               </td>
               <td>
                 {money(b.totalCents)}
@@ -1653,12 +1663,15 @@ function ManualBookingForm({
   onCreated,
 }: {
   defaultDate: string;
-  onCreated: () => void;
+  onCreated: (date: string) => void;
 }) {
   const { t } = useI18n();
   const [tables, setTables] = useState<Table[]>([]);
   const [availability, setAvailability] = useState<TableAvailability[]>([]);
-  const [date, setDate] = useState(defaultDate);
+  // Never open on a day older than staff may enter (the server refuses those).
+  const [date, setDate] = useState(() =>
+    defaultDate < earliestLateEntryIso() ? earliestLateEntryIso() : defaultDate,
+  );
   const [tableId, setTableId] = useState<number | ''>('');
   const [timeSlot, setTimeSlot] = useState('');
   const [guestName, setGuestName] = useState('');
@@ -1684,7 +1697,8 @@ function ManualBookingForm({
     if (!date) return;
     let active = true;
     api
-      .get<{ availability: TableAvailability[] }>(`/tables/availability?date=${date}`)
+      // The staff view: also the free starts already passed, for entering late.
+      .get<{ availability: TableAvailability[] }>(`/staff/availability?date=${date}`)
       .then((r) => {
         if (active) setAvailability(r.availability);
       })
@@ -1700,6 +1714,8 @@ function ManualBookingForm({
   const chosen = table && sharing ? { ...table, ...table.share! } : table;
   const freeSlots = chosen?.freeSlots ?? [];
   const walkInSlot = chosen?.walkInSlot ?? null;
+  const lateSlots = chosen?.lateSlots ?? [];
+  const isLate = timeSlot !== '' && lateSlots.includes(timeSlot);
   // The ends this table can actually offer from this start: its next booking
   // and closing time are already in maxDuration. The server checks again.
   const ends = timeSlot ? endOptions(timeSlot, chosen?.maxDuration?.[timeSlot]) : [];
@@ -1727,7 +1743,7 @@ function ManualBookingForm({
         notes: notes.trim() || undefined,
         share: sharing || undefined,
       });
-      onCreated();
+      onCreated(date);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create booking.');
       setReload((n) => n + 1);
@@ -1745,7 +1761,7 @@ function ManualBookingForm({
           {t('bk.date')}
           <input
             type="date"
-            min={todayIso()}
+            min={earliestLateEntryIso()}
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
@@ -1797,6 +1813,15 @@ function ManualBookingForm({
             }}
           >
             <option value="">—</option>
+            {lateSlots.length > 0 && (
+              <optgroup label={t('staff.lateGroup')}>
+                {lateSlots.map((s) => (
+                  <option key={s} value={s}>
+                    {s} ({t('staff.lateOption')})
+                  </option>
+                ))}
+              </optgroup>
+            )}
             {walkInSlot && (
               <option value={walkInSlot}>
                 {walkInSlot} ({t('staff.nowSlot')})
@@ -1869,6 +1894,7 @@ function ManualBookingForm({
           {busy ? t('bk.processing') : t('staff.createBtn')}
         </button>
       </div>
+      {isLate && <p className="muted late-note">{t('staff.lateNote')}</p>}
     </form>
   );
 }

@@ -11,6 +11,8 @@ export interface TodayBooking {
   tableLabel: string;
   status: string;
   source: string;
+  /** Staff entered it after it had started (migration 059). */
+  enteredLate: boolean;
   totalCents: number;
   durationMin: number;
   partySize: number;
@@ -79,10 +81,12 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     half: 1 | 2 | null;
     host_fee_cents: number;
     host_name: string | null;
+    entered_late: boolean;
   }>(
     `SELECT b.id, b.verification_code, b.time_slot, b.guest_name, b.guest_email, b.guest_phone,
             b.table_id, t.label AS table_label, b.status, b.source, b.total_cents,
-            b.duration_min, b.party_size, b.staff_notes, b.counter_cents, b.half, b.host_fee_cents, h.display_name AS host_name
+            b.duration_min, b.party_size, b.staff_notes, b.counter_cents, b.half, b.host_fee_cents, h.display_name AS host_name,
+            b.entered_late
        FROM bookings b
        JOIN tables t ON t.id = b.table_id
        LEFT JOIN hosts h ON h.user_id = b.host_id
@@ -131,6 +135,7 @@ export async function getBookingsForDate(date: string): Promise<TodayBooking[]> 
     tableLabel: r.table_label,
     status: r.status,
     source: r.source,
+    enteredLate: r.entered_late,
     totalCents: r.total_cents,
     durationMin: r.duration_min,
     partySize: r.party_size,

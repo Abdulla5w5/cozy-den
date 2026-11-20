@@ -72,6 +72,14 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** How many service days back staff may enter a booking that already started. */
+export const LATE_ENTRY_DAYS = 2;
+
+/** The earliest service date staff may enter a booking for (UTC date = service date). */
+function earliestLateEntryIso(now: number = Date.now()): string {
+  return new Date(now - LATE_ENTRY_DAYS * 864e5).toISOString().slice(0, 10);
+}
+
 async function assertTableExists(
   tableId: number,
   { activeOnly = true }: { activeOnly?: boolean } = {},
@@ -199,6 +207,8 @@ interface InsertParams {
   hostId?: number | null;
   hostKind?: HostKind | null;
   hostFeeCents?: number;
+  /** Staff entered it after it had started (migration 059). */
+  enteredLate?: boolean;
 }
 
 const ALREADY_BOOKED = 'That table is already booked for an overlapping session.';
@@ -234,11 +244,12 @@ async function insertBooking(p: InsertParams): Promise<number> {
            (table_id, booking_date, time_slot, guest_name, guest_email, guest_phone,
             verification_code, status, source, table_fee_cents, items_total_cents, total_cents,
             duration_min, party_size, terms_accepted_at, promo_code, newcomer_discount, user_id,
-            retry_token_hash, host_id, host_fee_cents, checkin_token, host_kind, staff_notes, half)
+            retry_token_hash, host_id, host_fee_cents, checkin_token, host_kind, staff_notes, half,
+            entered_late)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,
-                 CASE WHEN $14 THEN now() END, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+                 CASE WHEN $14 THEN now() END, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
          RETURNING id`,
-        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true, p.userId ?? null, p.retryTokenHash ?? null, p.hostId ?? null, p.hostFeeCents ?? 0, newCheckinToken(), p.hostKind ?? null, p.staffNotes || null, p.half ?? null]
+        [p.tableId, p.date, p.timeSlot, p.guestName, p.guestEmail, p.guestPhone, code, p.status, p.source, p.feeCents, p.totalCents, p.durationMin, p.partySize, p.termsAccepted === true, p.promoCode ?? null, p.newcomerDiscount === true, p.userId ?? null, p.retryTokenHash ?? null, p.hostId ?? null, p.hostFeeCents ?? 0, newCheckinToken(), p.hostKind ?? null, p.staffNotes || null, p.half ?? null, p.enteredLate === true]
       );
       return rows[0].id;
     } catch (err) {
@@ -962,15 +973,28 @@ async function releaseOwnNewcomerHolds(email: string): Promise<void> {
 /**
  * Staff manual entry for phone/WhatsApp bookings: no payment step, created
  * directly as 'pending' with source 'staff_manual'. Contact may be a phone
- * number or email — no receipt email is attempted. Unlike a customer, staff may
- * start one in the half hour already running.
+ * number or email — no receipt email is attempted.
+ *
+ * Unlike a customer, staff may start one in the half hour already running (a
+ * walk-in), or earlier still, up to LATE_ENTRY_DAYS service days back, for a
+ * group that sat down before anyone typed it in. Those are flagged
+ * entered_late. They take the table exactly like any other booking: the
+ * database's overlap rule refuses one that clashes with a booking already
+ * there, however the two were made and however close together, and the
+ * customer floor plan reads the same rows, so the time disappears for
+ * customers the moment it is saved.
  */
 export async function createStaffBooking(input: StaffCreateBookingInput): Promise<BookingView> {
-  if (input.date < todayIso()) throw new ApiError(400, 'Cannot book a date in the past.');
-  // A walk-in may start in the half hour running now, and no earlier.
-  if (slotHasStarted(input.date, input.timeSlot) && input.timeSlot !== currentSlot(input.date)) {
-    throw new ApiError(400, 'That start time has passed. Pick the current half hour or later.');
+  const now = Date.now();
+  if (input.date < earliestLateEntryIso(now)) {
+    throw new ApiError(
+      400,
+      `Bookings can be entered up to ${LATE_ENTRY_DAYS} days back. Pick a later date.`,
+    );
   }
+  // The running half hour is a walk-in, not a late entry.
+  const enteredLate =
+    slotHasStarted(input.date, input.timeSlot, now) && input.timeSlot !== currentSlot(input.date, now);
   const table = await assertTableExists(input.tableId, { activeOnly: false });
   const sitting = resolveSitting(input.timeSlot, table, input.durationMin, input.partySize, {
     share: input.share === true,
@@ -993,6 +1017,7 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     durationMin: sitting.durationMin,
     partySize: sitting.partySize,
     staffNotes: input.notes,
+    enteredLate,
   }, input.share === true);
 
   const view = await getBookingById(bookingId);

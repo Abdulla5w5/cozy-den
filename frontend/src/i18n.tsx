@@ -1287,6 +1287,13 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.source': { en: 'Source', ar: 'المصدر' },
   'staff.start': { en: 'Start time', ar: 'وقت البداية' },
   'staff.nowSlot': { en: 'now', ar: 'الحين' },
+  'staff.lateGroup': { en: 'Already started', ar: 'بدأ قبل' },
+  'staff.lateOption': { en: 'entered late', ar: 'إدخال متأخر' },
+  'staff.lateTag': { en: 'Entered late', ar: 'أُدخل متأخر' },
+  'staff.lateNote': {
+    en: 'This start has passed. The booking will be marked “Entered late”.',
+    ar: 'هالوقت فات. الحجز بينحفظ ومكتوب عليه «أُدخل متأخر».',
+  },
   'staff.endOption': { en: '{end} ({hours}h)', ar: '{end} ({hours} ساعة)' },
   'staff.counterBtn': { en: 'Collect', ar: 'تحصيل' },
   'staff.counterRecorded': {

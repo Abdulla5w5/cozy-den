@@ -18,6 +18,8 @@ export interface TableAvailability {
   walkInSlot?: string | null;
   /** Start time -> longest bookable length in minutes, given this table's day. */
   maxDuration: Record<string, number>;
+  /** Staff only (/staff/availability): free starts already passed, to enter late. */
+  lateSlots?: string[];
   /** Half of a 6+ seat table, shared with another small group. A start is open
    *  if either half is; `otherHalfBooked` lists those where the other is taken. */
   share?: PartSlots & { otherHalfBooked: string[] };
@@ -30,6 +32,7 @@ export interface PartSlots {
   takenSlots: string[];
   walkInSlot?: string | null;
   maxDuration: Record<string, number>;
+  lateSlots?: string[];
 }
 
 /** Mirrors backend/src/utils/share.ts. */
@@ -165,6 +168,8 @@ export interface StaffBooking {
   tableLabel: string;
   status: string;
   source: string;
+  /** Entered by staff after it had started. */
+  enteredLate?: boolean;
   totalCents: number;
   durationMin?: number;
   partySize?: number;
