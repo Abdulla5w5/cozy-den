@@ -511,7 +511,7 @@ function TodayTab() {
                     {t('staff.counterBtn')}
                   </button>
                 )}
-                {canChange(b) && (
+                {canEdit(b, date) && (
                   <button
                     className="link"
                     aria-expanded={changeOpen === b.id}
@@ -557,7 +557,7 @@ function TodayTab() {
                 </td>
               </tr>
             )}
-            {changeOpen === b.id && canChange(b) && (
+            {changeOpen === b.id && canEdit(b, date) && (
               <tr className="booking-notes-row">
                 <td colSpan={11}>
                   <ChangeBooking
@@ -598,6 +598,12 @@ function TodayTab() {
 }
 
 const canChange = (b: StaffBooking) => b.status === 'pending' || b.status === 'arrived';
+// Change also corrects a done booking's record, within the same 2 nights as a
+// late entry. Event holds are changed from the Events tab.
+const canEdit = (b: StaffBooking, date: string) =>
+  b.source !== 'event' &&
+  date >= earliestLateEntryIso() &&
+  (canChange(b) || b.status === 'order_complete');
 const canCollect = (b: StaffBooking) => canChange(b) || b.status === 'order_complete';
 
 /** "3.50", "3.500", "٣٫٥" or "-2" as 1/100 KD; null if it is not an amount. */
@@ -1551,7 +1557,7 @@ function TableFloorView({
                               {t('staff.printBtn')}
                             </button>
                           )}
-                          {canChange(b) && (
+                          {canEdit(b, date) && (
                             <button
                               className="link"
                               aria-expanded={changing === b.id}
@@ -1574,7 +1580,7 @@ function TableFloorView({
                             </button>
                           )}
                         </div>
-                        {changing === b.id && canChange(b) && (
+                        {changing === b.id && canEdit(b, date) && (
                           <ChangeBooking
                             bookingId={b.id}
                             guestName={b.guestName}

@@ -114,11 +114,72 @@ async function finishedSittingOverlaps(
        AND b.done_at IS NOT NULL AND b.id IS DISTINCT FROM $6
        AND ($5::smallint IS NULL OR b.half IS NULL OR b.half = $5::smallint)
        AND held.until > lower(held.bw)
-       AND tsrange(lower(held.bw), LEAST(upper(held.bw), held.until)) && booking_window($2::date, $3, $4)
+       AND tsrange(lower(held.bw), GREATEST(lower(held.bw), LEAST(upper(held.bw), held.until)))
+           && booking_window($2::date, $3, $4)
      LIMIT 1`;
   const params = [s.tableId, s.date, s.timeSlot, s.durationMin, s.half, s.exceptId ?? null];
   const { rows } = db ? await db.query(sql, params) : await query(sql, params);
   return rows.length > 0;
+}
+
+/**
+ * For correcting a booking already marked done: the span it would say the group
+ * held (start until marked done, to the half hour) must not overlap any active
+ * booking, nor any other done group's held span, on that table or half.
+ */
+async function assertDoneCorrectionFits(
+  db: Pick<PoolClient, 'query'> | null,
+  s: {
+    tableId: number; date: string; timeSlot: string; durationMin: number; half: 1 | 2 | null; id: number;
+    doneAt: Date | null; oldTimeSlot: string;
+  },
+): Promise<void> {
+  const run = <T extends Record<string, unknown>>(sql: string, params: unknown[]) =>
+    db ? db.query<T>(sql, params) : query<T>(sql, params);
+  // Kuwait wall time, floored to the half hour, like finishedSittingOverlaps.
+  const UNTIL = `(to_timestamp(floor(extract(epoch FROM $1::timestamptz) / 1800) * 1800) AT TIME ZONE 'Asia/Kuwait')`;
+  // A new start must come before the group was marked done: a group cannot
+  // have sat down after it left. A booking that already started at or after
+  // that (done early) keeps its start, so its table or length can still be
+  // corrected; its held span is then empty.
+  if (s.doneAt && s.timeSlot !== s.oldTimeSlot) {
+    const DONE = `($1::timestamptz AT TIME ZONE 'Asia/Kuwait')`;
+    const { rows } = await run<{ after: boolean; was_before: boolean; at: string }>(
+      `SELECT ${DONE} <= lower(booking_window($2::date, $3, 30)) AS after,
+              ${DONE} > lower(booking_window($2::date, $4, 30)) AS was_before,
+              to_char(${DONE}, 'HH24:MI') AS at`,
+      [s.doneAt, s.date, s.timeSlot, s.oldTimeSlot],
+    );
+    if (rows[0]?.after && rows[0].was_before) {
+      throw new ApiError(400, `This group was marked done at ${rows[0].at}. Pick a start before that.`);
+    }
+  }
+  const { rows } = await run<{ one: number }>(
+    `SELECT 1 AS one
+       FROM bookings b
+      CROSS JOIN LATERAL (
+        SELECT booking_window(b.booking_date, b.time_slot, b.duration_min) AS bw,
+               CASE WHEN b.status = 'order_complete' THEN
+                 (to_timestamp(floor(extract(epoch FROM b.done_at) / 1800) * 1800) AT TIME ZONE 'Asia/Kuwait')
+               END AS until
+      ) o
+      CROSS JOIN LATERAL (
+        SELECT booking_window($2::date, $3, $4) AS nw,
+               CASE WHEN $1::timestamptz IS NOT NULL THEN ${UNTIL} END AS mine
+      ) n
+      WHERE b.table_id = $5 AND b.booking_date = $2 AND b.id <> $7
+        AND ($6::smallint IS NULL OR b.half IS NULL OR b.half = $6::smallint)
+        AND (b.status IN ('pending_payment', 'pending', 'arrived')
+             OR (b.status = 'order_complete' AND b.done_at IS NOT NULL AND o.until > lower(o.bw)))
+        -- GREATEST keeps a span that ends before it starts empty, not an error.
+        AND tsrange(lower(o.bw), GREATEST(lower(o.bw), LEAST(upper(o.bw), COALESCE(o.until, upper(o.bw)))))
+            && tsrange(lower(n.nw), GREATEST(lower(n.nw), LEAST(upper(n.nw), COALESCE(n.mine, upper(n.nw)))))
+      LIMIT 1`,
+    [s.doneAt, s.date, s.timeSlot, s.durationMin, s.tableId, s.half, s.id],
+  );
+  if (rows.length > 0) {
+    throw new ApiError(409, 'Another group had this table then. Pick another time or table.');
+  }
 }
 
 async function assertTableExists(
@@ -1280,19 +1341,23 @@ interface ChangeableRow {
   counter_cents: number;
   half: 1 | 2 | null;
   entered_late: boolean;
+  /** When it was marked done, for a done booking (migration 060). */
+  done_at: Date | null;
 }
 
 const CHANGEABLE_SELECT = `SELECT id, table_id, to_char(booking_date, 'YYYY-MM-DD') AS date, time_slot,
          duration_min, party_size, status, source, host_id, total_cents, promo_code, first_quote_cents, counter_cents, half,
-         entered_late
+         entered_late, done_at
     FROM bookings WHERE id = $1`;
 
 /** Why this booking cannot be changed at all, or null when it can. */
 function changeRefusal(row: ChangeableRow): string | null {
   if (row.source === 'event') return 'This is an event hold. Change it from the Events tab.';
   if (row.status === 'pending_payment') return 'The customer is still paying for this booking.';
-  if (row.status !== 'pending' && row.status !== 'arrived') {
-    return 'This booking is finished, so it cannot be changed.';
+  // A done booking may still be corrected (who sat where, when, how many): the
+  // record only, since the group has left and the table stays free.
+  if (row.status !== 'pending' && row.status !== 'arrived' && row.status !== 'order_complete') {
+    return 'This booking is cancelled, so it cannot be changed.';
   }
   // Staff may correct a booking from tonight or the two nights before: the
   // same window as entering one late.
@@ -1309,7 +1374,7 @@ function changeRefusal(row: ChangeableRow): string | null {
  * keep the walk-in rule: the half hour running now, and no earlier.
  */
 function mayMoveToPastStart(row: ChangeableRow): boolean {
-  return row.entered_late || row.date < todayIso();
+  return row.entered_late || row.status === 'order_complete' || row.date < todayIso();
 }
 
 interface Sitting {
@@ -1329,7 +1394,8 @@ const seatsFor = (half: 1 | 2 | null, partySize: number, table: { capacity: numb
  * The booking as it would be after these changes, checked against the same rules
  * as a new one, apart from the table's minimum party: staff record who actually
  * came, even if fewer than the table asks for. The database still has the final
- * say on overlaps.
+ * say on overlaps, except for a done booking, which it ignores: those are checked
+ * here by assertDoneCorrectionFits.
  */
 async function resolveChanges(
   row: ChangeableRow,
@@ -1386,7 +1452,16 @@ async function resolveChanges(
   // that used that table earlier is no obstacle.
   const placementChanged =
     newTime || newLength || tableId !== row.table_id || half !== row.half;
-  if (
+  // A done booking is outside the overlap rule, so it is checked here instead:
+  // the span it now says the group held must miss every other group's.
+  if (row.status === 'order_complete') {
+    if (placementChanged) {
+      await assertDoneCorrectionFits(db, {
+        tableId, date: row.date, timeSlot, durationMin, half, id: row.id,
+        doneAt: row.done_at, oldTimeSlot: row.time_slot,
+      });
+    }
+  } else if (
     placementChanged &&
     (newTime || row.date < todayIso()) &&
     isPastStart(row.date, timeSlot) &&
@@ -1447,7 +1522,7 @@ async function priceChangeFor(
   if (row.total_cents <= 0) return null;
   // An earlier night is a correction to the record: the guests have left, so
   // there is nothing to collect or hand back.
-  if (row.date < todayIso()) return null;
+  if (row.date < todayIso() || row.status === 'order_complete') return null;
   const { codeMissing, options } = await quoteOptionsFor(row);
   if (codeMissing) {
     return {
@@ -1507,7 +1582,8 @@ export async function previewBookingChange(id: number, changes: BookingChanges) 
 /**
  * Move a booking to another table or time, or change how many came. The row is
  * locked while it is checked and written, so two staff cannot combine into a
- * sitting neither of them checked. The exclusion constraint refuses any overlap.
+ * sitting neither of them checked. The exclusion constraint refuses any overlap
+ * (a done booking's correction is checked in code, under the table's lock).
  */
 export async function changeBooking(id: number, changes: BookingChanges, staffId: number) {
   // Priced before the transaction: everything inside it must use its own client.
@@ -1517,6 +1593,7 @@ export async function changeBooking(id: number, changes: BookingChanges, staffId
     before[0].total_cents > 0 &&
     before[0].first_quote_cents === null &&
     before[0].date >= todayIso() &&
+    before[0].status !== 'order_complete' &&
     changeRefusal(before[0]) === null
       ? await quoteCurrent(before[0])
       : null;

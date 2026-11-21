@@ -9286,3 +9286,14 @@ a.ev-ticket:active {
 .late-note {
   margin: 0.5rem 0 0;
 }
+
+/* Booking status labels: always one line, and "Order complete" readable on the
+   light theme (the older dark-theme pink was too faint). */
+.status {
+  display: inline-block;
+  white-space: nowrap;
+}
+.status.order_complete {
+  background: #6b3fa0;
+  color: #fff;
+}
