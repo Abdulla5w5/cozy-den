@@ -11,7 +11,8 @@ import { query } from '../db/pool';
 import { mailer } from './mailer';
 
 export type NotificationKind =
-  | 'booking_reminder';
+  | 'booking_reminder'
+  | 'staff_new_booking';
 
 export interface NotifyInput {
   /** The account to show it to. Null for a guest, who only gets the email. */
@@ -68,6 +69,30 @@ export async function notify(input: NotifyInput): Promise<boolean> {
     }
   }
   return fresh;
+}
+
+/**
+ * The same in-site notice for every staff account (no email: callers that
+ * email staff do so themselves). The dedupe key makes a repeat a no-op, so a
+ * booking confirmed by both the payment redirect and the webhook is announced
+ * once. Never throws: a failed notice must not fail the request behind it.
+ */
+export async function notifyStaff(input: {
+  kind: NotificationKind;
+  data: Record<string, string | number | boolean | null>;
+  link?: string | null;
+  dedupeKey: string;
+}): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO notifications (user_id, kind, data, link, dedupe_key)
+       SELECT id, $1, $2::jsonb, $3, $4 FROM users WHERE is_staff
+       ON CONFLICT (user_id, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
+      [input.kind, JSON.stringify(input.data), input.link ?? null, input.dedupeKey],
+    );
+  } catch (err) {
+    console.error(`[notify] staff ${input.kind} notice failed`, err);
+  }
 }
 
 const LIST_LIMIT = 30;

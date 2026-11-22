@@ -16,6 +16,9 @@ interface Notice {
 // (and when the tab comes back into view). Guests on the café Wi-Fi share one
 // IP's request budget, so the bell must stay a small part of it.
 const POLL_MS = 5 * 60_000;
+// Staff hear about new online bookings here, so their badge is checked every
+// minute. Only a few staff devices, so the shared Wi-Fi budget can take it.
+const STAFF_POLL_MS = 60_000;
 
 function timeAgo(iso: string, lang: string): string {
   const diffSec = Math.round((Date.parse(iso) - Date.now()) / 1000);
@@ -32,7 +35,7 @@ function timeAgo(iso: string, lang: string): string {
  * Opening the list marks everything read; notices that were unread at that
  * moment stay highlighted until it closes.
  */
-export function NotificationBell({ authKey }: { authKey: number }) {
+export function NotificationBell({ authKey, isStaff = false }: { authKey: number; isStaff?: boolean }) {
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const [unread, setUnread] = useState(0);
@@ -53,13 +56,13 @@ export function NotificationBell({ authKey }: { authKey: number }) {
 
   useEffect(() => {
     refreshCount();
-    const id = window.setInterval(refreshCount, POLL_MS);
+    const id = window.setInterval(refreshCount, isStaff ? STAFF_POLL_MS : POLL_MS);
     document.addEventListener('visibilitychange', refreshCount);
     return () => {
       window.clearInterval(id);
       document.removeEventListener('visibilitychange', refreshCount);
     };
-  }, [refreshCount, authKey]);
+  }, [refreshCount, authKey, isStaff]);
 
   // Close on a click outside or Escape.
   useEffect(() => {

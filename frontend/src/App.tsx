@@ -183,7 +183,7 @@ export function App() {
           >
             {lang === 'en' ? 'عربي' : 'EN'}
           </button>
-          {loggedIn && <NotificationBell authKey={authTick} />}
+          {loggedIn && <NotificationBell authKey={authTick} isStaff={user?.isStaff === true} />}
           {loggedIn ? (
             <button className="cta button nav-cta" onClick={logout}>
               {t('nav.logout')}

@@ -18,6 +18,14 @@ const dict: Record<string, { en: string; ar: string }> = {
   'notif.empty': { en: 'Nothing new yet.', ar: 'ما في شي جديد.' },
   'notif.failed': { en: 'Could not load notifications.', ar: 'ما قدرنا نجيب الإشعارات.' },
   'notif.generic': { en: 'You have a new update.', ar: 'عندك تحديث جديد.' },
+  'notif.staff_new_booking.title': {
+    en: 'New online booking: {name}',
+    ar: 'حجز أونلاين جديد: {name}',
+  },
+  'notif.staff_new_booking.body': {
+    en: '{table}, {date} at {time}, {party} people. Paid online.',
+    ar: '{table}، {date} الساعة {time}، {party} أشخاص. مدفوع أونلاين.',
+  },
   'notif.booking_reminder.title': {
     en: 'Reminder: your table at {time}',
     ar: 'تذكير: طاولتك الساعة {time}',

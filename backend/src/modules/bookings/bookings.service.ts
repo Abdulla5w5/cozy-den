@@ -17,6 +17,7 @@ import {
 } from '../../payment/ledger';
 import { mailer, formatReceiptEmail, formatStaffBookingAlert } from '../../notifications/mailer';
 import { bookingAlertRecipients } from '../../notifications/staffRecipients';
+import { notifyStaff } from '../../notifications/notify';
 import { BookingChanges, CreateBookingInput, StaffCreateBookingInput } from './bookings.schema';
 import { normalizeKuwaitiPhone } from '../../utils/phone';
 import { findCode, resolvePromoCode } from '../promo/codes.service';
@@ -573,6 +574,20 @@ function alertStaff(view: BookingView) {
 function announceConfirmed(view: BookingView) {
   sendReceipt(view);
   alertStaff(view);
+  // The same news on every staff account's bell, for whoever missed the email.
+  void notifyStaff({
+    kind: 'staff_new_booking',
+    data: {
+      bookingId: view.id,
+      name: view.guestName,
+      table: view.tableLabel,
+      date: view.date,
+      time: view.timeSlot,
+      party: view.partySize,
+    },
+    link: '/staff/dashboard',
+    dedupeKey: `staff_new_booking:${view.id}`,
+  });
   if (view.hostName) alertHost(view);
 }
 
