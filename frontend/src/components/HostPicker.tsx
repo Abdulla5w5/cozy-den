@@ -20,6 +20,9 @@ export interface HostChoice {
 
 const NOTICE_MS = 24 * 60 * 60 * 1000;
 
+/** Blood on the Clocktower needs at least this many players; the server checks it too. */
+export const CLOCKTOWER_MIN_PLAYERS = 5;
+
 /** When a slot starts, in Kuwait time: before 14:00 is the next morning. */
 function startsAt(date: string, slot: string): number {
   const [h, m] = slot.split(':').map(Number);
@@ -35,6 +38,7 @@ export function HostPicker({
   date,
   timeSlot,
   durationMin,
+  partySize,
   late,
   selected,
   onSelect,
@@ -42,6 +46,7 @@ export function HostPicker({
   date: string;
   timeSlot: string;
   durationMin: number;
+  partySize: number;
   late: boolean;
   selected: HostChoice | null;
   onSelect: (h: HostChoice | null) => void;
@@ -69,10 +74,16 @@ export function HostPicker({
     };
   }, [date, timeSlot, durationMin, late, tooSoon]);
 
-  // An option chosen for another time may have no host free at this one.
+  const tooFew = (kind: HostKind) => kind === 'clocktower' && partySize < CLOCKTOWER_MIN_PLAYERS;
+
+  // An option chosen for another time may have no host free at this one, and
+  // a smaller group may fall below the Clocktower minimum.
   useEffect(() => {
-    if (selected && options && !options.some((o) => o.kind === selected.kind)) onSelect(null);
-  }, [options, selected, onSelect]);
+    if (!selected) return;
+    if ((options && !options.some((o) => o.kind === selected.kind)) || tooFew(selected.kind)) {
+      onSelect(null);
+    }
+  });
 
   if (late) return null;
 
@@ -106,6 +117,7 @@ export function HostPicker({
               aria-checked={selected?.kind === o.kind}
               key={o.kind}
               className={`host-card ${selected?.kind === o.kind ? 'active' : ''}`}
+              disabled={tooFew(o.kind)}
               onClick={() => onSelect(o)}
             >
               <span className={`host-initial ${o.kind}`} aria-hidden="true">
@@ -117,7 +129,11 @@ export function HostPicker({
                   {t('host.rate', { amount: money(o.hourlyCents) })} ·{' '}
                   {t('host.forSession', { amount: money(hostFee(o.hourlyCents, durationMin)) })}
                 </small>
-                <span className="host-bio">{t('host.wholeTable')}</span>
+                <span className="host-bio">
+                  {tooFew(o.kind)
+                    ? t('host.clocktowerMin', { n: CLOCKTOWER_MIN_PLAYERS })
+                    : t('host.wholeTable')}
+                </span>
               </span>
             </button>
           ))}

@@ -929,6 +929,7 @@ export function BookingFlow() {
                         date={date}
                         timeSlot={timeSlot}
                         durationMin={durationMin}
+                        partySize={partySize}
                         late={late}
                         selected={host}
                         onSelect={chooseHost}

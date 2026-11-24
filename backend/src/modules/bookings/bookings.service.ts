@@ -23,7 +23,7 @@ import { normalizeKuwaitiPhone } from '../../utils/phone';
 import { findCode, resolvePromoCode } from '../promo/codes.service';
 import { getAvailability } from '../tables/tables.service';
 import { hashRetryToken } from '../../utils/retryToken';
-import { assignHost, hostEmailForBooking, hostFeeCents, HostKind } from '../hosts/hosts.service';
+import { assignHost, CLOCKTOWER_MIN_PLAYERS, hostEmailForBooking, hostFeeCents, HostKind } from '../hosts/hosts.service';
 import { ensureCheckinToken, newCheckinToken } from '../checkin/checkin.service';
 
 // Legacy line items are still surfaced for pre-overhaul bookings; new bookings
@@ -433,6 +433,12 @@ export async function createBooking(
     maxParty: MAX_PARTY,
     share: input.share === true,
   });
+  if (input.hostKind === 'clocktower' && sitting.partySize < CLOCKTOWER_MIN_PLAYERS) {
+    throw new ApiError(
+      400,
+      `Blood on the Clocktower needs at least ${CLOCKTOWER_MIN_PLAYERS} players.`,
+    );
+  }
   const promo = await resolvePromoCode(
     input.promoCode,
     sitting.partySize,
@@ -677,6 +683,12 @@ export async function startBookingCheckout(
     maxParty: MAX_PARTY,
     share: input.share === true,
   });
+  if (input.hostKind === 'clocktower' && sitting.partySize < CLOCKTOWER_MIN_PLAYERS) {
+    throw new ApiError(
+      400,
+      `Blood on the Clocktower needs at least ${CLOCKTOWER_MIN_PLAYERS} players.`,
+    );
+  }
   const promo = await resolvePromoCode(
     input.promoCode,
     sitting.partySize,

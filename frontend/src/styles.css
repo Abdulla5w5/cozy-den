@@ -8319,6 +8319,10 @@ a.ev-ticket:active {
   text-align: start;
   box-shadow: none;
 }
+.host-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .host-card.none {
   justify-content: center;
   padding: 0.45rem;

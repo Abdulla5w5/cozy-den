@@ -553,6 +553,10 @@ const dict: Record<string, { en: string; ar: string }> = {
   'qr.show': { en: 'Show QR pass', ar: 'اعرض كود الدخول' },
   'qr.hide': { en: 'Hide QR pass', ar: 'اخفِ كود الدخول' },
   'host.kind.normal': { en: 'Normal host', ar: 'مضيف عادي' },
+  'host.clocktowerMin': {
+    en: 'For {n} or more players.',
+    ar: 'لـ {n} لاعبين أو أكثر.',
+  },
   'host.kind.clocktower': { en: 'Blood on the Clocktower host', ar: 'مضيف Blood on the Clocktower' },
   'host.wholeTable': {
     en: 'One price for the whole table, however many you are.',

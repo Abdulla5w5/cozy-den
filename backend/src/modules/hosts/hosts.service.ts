@@ -16,6 +16,9 @@ export const HOST_NOTICE_MS = 24 * 60 * 60 * 1000;
 
 export type HostKind = 'normal' | 'clocktower';
 
+/** Blood on the Clocktower needs at least this many players (client, Nov 2026). */
+export const CLOCKTOWER_MIN_PLAYERS = 5;
+
 /** Which tick on a host's profile each option needs. Fixed identifiers only:
  *  these go straight into SQL. */
 const KIND_COLUMN: Record<HostKind, string> = {
