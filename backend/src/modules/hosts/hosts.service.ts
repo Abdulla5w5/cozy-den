@@ -1,4 +1,4 @@
-import { query } from '../../db/pool';
+import { query, withTransaction } from '../../db/pool';
 import { ApiError } from '../../middleware/error';
 import { CLOSE_MIN, isLateStart, isValidStart, slotStartsAt, toMinutes } from '../../utils/slots';
 
@@ -351,17 +351,26 @@ export async function removeAvailability(hostId: number, id: number): Promise<vo
 // ---------- Admin ----------
 
 export interface AdminHost extends HostProfile {
+  /** Library games this host can run. */
+  gameIds: number[];
   email: string;
   isActive: boolean;
 }
 
 export async function listHostsForAdmin(): Promise<AdminHost[]> {
-  const { rows } = await query<HostRow & { email: string; is_active: boolean }>(
-    `SELECT ${PROFILE_COLUMNS}, u.email, h.is_active
+  const { rows } = await query<HostRow & { email: string; is_active: boolean; game_ids: number[] }>(
+    `SELECT ${PROFILE_COLUMNS}, u.email, h.is_active,
+            ARRAY(SELECT hg.game_id FROM host_games hg WHERE hg.host_id = h.user_id
+                   ORDER BY hg.game_id) AS game_ids
        FROM hosts h JOIN users u ON u.id = h.user_id
       ORDER BY h.is_active DESC, h.display_name`,
   );
-  return rows.map((r) => ({ ...toProfile(r), email: r.email, isActive: r.is_active }));
+  return rows.map((r) => ({
+    ...toProfile(r),
+    email: r.email,
+    isActive: r.is_active,
+    gameIds: r.game_ids,
+  }));
 }
 
 export interface HostInput {
@@ -374,6 +383,8 @@ export interface HostInput {
   offersClocktower: boolean;
   offersDnd: boolean;
   isActive: boolean;
+  /** Left out keeps the games as they are. */
+  gameIds?: number[];
 }
 
 /** Make an existing account a host (or update one), found by email. */
@@ -384,31 +395,43 @@ export async function saveHostByEmail(email: string, h: HostInput): Promise<numb
   if (!rows[0]) {
     throw new ApiError(404, 'No account with that email. They must register first.');
   }
-  await query(
-    `INSERT INTO hosts (user_id, display_name, bio, photo_url, hourly_cents,
-                        offers_board_games, offers_dnd, is_active, offers_clocktower)
-     VALUES ($1, $2, $3, $4, COALESCE($5::int, 500), $6, $7, $8, $9)
-     ON CONFLICT (user_id) DO UPDATE
-       SET display_name = EXCLUDED.display_name, bio = EXCLUDED.bio,
-           photo_url = EXCLUDED.photo_url,
-           hourly_cents = COALESCE($5::int, hosts.hourly_cents),
-           offers_board_games = EXCLUDED.offers_board_games,
-           offers_clocktower = EXCLUDED.offers_clocktower,
-           offers_dnd = EXCLUDED.offers_dnd, is_active = EXCLUDED.is_active,
-           updated_at = now()`,
-    [
-      rows[0].id,
-      h.displayName,
-      h.bio,
-      h.photoUrl,
-      h.hourlyCents ?? null,
-      h.offersBoardGames,
-      h.offersDnd,
-      h.isActive,
-      h.offersClocktower,
-    ],
-  );
-  return rows[0].id;
+  const userId = rows[0].id;
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO hosts (user_id, display_name, bio, photo_url, hourly_cents,
+                          offers_board_games, offers_dnd, is_active, offers_clocktower)
+       VALUES ($1, $2, $3, $4, COALESCE($5::int, 500), $6, $7, $8, $9)
+       ON CONFLICT (user_id) DO UPDATE
+         SET display_name = EXCLUDED.display_name, bio = EXCLUDED.bio,
+             photo_url = EXCLUDED.photo_url,
+             hourly_cents = COALESCE($5::int, hosts.hourly_cents),
+             offers_board_games = EXCLUDED.offers_board_games,
+             offers_clocktower = EXCLUDED.offers_clocktower,
+             offers_dnd = EXCLUDED.offers_dnd, is_active = EXCLUDED.is_active,
+             updated_at = now()`,
+      [
+        userId,
+        h.displayName,
+        h.bio,
+        h.photoUrl,
+        h.hourlyCents ?? null,
+        h.offersBoardGames,
+        h.offersDnd,
+        h.isActive,
+        h.offersClocktower,
+      ],
+    );
+    if (h.gameIds) {
+      await client.query('DELETE FROM host_games WHERE host_id = $1', [userId]);
+      // Joined to games: one deleted since the page loaded is just left out.
+      await client.query(
+        `INSERT INTO host_games (host_id, game_id)
+         SELECT $1, id FROM games WHERE id = ANY($2::int[])`,
+        [userId, h.gameIds],
+      );
+    }
+  });
+  return userId;
 }
 
 /** The host's account email for a booking, for the "you have been booked"

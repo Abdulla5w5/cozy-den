@@ -87,6 +87,11 @@ export interface StaffPass extends PublicPass {
 // booking still works.
 const STILL_VALID = `>= (now() AT TIME ZONE 'Asia/Kuwait')::date - 1`;
 
+// The calendar day a Wanted Board session starts, the same everywhere a customer
+// reads it: 00:30 is the day after the night it belongs to.
+const WANTED_DAY = `to_char(CASE WHEN p.start_time IS NULL THEN p.session_date
+  ELSE lower(booking_window(p.session_date, p.start_time, p.duration_min))::date END, 'YYYY-MM-DD')`;
+
 interface Found extends StaffPass {
   id: number;
 }
@@ -207,6 +212,8 @@ async function find(token: string): Promise<Found | null> {
     id: number;
     title: string;
     d: string | null;
+    slot: string | null;
+    day: string | null;
     duration_min: number;
     seats: number;
     name: string;
@@ -216,7 +223,8 @@ async function find(token: string): Promise<Found | null> {
     checked_in_at: Date | null;
   }>(
     `SELECT s.id, COALESCE(g.title, p.game_name, 'Wanted Board') AS title,
-            to_char(p.session_date, 'YYYY-MM-DD') AS d, p.duration_min, s.seats,
+            to_char(p.session_date, 'YYYY-MM-DD') AS d, p.start_time AS slot, p.duration_min, s.seats,
+            ${WANTED_DAY} AS day,
             u.name, u.email, u.phone, s.amount_cents, s.checked_in_at
        FROM wanted_post_seats s
        JOIN wanted_posts p ON p.id = s.post_id
@@ -233,8 +241,8 @@ async function find(token: string): Promise<Found | null> {
       id: r.id,
       kind: 'wanted',
       title: r.title,
-      date: r.d ?? '',
-      timeSlot: null,
+      date: r.day ?? '',
+      timeSlot: r.slot,
       durationMin: r.duration_min,
       people: r.seats,
       paid: true,
@@ -361,12 +369,13 @@ export async function listMyPasses(userId: number): Promise<MyPass[]> {
     id: number;
     title: string;
     d: string | null;
+    slot: string | null;
     seats: number;
     checked_in_at: Date | null;
     checkin_token: string | null;
   }>(
     `SELECT s.id, COALESCE(g.title, p.game_name, 'Wanted Board') AS title,
-            to_char(p.session_date, 'YYYY-MM-DD') AS d, s.seats, s.checked_in_at, s.checkin_token
+            ${WANTED_DAY} AS d, p.start_time AS slot, s.seats, s.checked_in_at, s.checkin_token
        FROM wanted_post_seats s
        JOIN wanted_posts p ON p.id = s.post_id
        LEFT JOIN games g ON g.id = p.game_id
@@ -392,7 +401,7 @@ export async function listMyPasses(userId: number): Promise<MyPass[]> {
       kind: 'wanted',
       title: r.title,
       date: r.d ?? '',
-      timeSlot: null,
+      timeSlot: r.slot,
       people: r.seats,
       token: r.checkin_token ?? (await ensureCheckinToken('wanted', r.id)),
       checkedIn: r.checked_in_at !== null,
@@ -420,7 +429,11 @@ export function emailSeatPass(kind: 'event' | 'wanted', id: number): void {
           )
         : await query<{ email: string; name: string; title: string; d: string; ref: string | null }>(
             `SELECT u.email, u.name, COALESCE(g.title, p.game_name, 'Wanted Board') AS title,
-                    COALESCE(to_char(p.session_date, 'YYYY-MM-DD'), '') AS d, NULL AS ref
+                    COALESCE(
+                      -- The calendar day it starts: 00:30 is the day after the night.
+                      to_char(lower(booking_window(p.session_date, p.start_time, p.duration_min)),
+                              'YYYY-MM-DD "at" HH24:MI'),
+                      to_char(p.session_date, 'YYYY-MM-DD'), '') AS d, NULL AS ref
                FROM wanted_post_seats s
                JOIN wanted_posts p ON p.id = s.post_id
                JOIN users u ON u.id = s.member_id

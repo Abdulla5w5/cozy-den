@@ -14,7 +14,11 @@ import {
   myInterestPostIds,
   registerInterest,
   releaseListing,
+  withdrawInterest,
 } from './wanted.service';
+import { getWantedMember, setSubscribed, setUsername, unsubscribeByToken } from './wanted.members';
+import { isRealDate } from '../../utils/dates';
+import { isValidStart } from '../../utils/slots';
 import { paymentProvider } from '../../payment';
 import { TAP_CHARGE_EXPIRY_MINUTES } from '../../payment/constants';
 import { env } from '../../config/env';
@@ -23,14 +27,25 @@ import { ApiError } from '../../middleware/error';
 export const wantedRouter = Router();
 
 const createSchema = z.object({
-  gameId: z.number().int().positive().nullable().optional(),
-  gameName: z.string().trim().min(1).max(160).nullable().optional(),
+  gameId: z.number().int().positive().max(2147483647).nullable().optional(),
+  // One plain line: it goes into email subjects.
+  gameName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(160)
+    .regex(/^[^\p{Cc}]*$/u, 'Write the game name on one line.')
+    .nullable()
+    .optional(),
   minPlayers: z.number().int().min(1).max(50),
   maxPlayers: z.number().int().min(1).max(50),
   sessionType: z.enum(['males_only', 'females_only', 'open']),
   // The exact date the session is for. A wanted session is a one-off, not a
   // recurring event, so it names a day rather than a set of weekdays.
-  sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick the date you want to play on.'),
+  sessionDate: z.string().refine(isRealDate, 'Pick the date you want to play on.'),
+  startTime: z
+    .string({ required_error: 'Pick a start time. Refresh the page if you do not see one.' })
+    .refine(isValidStart, 'Pick a start time.'),
   // The same lengths as a table booking. The price is derived from this
   // server-side, so the client never sends a price.
   durationMin: z
@@ -45,8 +60,8 @@ const createSchema = z.object({
   }),
 });
 
-// GET /api/wanted — the public board. Approved posts, interest COUNTS only:
-// no names, no contact details, no poster identity.
+// GET /api/wanted — the public board. Approved posts, COUNTS and the poster's
+// chosen username only: no names, no contact details.
 wantedRouter.get('/', async (_req, res, next) => {
   try {
     res.json({ posts: await listPublicPosts() });
@@ -62,6 +77,7 @@ wantedRouter.get('/mine', requireAuth, async (req, res, next) => {
     res.json({
       posts: await listMyPosts(req.user!.sub),
       interestedIn: await myInterestPostIds(req.user!.sub),
+      member: await getWantedMember(req.user!.sub),
     });
   } catch (err) {
     next(err);
@@ -77,7 +93,43 @@ wantedRouter.post('/', requireAuth, validate(createSchema), async (req, res, nex
   }
 });
 
-const idParam = z.object({ id: z.coerce.number().int().positive() });
+const idParam = z.object({ id: z.coerce.number().int().positive().max(2147483647) });
+
+const usernameSchema = z.object({ username: z.string().trim().min(1).max(40) });
+
+// PUT /api/wanted/username — the name shown on the member's posts.
+wantedRouter.put('/username', requireAuth, validate(usernameSchema), async (req, res, next) => {
+  try {
+    res.json({ username: await setUsername(req.user!.sub, req.body.username) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const subscribeSchema = z.object({ subscribed: z.boolean() });
+
+// PUT /api/wanted/subscription — alerts for new posts, on or off.
+wantedRouter.put('/subscription', requireAuth, validate(subscribeSchema), async (req, res, next) => {
+  try {
+    await setSubscribed(req.user!.sub, req.body.subscribed);
+    res.json({ subscribed: req.body.subscribed });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const unsubscribeSchema = z.object({ token: z.string().max(100) });
+
+// POST /api/wanted/unsubscribe — from the link in an alert email, signed in or
+// not. A POST, so a mail scanner opening the link unsubscribes nobody.
+wantedRouter.post('/unsubscribe', validate(unsubscribeSchema), async (req, res, next) => {
+  try {
+    await unsubscribeByToken(req.body.token);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // POST /api/wanted/:id/interest — register intent. Not a booking, and it
 // schedules nothing; staff coordinate the session once a post fills.
@@ -93,6 +145,21 @@ wantedRouter.post(
         email: req.user!.email,
       });
       res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// DELETE /api/wanted/:id/interest — take a registration back.
+wantedRouter.delete(
+  '/:id/interest',
+  requireAuth,
+  validate(idParam, 'params'),
+  async (req, res, next) => {
+    try {
+      await withdrawInterest(Number(req.params.id), req.user!.sub);
+      res.json({ ok: true });
     } catch (err) {
       next(err);
     }

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useI18n } from '../i18n';
+import { LoadFailed } from './WantedBoard';
 
 /**
  * Admin: the café's game hosts (migration 049). A host is an existing account,
@@ -20,6 +21,8 @@ interface Host {
   offersClocktower: boolean;
   offersDnd: boolean;
   isActive: boolean;
+  /** Library games this host can run. */
+  gameIds: number[];
 }
 
 const EMPTY = {
@@ -31,6 +34,7 @@ const EMPTY = {
   offersClocktower: false,
   offersDnd: false,
   isActive: true,
+  gameIds: [] as number[],
 };
 
 // Service-night times: before 14:00 is the small hours of the next morning.
@@ -178,6 +182,9 @@ export function StaffHosts() {
   const { t } = useI18n();
   const [hosts, setHosts] = useState<Host[] | null>(null);
   const [form, setForm] = useState(EMPTY);
+  const [games, setGames] = useState<{ id: number; title: string; is_active: boolean }[] | null>(null);
+  const [gamesFailed, setGamesFailed] = useState(false);
+  const [gameFilter, setGameFilter] = useState('');
   const [note, setNote] = useState<string | null>(null);
   // Set while changing an existing coach: their email is then fixed, so an
   // edit can never turn into a second coach.
@@ -191,7 +198,19 @@ export function StaffHosts() {
       .get<{ hosts: Host[] }>('/staff/hosts')
       .then((r) => setHosts(r.hosts))
       .catch(() => setHosts([]));
+    loadGames();
   }, []);
+
+  function loadGames() {
+    // Retired games too: a host's list keeps them, and they may come back.
+    api
+      .get<{ games: { id: number; title: string; is_active: boolean }[] }>('/games/all')
+      .then((r) => {
+        setGames([...r.games].sort((a, b) => a.title.localeCompare(b.title)));
+        setGamesFailed(false);
+      })
+      .catch(() => setGamesFailed(true));
+  }
 
   function edit(h: Host) {
     setForm({
@@ -203,7 +222,9 @@ export function StaffHosts() {
       offersClocktower: h.offersClocktower,
       offersDnd: h.offersDnd,
       isActive: h.isActive,
+      gameIds: h.gameIds,
     });
+    setGameFilter('');
     setEditing(h.email);
     setNote(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -211,6 +232,7 @@ export function StaffHosts() {
 
   function cancelEdit() {
     setForm(EMPTY);
+    setGameFilter('');
     setEditing(null);
   }
 
@@ -247,10 +269,13 @@ export function StaffHosts() {
         offersClocktower: form.offersClocktower,
         offersDnd: form.offersDnd,
         isActive: form.isActive,
+        // Not sent if the games never loaded, so a save cannot wipe them.
+        ...(games ? { gameIds: form.gameIds } : {}),
       });
       setHosts(r.hosts);
       if (r.upcoming.length) setUpcoming({ name: form.displayName, sessions: r.upcoming });
       setForm(EMPTY);
+      setGameFilter('');
       setEditing(null);
       setNote(t('pr.saved'));
     } catch (err) {
@@ -325,6 +350,45 @@ export function StaffHosts() {
             dir="ltr"
           />
         </label>
+        {gamesFailed && !games && <LoadFailed onRetry={loadGames} />}
+        {games && (
+          <fieldset className="host-games">
+            <legend>{t('sh.games', { n: form.gameIds.length })}</legend>
+            <input
+              type="search"
+              value={gameFilter}
+              onChange={(e) => setGameFilter(e.target.value)}
+              placeholder={t('sh.gamesFind')}
+              aria-label={t('sh.gamesFind')}
+              // Enter here must not save a half-filled host.
+              onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+            />
+            <div className="host-games-list">
+              {games
+                .filter((g) => g.title.toLowerCase().includes(gameFilter.trim().toLowerCase()))
+                .map((g) => (
+                  <label className="terms-check" key={g.id}>
+                    <input
+                      type="checkbox"
+                      checked={form.gameIds.includes(g.id)}
+                      onChange={(e) =>
+                        set(
+                          'gameIds',
+                          e.target.checked
+                            ? [...form.gameIds, g.id]
+                            : form.gameIds.filter((id) => id !== g.id),
+                        )
+                      }
+                    />
+                    <span>
+                      {g.title}
+                      {g.is_active ? '' : ` (${t('sh.gameRetired')})`}
+                    </span>
+                  </label>
+                ))}
+            </div>
+          </fieldset>
+        )}
         <div className="row">
           <label className="terms-check">
             <input
@@ -393,6 +457,15 @@ export function StaffHosts() {
                   .filter(Boolean)
                   .join(' + ') || '—'}
               </p>
+              {games && h.gameIds.length > 0 && (
+                <p className="muted">
+                  {t('sh.canRun')}{' '}
+                  {games
+                    .filter((g) => h.gameIds.includes(g.id))
+                    .map((g) => g.title)
+                    .join(', ')}
+                </p>
+              )}
               <div className="host-actions">
                 <button type="button" className="link" onClick={() => edit(h)}>
                   {t('sh.edit')}

@@ -709,13 +709,15 @@ staffRouter.get('/hosts', requireAdmin, async (_req, res, next) => {
 
 const hostBody = z.object({
   email: z.string().trim().email().max(200),
-  displayName: z.string().trim().min(1).max(60),
-  bio: z.string().trim().max(400).default(''),
+  displayName: z.string().trim().min(1).max(60).regex(/^[^\p{Cc}]*$/u, 'Write the name on one line.'),
+  bio: z.string().trim().max(400).regex(/^[^\0]*$/, 'Remove the invisible character.').default(''),
   photoUrl: linkish(1000),
   offersBoardGames: z.boolean(),
   offersClocktower: z.boolean(),
   offersDnd: z.boolean(),
   isActive: z.boolean().default(true),
+  // Library games they can run; left out keeps them as they are.
+  gameIds: z.array(z.number().int().positive().max(2147483647)).max(500).optional(),
 });
 
 // PUT /api/staff/hosts — make an account a host, or update one.
@@ -730,6 +732,7 @@ staffRouter.put('/hosts', requireAdmin, validate(hostBody), async (req, res, nex
       offersClocktower: b.offersClocktower,
       offersDnd: b.offersDnd,
       isActive: b.isActive,
+      gameIds: b.gameIds,
     });
     // Unticking Active is the other way to take a host off: same warning.
     res.json({

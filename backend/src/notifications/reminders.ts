@@ -22,6 +22,7 @@
 import { query } from '../db/pool';
 import { env } from '../config/env';
 import { notify } from './notify';
+import { sendDueWantedReminders } from '../modules/wanted/wanted.notices';
 
 export const REMINDER_HOURS = 3;
 const BATCH = 50;
@@ -170,6 +171,13 @@ export function startReminders(intervalMs = 5 * 60 * 1000): void {
       if (n > 0) console.log(`[reminders] sent ${n} booking reminder(s)`);
     } catch (err) {
       console.error('[reminders] sweep error', err);
+    }
+    // On its own, so trouble with one kind never stops the other.
+    try {
+      const n = await sendDueWantedReminders();
+      if (n > 0) console.log(`[reminders] sent ${n} Wanted Board reminder(s)`);
+    } catch (err) {
+      console.error('[reminders] Wanted Board sweep error', err);
     } finally {
       running = false;
     }

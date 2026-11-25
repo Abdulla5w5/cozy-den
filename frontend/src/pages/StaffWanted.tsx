@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n';
-import { formatSessionDate } from './WantedBoard';
+import { formatDay } from '../formatDay';
+import { LoadFailed, useLength } from './WantedBoard';
 import { money } from '../types';
 
 /**
@@ -12,8 +13,8 @@ import { money } from '../types';
  * new post is approved: until staff publish it, no member can see it or
  * register interest.
  *
- * A completed post is a to-do list, not a booking. Staff phone or email the
- * people below and arrange the day and time themselves.
+ * A completed post is a to-do list, not a booking. Staff arrange the table, and
+ * phone or email the people below. A session that is over moves to the archive.
  */
 
 interface StaffPost {
@@ -23,6 +24,12 @@ interface StaffPost {
   maxPlayers: number;
   sessionType: 'males_only' | 'females_only' | 'open';
   sessionDate: string | null;
+  startTime: string | null;
+  durationMin?: number;
+  postedBy: string | null;
+  started: boolean;
+  /** Over: shown in the archive only. */
+  ended: boolean;
   preferredDays: number[];
   status: 'pending' | 'open' | 'completed' | 'rejected';
   interestCount: number;
@@ -38,28 +45,46 @@ interface StaffPost {
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 export function StaffWanted() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const lengthText = useLength();
+  const [loadFailed, setLoadFailed] = useState(false);
   const [posts, setPosts] = useState<StaffPost[] | null>(null);
+  const [archive, setArchive] = useState(false);
   const [busy, setBusy] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ id: number; text: string } | null>(null);
 
-  function load() {
-    api
+  function load(): Promise<void> {
+    return api
       .get<{ posts: StaffPost[] }>('/staff/wanted')
-      .then((r) => setPosts(r.posts))
-      .catch(() => setPosts([]));
+      .then((r) => {
+        setPosts(r.posts);
+        setLoadFailed(false);
+      })
+      // The list already on screen stays.
+      .catch(() => setLoadFailed(true));
   }
 
-  useEffect(load, []);
+  useEffect(() => {
+    void load();
+  }, []);
 
-  async function moderate(id: number, decision: 'approve' | 'reject') {
+  async function moderate(post: StaffPost, decision: 'approve' | 'reject') {
+    const id = post.id;
+    if (
+      decision === 'reject' &&
+      !window.confirm(t('staff.wbRejectConfirm', { game: post.gameTitle, name: post.posterName }))
+    ) {
+      return;
+    }
     setError(null);
     setBusy(id);
     try {
       await api.post(`/staff/wanted/${id}/moderate`, { decision });
-      load();
+      await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('staff.wbActionFailed'));
+      // A colleague may have handled it already: show the post as it is now.
+      await load();
+      setError({ id, text: e instanceof Error ? e.message : t('staff.wbActionFailed') });
     } finally {
       setBusy(null);
     }
@@ -73,20 +98,32 @@ export function StaffWanted() {
       await api.del(`/staff/wanted/${post.id}`);
       setPosts((current) => current?.filter((item) => item.id !== post.id) ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('staff.wbActionFailed'));
+      setError({ id: post.id, text: e instanceof Error ? e.message : t('staff.wbActionFailed') });
     } finally {
       setBusy(null);
     }
   }
 
-  if (posts === null) return <p>{t('loading')}</p>;
-  if (posts.length === 0) return <p className="muted">{t('staff.wbNone')}</p>;
+  if (posts === null) return loadFailed ? <LoadFailed onRetry={load} /> : <p>{t('loading')}</p>;
+  // A rejected post needs nothing more from staff either.
+  const isPast = (p: StaffPost) => p.ended || p.status === 'rejected';
+  const past = posts.filter(isPast);
+  const shown = archive ? past : posts.filter((p) => !isPast(p));
 
   return (
     <>
-      {error && <div className="alert error">{error}</div>}
-      <div className="feature-grid">
-        {posts.map((p) => (
+      <div className="chips left">
+        <button type="button" className={`chip ${archive ? '' : 'active'}`} aria-pressed={!archive} onClick={() => setArchive(false)}>
+          {t('staff.wbCurrent', { n: posts.length - past.length })}
+        </button>
+        <button type="button" className={`chip ${archive ? 'active' : ''}`} aria-pressed={archive} onClick={() => setArchive(true)}>
+          {t('staff.wbArchive', { n: past.length })}
+        </button>
+      </div>
+      {shown.length === 0 && <p className="muted">{t('staff.wbNone')}</p>}
+      {loadFailed && <LoadFailed onRetry={load} />}
+      <div className="feature-grid staff-wanted">
+        {shown.map((p) => (
           <div className="feature-card" key={p.id}>
             <div className="mcard-top">
               <span className={`status ${p.status}`}>{t(`wb.status.${p.status}`)}</span>
@@ -99,11 +136,21 @@ export function StaffWanted() {
             </p>
             <p className="muted">
               {p.sessionDate
-                ? formatSessionDate(p.sessionDate)
+                ? formatDay(p.sessionDate, lang)
                 : p.preferredDays.map((d) => t(`day.${DAY_KEYS[d]}`)).join(' · ')}
+              {p.startTime
+                ? ` · ${p.startTime}${Number(p.startTime.slice(0, 2)) < 14 ? ` (${t('wb.afterMidnight')})` : ''}`
+                : ''}
+              {p.durationMin ? ` · ${lengthText(p.durationMin)}` : ''}
             </p>
             <p className="muted">
-              {t('staff.wbPoster')}: {p.posterName} — {p.posterEmail}
+              {t('staff.wbPoster')}: <bdi>{p.posterName}</bdi> — <bdi dir="ltr">{p.posterEmail}</bdi>
+              {p.postedBy && (
+                <>
+                  {' '}
+                  <bdi dir="ltr">(@{p.postedBy})</bdi>
+                </>
+              )}
             </p>
             {/* Seats are bought individually, so a listing can have several
                 payers. Staff run the session from this list. */}
@@ -118,40 +165,12 @@ export function StaffWanted() {
               <ul className="muted">
                 {p.seatBuyers.map((b, i) => (
                   <li key={i}>
-                    {b.name} — {b.contact} · {t('staff.wbSeatCount', { n: b.seats })}
+                    <bdi>{b.name}</bdi> — <bdi dir="ltr">{b.contact}</bdi> · {t('staff.wbSeatCount', { n: b.seats })}
                     {b.paid ? '' : ` · ${t('staff.wbSeatPending')}`}
                   </li>
                 ))}
               </ul>
             ) : null}
-
-            {p.status === 'pending' && (
-              <div className="row">
-                <button
-                  className="primary"
-                  disabled={busy === p.id}
-                  onClick={() => moderate(p.id, 'approve')}
-                >
-                  {t('staff.wbApprove')}
-                </button>
-                <button
-                  className="link"
-                  disabled={busy === p.id}
-                  onClick={() => moderate(p.id, 'reject')}
-                >
-                  {t('staff.wbReject')}
-                </button>
-              </div>
-            )}
-
-            <button
-              type="button"
-              className="link"
-              disabled={busy === p.id}
-              onClick={() => remove(p)}
-            >
-              {t('staff.wbDelete')}
-            </button>
 
             {p.interested.length > 0 && (
               <>
@@ -159,12 +178,49 @@ export function StaffWanted() {
                 <ul>
                   {p.interested.map((i, n) => (
                     <li key={n} className="muted">
-                      {i.contact}
+                      <bdi dir="ltr">{i.contact}</bdi>
                     </li>
                   ))}
                 </ul>
               </>
             )}
+            {error?.id === p.id && (
+              <p className="wb-error" role="alert">
+                {error.text}
+              </p>
+            )}
+            {p.status === 'pending' && p.started && (
+              <p className="wb-error">{t('staff.wbTooLate')}</p>
+            )}
+            <div className="host-actions">
+              {p.status === 'pending' && (
+                <>
+                  <button
+                    className="primary"
+                    disabled={busy !== null || p.started}
+                    onClick={() => moderate(p, 'approve')}
+                  >
+                    {t('staff.wbApprove')}
+                  </button>
+                  <button
+                    type="button"
+                    className="link danger"
+                    disabled={busy !== null}
+                    onClick={() => moderate(p, 'reject')}
+                  >
+                    {t('staff.wbReject')}
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="link danger"
+                disabled={busy !== null}
+                onClick={() => remove(p)}
+              >
+                {t('staff.wbDelete')}
+              </button>
+            </div>
           </div>
         ))}
       </div>

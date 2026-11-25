@@ -8234,7 +8234,8 @@ a.ev-ticket:active {
 .pay-return {
   position: relative;
   margin: 0 0 1.25rem;
-  padding: 0.85rem 2.6rem 0.85rem 1rem;
+  padding-block: 0.85rem;
+  padding-inline: 1rem 2.6rem;
   border: 2px solid var(--ink);
   border-radius: 14px;
   box-shadow: 3px 3px 0 var(--ink);
@@ -9138,6 +9139,9 @@ a.ev-ticket:active {
   place-items: center;
   width: 40px;
   height: 40px;
+  /* The shared button padding and touch height pushed the bell off-centre. */
+  min-height: 0;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid var(--outline-variant);
   background: transparent;
@@ -9230,9 +9234,10 @@ a.ev-ticket:active {
   box-shadow: 2px 2px 0 rgba(246, 239, 227, 0.72);
 }
 @media (max-width: 720px) {
-  .notif-button {
-    width: 36px;
-    height: 36px;
+  .topbar .notif-button {
+    width: 40px;
+    height: 40px;
+    min-height: 0;
   }
   /* On a phone the bell sits mid-row, so the list hangs from the bottom of
      the (sticky) header, full width with the page's 16px gutter. */
@@ -9300,4 +9305,266 @@ a.ev-ticket:active {
 .status.order_complete {
   background: #6b3fa0;
   color: #fff;
+}
+
+/* Wanted Board: compact post cards, so a page shows many sessions. */
+.wb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.wb-subscribe {
+  display: grid;
+  gap: 0.3rem;
+  max-width: 22rem;
+}
+.wb-subscribe button {
+  justify-self: start;
+}
+.wb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
+  gap: 0.9rem;
+}
+.wb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border: 2px solid #242424;
+  border-radius: 14px;
+  background: #fff;
+  color: #242424;
+}
+.wb-card-head {
+  display: flex;
+  gap: 0.7rem;
+  min-width: 0;
+}
+.wb-card-head > div {
+  min-width: 0;
+}
+.wb-card-head img,
+.wb-card-noimg {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  border: 2px solid #242424;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #fff1d6;
+}
+.wb-card-noimg {
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+}
+.wb-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.wb-by {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+}
+.wb-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+.wb-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+.wb-facts li {
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.wb-facts li > span[aria-hidden] {
+  flex: none;
+  width: 1.3em;
+  text-align: center;
+}
+.wb-buy {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+.wb-buy select {
+  flex: none;
+  width: 5rem;
+  min-height: 0;
+  margin: 0;
+}
+.wb-buy .cta {
+  flex: 1;
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.9rem;
+}
+.wb-card > .pill {
+  align-self: flex-start;
+  margin-top: auto;
+}
+.wb-joined {
+  margin: 0;
+  font-size: 0.82rem;
+}
+[data-theme='dark'] .wb-card,
+[data-theme='dark'] .wb-card-head img,
+[data-theme='dark'] .wb-card-noimg {
+  border-color: rgba(246, 239, 227, 0.72);
+}
+[data-theme='dark'] .wb-card {
+  background: var(--surface-container);
+  color: var(--ink);
+}
+[data-theme='dark'] .wb-card-noimg {
+  background: #2e2014;
+}
+.host-games {
+  margin: 0 0 1rem;
+  padding: 0.8rem;
+  border: 2px dashed var(--outline-variant);
+  border-radius: 12px;
+}
+.host-games-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 0.2rem 0.8rem;
+  max-height: 220px;
+  margin-top: 0.6rem;
+  overflow-y: auto;
+}
+/* Read out, not shown: the icon stands in for the label on screen. */
+.wb-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Dropdowns draw their own arrow: the browser's ignores the padding and sat on
+   the border. !important because many rules set the background shorthand. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 2.2rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23242424' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.9rem center !important;
+  background-size: 0.7rem auto !important;
+}
+[dir='rtl'] select {
+  background-position: left 0.9rem center !important;
+}
+[data-theme='dark'] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23f6efe3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+}
+
+/* Messages on the card they are about. */
+.wb-error,
+.wb-ok {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.wb-error {
+  color: #b3220d;
+}
+.wb-ok {
+  color: #1d6b40;
+}
+[data-theme='dark'] .wb-error {
+  color: var(--bad);
+}
+[data-theme='dark'] .wb-ok {
+  color: #7fd6a4;
+}
+/* Wanted Board states: waiting, up, full, refused. */
+.wb-tags .status,
+.staff-wanted .status {
+  color: #242424;
+}
+.wb-tags .status.pending,
+.staff-wanted .status.pending {
+  background: #ffe58a;
+}
+.wb-tags .status.open,
+.staff-wanted .status.open {
+  background: #bfe6cf;
+}
+.wb-tags .status.completed,
+.staff-wanted .status.completed {
+  background: #e4ded3;
+}
+.wb-tags .status.rejected,
+.staff-wanted .status.rejected {
+  background: #ffc4b8;
+}
+/* On the pale notice in both themes. */
+.pay-return button.link,
+[data-theme='dark'] .pay-return button.link,
+[data-theme='dark'] .pay-return button.link:hover:not(:disabled) {
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: #17120d;
+  font-weight: 800;
+  text-decoration: underline;
+}
+/* Text links are links in dark mode too, not boxes. */
+[data-theme='dark'] .wb-card button.link,
+[data-theme='dark'] .staff-wanted button.link,
+[data-theme='dark'] .alert button.link,
+[data-theme='dark'] .wb-card button.link:hover:not(:disabled),
+[data-theme='dark'] .staff-wanted button.link:hover:not(:disabled),
+[data-theme='dark'] .alert button.link:hover:not(:disabled) {
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+.alert button.link,
+[data-theme='dark'] .alert button.link,
+[data-theme='dark'] .alert button.link:hover:not(:disabled) {
+  color: inherit;
+  text-decoration: underline;
+}
+.pay-return button.link,
+.wb-joined button.link {
+  padding-inline: 0;
+  font-size: inherit;
+}
+.staff-wanted button.link {
+  padding-inline: 0;
+}
+.wb-subscribe button > span {
+  margin-inline-end: 0.3rem;
+}
+.staff-wanted .feature-card p,
+.staff-wanted .feature-card ul,
+.staff-wanted .feature-card h4 {
+  margin: 0;
+}
+.staff-wanted .feature-card {
+  gap: 0.5rem;
+}
+.staff-wanted .host-actions {
+  align-items: center;
+  margin-top: auto;
 }

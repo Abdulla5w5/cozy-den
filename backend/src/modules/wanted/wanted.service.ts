@@ -3,6 +3,9 @@ import { getOverrideMap, getRates, listingPerSeatOn, type Rates } from '../../ut
 import { paymentProvider } from '../../payment';
 import { emailSeatPass, newCheckinToken } from '../checkin/checkin.service';
 import { ApiError } from '../../middleware/error';
+import { isRealDate } from '../../utils/dates';
+import { isValidDuration, isValidStart, slotStartsAt } from '../../utils/slots';
+import { announceDecision } from './wanted.notices';
 
 /**
  * The Wanted Board.
@@ -14,15 +17,27 @@ import { ApiError } from '../../middleware/error';
  *     API refuses a post without it and the table has a CHECK constraint, so a
  *     browser that skips the checkbox gains nothing.
  *
- *  2. VISIBILITY. The public board exposes a COUNT of interested members and
- *     nothing else — no names, no contact details, not even who posted. Only
- *     staff see identities. The two are separate functions returning separate
- *     shapes so that a public response cannot accidentally carry identity: the
- *     public query never selects those columns at all.
+ *  2. VISIBILITY. The public board exposes COUNTS of members and the poster's
+ *     chosen username (on posts made since usernames existed) — no names and
+ *     no contact details. Only staff see identities. The two are separate
+ *     functions returning separate shapes so that a public response cannot
+ *     accidentally carry identity: the public query never selects those
+ *     columns at all.
  *
- * Nothing is scheduled automatically. A filled post is handed to staff, who
- * contact people and arrange the session themselves.
+ * No table is held automatically: staff arrange the table for a session.
  */
+
+/** A session must be posted at least this long before it starts. */
+export const POST_NOTICE_MS = 24 * 60 * 60 * 1000;
+
+// Seats close when the session starts, and the post leaves the board when it
+// ends. Posts from before start times only have a date to go by. The table
+// must be aliased p.
+const WINDOW = 'booking_window(p.session_date, p.start_time, p.duration_min)';
+const STARTED = `(CASE WHEN p.start_time IS NULL THEN COALESCE(p.session_date < current_date, FALSE)
+  ELSE (lower(${WINDOW}) AT TIME ZONE 'Asia/Kuwait') <= now() END)`;
+const ENDED = `(CASE WHEN p.start_time IS NULL THEN COALESCE(p.session_date < current_date, FALSE)
+  ELSE (upper(${WINDOW}) AT TIME ZONE 'Asia/Kuwait') <= now() END)`;
 
 export type SessionType = 'males_only' | 'females_only' | 'open';
 export type PostStatus = 'pending' | 'open' | 'completed' | 'rejected';
@@ -44,6 +59,15 @@ export interface PublicPost {
   /** The exact day the session is for (YYYY-MM-DD). Null on posts made before
    *  listings carried a date. */
   sessionDate: string | null;
+  /** HH:MM; null on posts made before listings carried a time. */
+  startTime: string | null;
+  /** Taking no more players: the session has begun. */
+  started: boolean;
+  /** Over; off the board. */
+  ended: boolean;
+  imageUrl: string | null;
+  /** The poster's chosen username, on posts that show it. */
+  postedBy: string | null;
   preferredDays: number[];
   status: PostStatus;
   interestCount: number;
@@ -60,10 +84,12 @@ export interface CreatePostInput {
   sessionType: SessionType;
   /** YYYY-MM-DD. A listing is a one-off, so it names the actual date. */
   sessionDate: string;
+  /** HH:MM, one of the café's start times. */
+  startTime: string;
   acknowledgmentConfirmed: boolean;
 }
 
-// Public projection. Deliberately selects no member identity of any kind.
+// Public projection. Deliberately selects no identity beyond the username.
 const PUBLIC_SELECT = `
   SELECT p.id, p.game_id, COALESCE(g.title, p.game_name) AS game_title,
          p.duration_min,
@@ -71,6 +97,8 @@ const PUBLIC_SELECT = `
                     WHERE s.post_id = p.id AND s.payment_state <> 'released'), 0) AS seats_taken,
          p.min_players, p.max_players, p.session_type,
          p.preferred_days, p.session_date, p.status, p.created_at,
+         p.start_time, ${STARTED} AS started, g.image_url,
+         p.posted_by, ${ENDED} AS ended,
          (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id) AS interest_count
     FROM wanted_posts p
     LEFT JOIN games g ON g.id = p.game_id`;
@@ -86,6 +114,11 @@ interface PublicRow {
   session_type: SessionType;
   preferred_days: number[];
   session_date: string | Date | null;
+  start_time: string | null;
+  started: boolean;
+  ended: boolean;
+  image_url: string | null;
+  posted_by: string | null;
   status: PostStatus;
   created_at: Date;
   interest_count: string;
@@ -127,6 +160,11 @@ function toPublic(r: PublicRow, rates: Rates, overrides: Map<string, number>): P
     maxPlayers: r.max_players,
     sessionType: r.session_type,
     sessionDate: toDateString(r.session_date),
+    startTime: r.start_time,
+    started: r.started,
+    ended: r.ended,
+    imageUrl: r.image_url,
+    postedBy: r.posted_by,
     preferredDays: r.preferred_days,
     status: r.status,
     interestCount: Number(r.interest_count),
@@ -148,13 +186,21 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
   }
   // One exact date, and never one that has already passed.
   const sessionDate = input.sessionDate;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate ?? '')) {
+  if (!isRealDate(sessionDate ?? '')) {
     throw new ApiError(400, 'Pick the date you want to play on.');
   }
   const day = new Date(`${sessionDate}T00:00:00Z`);
-  if (Number.isNaN(day.getTime())) throw new ApiError(400, 'That date is not a real date.');
-  if (sessionDate < new Date().toISOString().slice(0, 10)) {
-    throw new ApiError(400, 'That date has already passed.');
+  const durationMin = input.durationMin ?? 120;
+  if (!isValidStart(input.startTime)) throw new ApiError(400, 'Pick a start time.');
+  // Also keeps late starts out: too short for the 2-hour minimum.
+  if (durationMin < 120 || !isValidDuration(input.startTime, durationMin)) {
+    throw new ApiError(400, 'That session would run past closing time. Start earlier or make it shorter.');
+  }
+  if (slotStartsAt(sessionDate, input.startTime) - Date.now() > 365 * 24 * 60 * 60 * 1000) {
+    throw new ApiError(400, 'Pick a date within the next year.');
+  }
+  if (slotStartsAt(sessionDate, input.startTime) - Date.now() < POST_NOTICE_MS) {
+    throw new ApiError(400, 'A session must be posted at least 24 hours before it starts.');
   }
   if (!input.gameId && !input.gameName?.trim()) {
     throw new ApiError(400, 'Pick a game from the library or type its name.');
@@ -164,12 +210,18 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
     if (!rows[0]) throw new ApiError(404, 'That game is not in the library.');
   }
 
+  const { rows: poster } = await query<{ username: string | null }>(
+    'SELECT username FROM users WHERE id = $1',
+    [memberId],
+  );
+  if (!poster[0]?.username) throw new ApiError(400, 'Choose a username before posting.');
+
   const { rows } = await query<{ id: number }>(
     `INSERT INTO wanted_posts
        (member_id, game_id, game_name, min_players, max_players,
         session_type, preferred_days, session_date,
-        acknowledgment_confirmed, duration_min)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9)
+        acknowledgment_confirmed, duration_min, start_time, posted_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9,$10,$11)
      RETURNING id`,
     [
       memberId,
@@ -182,7 +234,9 @@ export async function createPost(memberId: number, input: CreatePostInput): Prom
       // always matches the date the listing is for.
       [day.getUTCDay()],
       sessionDate,
-      input.durationMin ?? 120,
+      durationMin,
+      input.startTime,
+      poster[0].username,
     ],
   );
   const post = await getPublicPost(rows[0].id);
@@ -197,9 +251,9 @@ export async function getPublicPost(id: number): Promise<PublicPost | null> {
 
 /**
  * The public board: approved posts only, identity-free, and only sessions that
- * have not happened yet.
+ * have not finished yet.
  *
- * A listing names one date, so once that date passes it is not something anyone
+ * A listing names one session, so once that ends it is not something anyone
  * can join — leaving it up made the board grow without limit and buried the
  * live listings under dead ones. Posts from before listings carried a date have
  * no date to judge, so they stay until staff clear them.
@@ -208,9 +262,11 @@ export async function listPublicPosts(): Promise<PublicPost[]> {
   const { rows } = await query<PublicRow>(
     `${PUBLIC_SELECT}
       WHERE p.status IN ('open', 'completed')
-        AND (p.session_date IS NULL OR p.session_date >= current_date)
+        AND NOT ${ENDED}
       ORDER BY CASE p.status WHEN 'open' THEN 0 ELSE 1 END,
-               p.session_date NULLS LAST, p.created_at DESC
+               p.session_date NULLS LAST,
+               CASE WHEN p.start_time::time < TIME '14:00' THEN 1 ELSE 0 END, p.start_time NULLS LAST,
+               p.created_at DESC
       LIMIT 200`,
   );
   const rates = await getRates();
@@ -257,14 +313,14 @@ export async function registerInterest(
       max_players: number;
       expired: boolean;
     }>(
-      `SELECT id, member_id, status, max_players, session_date < current_date AS expired
-         FROM wanted_posts WHERE id = $1 FOR UPDATE`,
+      `SELECT p.id, p.member_id, p.status, p.max_players, ${STARTED} AS expired
+         FROM wanted_posts p WHERE p.id = $1 FOR UPDATE`,
       [postId],
     );
     const post = postRows[0];
     if (!post) throw new ApiError(404, 'Post not found.');
     // The board hides these, but a link in an old chat still resolves here.
-    if (post.expired) throw new ApiError(409, 'The date for this session has passed.');
+    if (post.expired) throw new ApiError(409, 'This session has already started or passed.');
     if (post.status === 'pending') throw new ApiError(409, 'This post is awaiting staff approval.');
     if (post.status !== 'open') throw new ApiError(409, 'This post is no longer accepting players.');
     if (post.member_id === member.id) {
@@ -302,9 +358,19 @@ export async function registerInterest(
   }
 }
 
+/** Take back a registration. Paid seats are separate and are not touched. */
+export async function withdrawInterest(postId: number, memberId: number): Promise<void> {
+  const { rowCount } = await query(
+    'DELETE FROM wanted_post_interests WHERE post_id = $1 AND member_id = $2',
+    [postId, memberId],
+  );
+  if (!rowCount) throw new ApiError(404, 'You are not registered on this post.');
+}
+
 // ---------- Staff-only views ----------
 
 export interface StaffPost extends PublicPost {
+
   posterName: string;
   posterEmail: string;
   interested: { name: string; contact: string; registeredAt: string }[];
@@ -322,6 +388,8 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
                        WHERE s.post_id = p.id AND s.payment_state <> 'released'), 0) AS seats_taken,
             p.min_players, p.max_players, p.session_type,
             p.preferred_days, p.session_date, p.status, p.created_at,
+            p.start_time, ${STARTED} AS started, ${ENDED} AS ended, g.image_url,
+            p.posted_by,
             (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id)
               AS interest_count,
             u.name AS poster_name, u.email AS poster_email
@@ -399,11 +467,25 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
 /** Staff approval gate: 'pending' -> 'open' (published) or 'rejected' (hidden). */
 export async function moderatePost(id: number, decision: 'approve' | 'reject'): Promise<PublicPost> {
   const next: PostStatus = decision === 'approve' ? 'open' : 'rejected';
+  // A session that has already begun cannot be published, only rejected.
   const { rowCount } = await query(
-    `UPDATE wanted_posts SET status = $2 WHERE id = $1 AND status = 'pending'`,
+    `UPDATE wanted_posts p SET status = $2
+      WHERE p.id = $1 AND p.status = 'pending' AND ($2 = 'rejected' OR NOT ${STARTED})`,
     [id, next],
   );
-  if (!rowCount) throw new ApiError(409, 'That post is not awaiting approval.');
+  if (!rowCount) {
+    const { rows } = await query<{ status: PostStatus }>(
+      'SELECT status FROM wanted_posts WHERE id = $1',
+      [id],
+    );
+    throw new ApiError(
+      409,
+      rows[0]?.status === 'pending'
+        ? 'This session has already started or passed, so it can only be rejected.'
+        : 'That post is not awaiting approval.',
+    );
+  }
+  void announceDecision(id, decision);
   const post = await getPublicPost(id);
   if (!post) throw new ApiError(404, 'Post not found.');
   return post;
@@ -571,14 +653,14 @@ export async function holdSeats(
       max_players: number;
       expired: boolean;
     }>(
-      `SELECT status, duration_min, preferred_days, session_date, max_players,
-              session_date < current_date AS expired
-         FROM wanted_posts WHERE id = $1 FOR UPDATE`,
+      `SELECT p.status, p.duration_min, p.preferred_days, p.session_date, p.max_players,
+              ${STARTED} AS expired
+         FROM wanted_posts p WHERE p.id = $1 FOR UPDATE`,
       [postId],
     );
     const post = postRows[0];
     if (!post) throw new ApiError(404, 'Post not found.');
-    if (post.expired) throw new ApiError(409, 'The date for this session has passed.');
+    if (post.expired) throw new ApiError(409, 'This session has already started or passed.');
     if (post.status !== 'open') throw new ApiError(409, 'This listing is not taking players.');
 
     const { rows: takenRows } = await client.query<{ taken: string }>(

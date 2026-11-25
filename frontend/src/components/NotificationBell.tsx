@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { formatDay } from '../formatDay';
 import { useI18n } from '../i18n';
 
 interface Notice {
@@ -102,10 +103,18 @@ export function NotificationBell({ authKey, isStaff = false }: { authKey: number
     }
   }
 
+  // Days are stored plain ("2026-11-28", perhaps with a time) and worded here.
+  // Each value is isolated so a Latin one keeps its order inside Arabic.
+  function readable(v: string): string {
+    const m = /^(\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?$/.exec(v);
+    const shown = m ? formatDay(m[1], lang) + (m[2] ? ` \u2066${m[2]}\u2069` : '') : v;
+    return `\u2068${shown}\u2069`;
+  }
+
   function text(n: Notice, part: 'title' | 'body'): string {
     const key = `notif.${n.kind}.${part}`;
     const vars = Object.fromEntries(
-      Object.entries(n.data).map(([k, v]) => [k, v === null ? '' : String(v)]),
+      Object.entries(n.data).map(([k, v]) => [k, v === null ? '' : readable(String(v))]),
     );
     const s = t(key, vars);
     if (s !== key) return s;

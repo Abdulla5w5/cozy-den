@@ -785,15 +785,15 @@ const dict: Record<string, { en: string; ar: string }> = {
   'wb.eyebrow': { en: 'Find your table', ar: 'دوّر ربعك' },
   'wb.title': { en: 'The Wanted Board', ar: 'لوحة الطلبات' },
   'wb.sub': {
-    en: 'Post a game you know and will teach, and gather players. Staff get in touch once a post fills to arrange the day and time.',
-    ar: 'انشر لعبة تعرفها وبتعلّمها للربع، واجمع لاعبين. الموظفين بيتواصلون معاكم لما يكتمل العدد لتحديد اليوم والوقت.',
+    en: 'Post a game you know and will teach, pick the day and time, and gather players.',
+    ar: 'انشر لعبة تعرفها وبتعلّمها للربع، حدد اليوم والوقت، واجمع لاعبين.',
   },
   'wb.guideKicker': { en: 'New here?', ar: 'أول مرة؟' },
   'wb.guideTitle': { en: 'How the Wanted Board works', ar: 'شلون تشتغل لوحة الطلبات؟' },
   'wb.step1': { en: 'Post a game', ar: 'انشر لعبة' },
   'wb.step1b': {
-    en: 'Sign in, pick a game you know and will teach, and choose the date, length and number of players.',
-    ar: 'سجّل دخولك، اختر لعبة تعرفها وتعلّمها، وحدد التاريخ والمدة وعدد اللاعبين.',
+    en: 'Sign in, pick a game you know and will teach, and choose the date, start time, length and number of players.',
+    ar: 'سجّل دخولك، اختر لعبة تعرفها وتعلّمها، وحدد التاريخ ووقت البداية والمدة وعدد اللاعبين.',
   },
   'wb.step2': { en: 'Staff review it', ar: 'الموظفين يراجعونه' },
   'wb.step2b': {
@@ -805,16 +805,183 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Other members reserve a seat each. When the seats are gone, the post is full.',
     ar: 'الأعضاء يحجزون مقعد لكل واحد. ولما تخلص المقاعد يكتمل المنشور.',
   },
-  'wb.step4': { en: 'We set the time', ar: 'نحدد الوقت' },
+  'wb.step4': {
+    en: 'Come and play',
+    ar: 'تعال العب',
+  },
   'wb.step4b': {
-    en: 'Staff contact everyone to arrange the day and time. Then you play.',
-    ar: 'الموظفين يتواصلون معكم لتحديد اليوم والوقت. وبعدها نلعب.',
+    en: 'We set up your table and remind you 3 hours before the session starts.',
+    ar: 'نجهّز لكم الطاولة ونذكّركم قبل الجلسة بـ3 ساعات.',
+  },
+  'notif.wanted_approved.title': {
+    en: 'Your post is live: {game}',
+    ar: 'منشورك نزل على اللوحة: {game}',
+  },
+  'notif.wanted_approved.body': {
+    en: 'It is now on the Wanted Board for {when}.',
+    ar: 'صار على لوحة الطلبات بتاريخ {when}.',
+  },
+  'notif.wanted_rejected.title': {
+    en: 'Your post was not approved: {game}',
+    ar: 'ما تمت الموافقة على منشورك: {game}',
+  },
+  'notif.wanted_rejected.body': {
+    en: 'It was for {when}.',
+    ar: 'كان بتاريخ {when}.',
+  },
+  'notif.wanted_new.title': {
+    en: 'New on the Wanted Board: {game}',
+    ar: 'يديد على لوحة الطلبات: {game}',
+  },
+  'notif.wanted_new.body': {
+    en: 'Looking for players on {when}.',
+    ar: 'يدوّرون لاعبين بتاريخ {when}.',
+  },
+  'notif.wanted_reminder.title': {
+    en: 'Reminder: {game} at {time}',
+    ar: 'تذكير: {game} الساعة {time}',
+  },
+  'notif.wanted_reminder.body': {
+    en: 'Your Wanted Board session on {date} starts at {time}.',
+    ar: 'جلستك من لوحة الطلبات بتاريخ {date} تبدأ الساعة {time}.',
+  },
+  'wb.startTime': {
+    en: 'Start time',
+    ar: 'وقت البداية',
+  },
+  'wb.pickTime': {
+    en: 'Pick a time',
+    ar: 'اختر الوقت',
+  },
+  'wb.startRequired': {
+    en: 'Pick a start time.',
+    ar: 'اختر وقت البداية.',
+  },
+  'wb.afterMidnight': {
+    en: 'after midnight',
+    ar: 'بعد نص الليل',
+  },
+  'wb.timeToArrange': {
+    en: 'Time to be arranged',
+    ar: 'الوقت يتحدد بعدين',
+  },
+  'wb.noticeRule': {
+    en: 'Sessions must be posted at least 24 hours before they start and end by 03:00.',
+    ar: 'لازم تنشر الجلسة قبل موعدها بـ24 ساعة على الأقل، وتخلص قبل الساعة 03:00.',
+  },
+  'wb.username': {
+    en: 'Username',
+    ar: 'اسم المستخدم',
+  },
+  'wb.usernameHint': {
+    en: 'Everyone can see this name on your post, so do not use your real name or number. Changing it later does not change posts already made.',
+    ar: 'الكل يشوف هالاسم على منشورك، فلا تحط اسمك الحقيقي أو رقمك. إذا غيّرته بعدين ما يتغير على المنشورات السابقة.',
+  },
+  'wb.usernameRules': {
+    en: 'Your username needs 3 to 20 English letters, numbers or underscores, with at least one letter.',
+    ar: 'اسم المستخدم من 3 إلى 20 حرف إنجليزي أو رقم أو شرطة سفلية، وفيه حرف واحد على الأقل.',
+  },
+  'wb.postedBy': {
+    en: 'Posted by',
+    ar: 'نشرها',
+  },
+  'wb.playersLabel': {
+    en: 'Players',
+    ar: 'اللاعبين',
+  },
+  'wb.seatsTaken': {
+    en: '{taken} taken, {left} left',
+    ar: '{taken} محجوز، {left} باقي',
+  },
+  'wb.fee': {
+    en: 'Price',
+    ar: 'السعر',
+  },
+  'wb.started': {
+    en: 'In progress',
+    ar: 'بدأت الجلسة',
+  },
+  'wb.lengthTwo': { en: '2-hour session', ar: 'جلسة ساعتين' },
+  'wb.loadFailed': { en: 'Could not load this.', ar: 'ما قدرنا نحمّل الصفحة.' },
+  'wb.retry': { en: 'Try again', ar: 'حاول مرة ثانية' },
+  'staff.wbRejectConfirm': {
+    en: 'Reject the post for {game} by {name}? They will be told, and this cannot be undone.',
+    ar: 'ترفض منشور {game} من {name}؟ راح يوصله خبر وما تقدر تتراجع.',
+  },
+  'staff.wbTooLate': {
+    en: 'This session has already started, so it can only be rejected.',
+    ar: 'الجلسة بدأت خلاص، تقدر ترفضها بس.',
+  },
+  'sh.gameRetired': { en: 'retired', ar: 'متوقفة' },
+  'wb.ended': {
+    en: 'Finished',
+    ar: 'انتهت',
+  },
+  'wb.withdraw': {
+    en: 'Withdraw',
+    ar: 'انسحب',
+  },
+  'wb.withdrawn': {
+    en: 'You have withdrawn.',
+    ar: 'تم انسحابك.',
+  },
+  'wb.subscribe': {
+    en: 'Subscribe',
+    ar: 'اشترك',
+  },
+  'wb.unsubscribe': {
+    en: 'Unsubscribe',
+    ar: 'إلغاء الاشتراك',
+  },
+  'wb.subscribeHint': {
+    en: 'Hear about new posts.',
+    ar: 'توصلك المنشورات اليديدة.',
+  },
+  'wb.subscribedHint': {
+    en: 'You get new posts by email and in the bell.',
+    ar: 'توصلك المنشورات اليديدة بالإيميل وبالجرس.',
+  },
+  'wb.subscribedBellHint': {
+    en: 'You get new posts in the bell. Confirm your email to get them by email too.',
+    ar: 'توصلك المنشورات اليديدة بالجرس. أكّد إيميلك عشان توصلك بالإيميل بعد.',
+  },
+  'wb.unsubAsk': {
+    en: 'Stop getting Wanted Board alerts?',
+    ar: 'تبي توقف تنبيهات لوحة الطلبات؟',
+  },
+  'wb.unsubDone': {
+    en: 'You have unsubscribed.',
+    ar: 'تم إلغاء اشتراكك.',
+  },
+  'wb.unsubFailed': {
+    en: 'That unsubscribe link did not work. Sign in and use the button below.',
+    ar: 'رابط إلغاء الاشتراك ما ضبط. سجّل دخولك واستخدم الزر تحت.',
+  },
+  'staff.wbCurrent': {
+    en: 'Current ({n})',
+    ar: 'الحالية ({n})',
+  },
+  'staff.wbArchive': {
+    en: 'Archive ({n})',
+    ar: 'الأرشيف ({n})',
+  },
+  'sh.games': {
+    en: 'Games they can run ({n})',
+    ar: 'الألعاب اللي يقدر يستضيفها ({n})',
+  },
+  'sh.gamesFind': {
+    en: 'Find a game',
+    ar: 'دوّر لعبة',
+  },
+  'sh.canRun': {
+    en: 'Can run:',
+    ar: 'يستضيف:',
   },
   'wb.postOne': { en: 'Post a game', ar: 'انشر لعبة' },
   'wb.close': { en: 'Cancel', ar: 'إلغاء' },
   'wb.signInToPost': {
-    en: 'Sign in to post a game or register interest.',
-    ar: 'سجّل دخولك عشان تنشر لعبة أو تسجّل اهتمامك.',
+    en: 'Sign in to post a game, take a seat or subscribe to new posts.',
+    ar: 'سجّل دخولك عشان تنشر لعبة أو تحجز مقعد أو تشترك بالمنشورات اليديدة.',
   },
   'wb.mine': { en: 'My posts', ar: 'منشوراتي' },
   'wb.open': { en: 'Looking for players', ar: 'يدوّرون لاعبين' },
@@ -863,15 +1030,15 @@ const dict: Record<string, { en: string; ar: string }> = {
   'wb.seatsLeft': { en: '{n} seats still open', ar: 'باقي {n} مقاعد' },
   'wb.oneSeatLeft': { en: 'Last seat', ar: 'آخر مقعد' },
   'wb.reserveSeat': { en: 'Take a seat — {amount}', ar: 'احجز مقعد — {amount}' },
-  'wb.reserveSeats': { en: 'Take {n} seats — {amount}', ar: 'احجز {n} مقاعد — {amount}' },
-  'wb.players': { en: '{min}–{max} players', ar: '{min}–{max} لاعبين' },
+  'wb.reserveSeats': { en: 'Take {n} seats — {amount}', ar: 'احجز المقاعد ({n}) — {amount}' },
+  'wb.players': { en: '{min}–{max} players', ar: '\u2066{min}–{max}\u2069 لاعبين' },
   'wb.interested': { en: '{n} of {max} interested', ar: '{n} من {max} مهتمين' },
   'wb.join': { en: "I'm interested", ar: 'أنا مهتم' },
-  'wb.youAreIn': { en: "You're interested", ar: 'سجّلت اهتمامك' },
+  'wb.youAreIn': { en: 'You marked interest (not a seat).', ar: 'سجّلت اهتمامك (مو مقعد).' },
   'wb.full': { en: 'Full', ar: 'مكتمل' },
   'wb.status.pending': { en: 'Awaiting review', ar: 'بانتظار المراجعة' },
   'wb.status.open': { en: 'Open', ar: 'مفتوح' },
-  'wb.status.completed': { en: 'Completed', ar: 'مكتمل' },
+  'wb.status.completed': { en: 'Full', ar: 'اكتمل العدد' },
   'wb.status.rejected': { en: 'Not approved', ar: 'غير موافق عليه' },
   'about.eyebrow': { en: "Kuwait's first board game cafe", ar: 'أول كافيه ألعاب بورد في الكويت' },
   'about.title': { en: 'More than a cafe', ar: 'أكثر من مجرد كافيه' },

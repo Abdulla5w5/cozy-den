@@ -12,7 +12,11 @@ import { mailer } from './mailer';
 
 export type NotificationKind =
   | 'booking_reminder'
-  | 'staff_new_booking';
+  | 'staff_new_booking'
+  | 'wanted_approved'
+  | 'wanted_rejected'
+  | 'wanted_new'
+  | 'wanted_reminder';
 
 export interface NotifyInput {
   /** The account to show it to. Null for a guest, who only gets the email. */
