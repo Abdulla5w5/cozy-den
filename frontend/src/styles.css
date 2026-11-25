@@ -3521,6 +3521,16 @@ button:hover:not(:disabled) {
   border-color: var(--ink);
   background: var(--green-tint);
 }
+/* The rule above outranks the orange of the main buttons and left their white
+   text on pale green. :where() keeps this at the same weight, so dark mode and
+   page-specific hovers still win. */
+button:where(.primary, .cta):hover:not(:disabled) {
+  background: #d96500;
+  color: #fff;
+}
+button:where(.lang-toggle, .notif-button):hover:not(:disabled) {
+  color: var(--ink);
+}
 input,
 select,
 textarea {
@@ -9567,4 +9577,19 @@ select {
 .staff-wanted .host-actions {
   align-items: center;
   margin-top: auto;
+}
+
+/* Light mode: selected and coloured buttons keep their own colour on hover, and
+   orange text links turn dark. :where() adds no weight, so dark mode's hovers
+   still win; last in the file, so these win the ties. */
+button:where(.chip.active, .checkin-button:not(.other-night)):hover:not(:disabled) {
+  background: var(--green);
+  color: #fff;
+}
+button:where(.share-option.active, .floor-load-error *):hover:not(:disabled) {
+  background: #d96500;
+  color: #fff;
+}
+button:where(.link:not(.danger), .tabs .active):hover:not(:disabled) {
+  color: var(--ink);
 }
