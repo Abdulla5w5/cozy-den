@@ -977,6 +977,142 @@ const dict: Record<string, { en: string; ar: string }> = {
     en: 'Can run:',
     ar: 'يستضيف:',
   },
+  'notif.wanted_moved.title': {
+    en: 'New time: {game}',
+    ar: 'وقت يديد: {game}',
+  },
+  'notif.wanted_moved.body': {
+    en: 'Moved from {from} to {when}: {length}.',
+    ar: 'انتقلت من {from} إلى {when}: {length}.',
+  },
+  'notif.wanted_cancelled.title': {
+    en: 'Cancelled: {game}',
+    ar: 'ألغيت: {game}',
+  },
+  'notif.wanted_cancelled.body': {
+    en: 'The session on {when} is cancelled. {note}',
+    ar: 'الجلسة بتاريخ {when} ألغيت. {note}',
+  },
+  'notif.staff_wanted_refund.title': {
+    en: 'Refund needed: {name}',
+    ar: 'لازم استرجاع: {name}',
+  },
+  'notif.staff_wanted_refund.body': {
+    en: '{amount} arrived for {game} after it was cancelled.',
+    ar: 'وصل {amount} لجلسة {game} بعد ما ألغيت.',
+  },
+  'staff.wbCancel': {
+    en: 'Cancel session',
+    ar: 'إلغاء الجلسة',
+  },
+  'staff.wbCancelGo': {
+    en: 'Cancel the session',
+    ar: 'ألغِ الجلسة',
+  },
+  'staff.wbCancelNote': {
+    en: 'Message to the players (optional)',
+    ar: 'رسالة للاعبين (اختياري)',
+  },
+  'staff.wbCancelHint': {
+    en: 'Everyone in it gets a notification and an email. Anyone who paid is told they will be refunded in full. Refund them in Tap, then tick them off here.',
+    ar: 'يوصل الكل إشعار وإيميل. واللي دفعوا يوصلهم إن فلوسهم ترجع كاملة. رجّعها من Tap وبعدين علّم عليهم هني.',
+  },
+  'staff.wbCancelConfirm': {
+    en: 'Cancel {game} on {when}? Everyone will be told, and this cannot be undone.',
+    ar: 'تلغي {game} بتاريخ {when}؟ راح يوصل الكل خبر وما تقدر تتراجع.',
+  },
+  'staff.wbCancelled': {
+    en: 'Session cancelled. Everyone in it is being told.',
+    ar: 'ألغيت الجلسة، والكل راح يوصله خبر.',
+  },
+  'staff.wbMoveConfirm': {
+    en: 'Move {game} from {from} to {to}? Everyone in it will be told.',
+    ar: 'تنقل {game} من {from} إلى {to}؟ راح يوصل الكل خبر.',
+  },
+  'staff.wbMoved': {
+    en: 'Session moved. Everyone in it is being told.',
+    ar: 'انتقلت الجلسة، والكل راح يوصله خبر.',
+  },
+  'staff.wbSaved': {
+    en: 'Saved.',
+    ar: 'تم الحفظ.',
+  },
+  'staff.wbBack': {
+    en: 'Back',
+    ar: 'رجوع',
+  },
+  'staff.wbEditHint': {
+    en: 'Moving the session tells everyone in it.',
+    ar: 'نقل الجلسة يوصل خبره للكل.',
+  },
+  'staff.wbEditPaid': {
+    en: 'Moving the session tells everyone in it. Seats are already taken, so the length is fixed, and those players keep the price they paid. A new day can change the price for new seats.',
+    ar: 'نقل الجلسة يوصل خبره للكل. في مقاعد محجوزة، فالمدة ثابتة واللي حجزوا يبقى سعرهم مثل ما دفعوا. واليوم اليديد ممكن يغير سعر المقاعد اليديدة.',
+  },
+  'staff.wbMaxTaken': {
+    en: '{n} seats are already taken, so the maximum cannot be lower.',
+    ar: 'في {n} مقاعد محجوزة، فما يصير الحد الأعلى أقل.',
+  },
+  'staff.wbRefunded': {
+    en: 'Refunded in Tap',
+    ar: 'تم الاسترجاع من Tap',
+  },
+  'staff.wbOwed': {
+    en: 'Still to refund: {amount}. Payments: {n}.',
+    ar: 'باقي للاسترجاع: {amount}. عدد الدفعات: {n}.',
+  },
+  'staff.wbNoteSent': {
+    en: 'Message sent:',
+    ar: 'الرسالة المرسلة:',
+  },
+  'notif.wanted_length.title': {
+    en: 'New length: {game}',
+    ar: 'مدة يديدة: {game}',
+  },
+  'notif.wanted_length.body': {
+    en: 'The session on {when} is now a {length}.',
+    ar: 'الجلسة بتاريخ {when} صارت {length}.',
+  },
+  'notif.wanted_cancelled_paid.title': {
+    en: 'Cancelled: {game}',
+    ar: 'ألغيت: {game}',
+  },
+  'notif.wanted_cancelled_paid.body': {
+    en: 'The session on {when} is cancelled. We will refund you in full: {amount}. {note}',
+    ar: 'الجلسة بتاريخ {when} ألغيت. بنرجّع لك المبلغ كامل: {amount}. {note}',
+  },
+  'staff.wbWorking': {
+    en: 'Saving…',
+    ar: 'جاري الحفظ…',
+  },
+  'staff.wbNoTimes': {
+    en: 'No times left on that night.',
+    ar: 'ما بقى أوقات بهالليلة.',
+  },
+  'staff.wbOwedShort': {
+    en: '{amount} (payments: {n})',
+    ar: '{amount} (عدد الدفعات: {n})',
+  },
+  'staff.wbCancelOwed': {
+    en: 'To refund by hand in Tap: {owed}.',
+    ar: 'للاسترجاع باليد من Tap: {owed}.',
+  },
+  'staff.wbCancelHintFree': {
+    en: 'Everyone in it gets a notification and an email.',
+    ar: 'يوصل الكل إشعار وإيميل.',
+  },
+  'staff.wbAllRefunded': {
+    en: 'All refunded. Moved to the archive.',
+    ar: 'تم استرجاع الكل. انتقلت للأرشيف.',
+  },
+  'staff.wbDeletePaid': {
+    en: 'The record of its payments and refunds here is deleted too.',
+    ar: 'سجل الدفعات والاسترجاع هني راح ينحذف بعد.',
+  },
+  'staff.wbReopened': {
+    en: 'Back in Current: a refund is owed again.',
+    ar: 'رجعت للحالية: في استرجاع باقي.',
+  },
   'wb.postOne': { en: 'Post a game', ar: 'انشر لعبة' },
   'wb.close': { en: 'Cancel', ar: 'إلغاء' },
   'wb.signInToPost': {
@@ -1039,6 +1175,7 @@ const dict: Record<string, { en: string; ar: string }> = {
   'wb.status.pending': { en: 'Awaiting review', ar: 'بانتظار المراجعة' },
   'wb.status.open': { en: 'Open', ar: 'مفتوح' },
   'wb.status.completed': { en: 'Full', ar: 'اكتمل العدد' },
+  'wb.status.cancelled': { en: 'Cancelled', ar: 'ملغية' },
   'wb.status.rejected': { en: 'Not approved', ar: 'غير موافق عليه' },
   'about.eyebrow': { en: "Kuwait's first board game cafe", ar: 'أول كافيه ألعاب بورد في الكويت' },
   'about.title': { en: 'More than a cafe', ar: 'أكثر من مجرد كافيه' },

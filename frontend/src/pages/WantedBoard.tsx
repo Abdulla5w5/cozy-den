@@ -5,6 +5,7 @@ import { formatDay } from '../formatDay';
 import { useI18n } from '../i18n';
 import { Roadmap } from '../components/Roadmap';
 import { PaymentReturnNotice } from '../components/PaymentReturnNotice';
+import { calendarDay, nightMinutes, SESSION_LENGTHS, startsFor } from '../sessionTimes';
 import { Game } from '../types';
 
 /**
@@ -34,7 +35,7 @@ interface Post {
   imageUrl: string | null;
   postedBy: string | null;
   preferredDays: number[];
-  status: 'pending' | 'open' | 'completed' | 'rejected';
+  status: 'pending' | 'open' | 'completed' | 'rejected' | 'cancelled';
   interestCount: number;
   createdAt: string;
   /** Session length, and what reserving the listing costs. */
@@ -52,34 +53,13 @@ interface Member {
   emailVerified: boolean;
 }
 
-// The café's starts that fit a 2-hour session: 14:00 to 01:00.
-const STARTS = Array.from({ length: 23 }, (_, i) => {
-  const m = (14 * 60 + i * 30) % (24 * 60);
-  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-});
-const LENGTHS = [120, 180, 240, 300, 360];
 const NOTICE_MS = 24 * 60 * 60 * 1000;
-
-/** Minutes into the night: before 14:00 is the small hours after it. */
-function nightMinutes(slot: string): number {
-  const [h, m] = slot.split(':').map(Number);
-  return h * 60 + m + (h < 14 ? 24 * 60 : 0);
-}
-
-const startsAt = (date: string, slot: string) =>
-  Date.parse(`${date}T00:00:00+03:00`) + nightMinutes(slot) * 60_000;
 
 /** "19:00–21:00". */
 function sessionTime(start: string, durationMin: number): string {
   const end = (nightMinutes(start) + durationMin) % (24 * 60);
   // Isolated left-to-right, or Arabic would show the end first.
   return `\u2066${start}–${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}\u2069`;
-}
-
-/** The calendar day it starts: 00:30 is the day after the night it belongs to. */
-function calendarDay(night: string, start: string | null): string {
-  if (!start || Number(start.slice(0, 2)) >= 14) return night;
-  return new Date(Date.parse(`${night}T00:00:00Z`) + 24 * 3600_000).toISOString().slice(0, 10);
 }
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -162,7 +142,8 @@ export function WantedBoard() {
    * table checkout does; the server confirms only after re-retrieving the
    * charge.
    */
-  async function reserve(id: number, seats: number) {
+  async function reserve(post: Post, seats: number) {
+    const id = post.id;
     if (paying.current) return;
     paying.current = true;
     setCardNote(null);
@@ -170,7 +151,16 @@ export function WantedBoard() {
     try {
       const res = await api.post<{ redirectUrl?: string; free?: boolean }>(
         `/wanted/${id}/reserve`,
-        { seats },
+        {
+          seats,
+          // What this card shows: a session that has since moved is refused.
+          expected: {
+            sessionDate: post.sessionDate,
+            startTime: post.startTime,
+            durationMin: post.durationMin,
+            perPlayerCents: post.perPlayerCents,
+          },
+        },
       );
       if (res.redirectUrl) {
         window.location.assign(res.redirectUrl);
@@ -302,7 +292,7 @@ export function WantedBoard() {
                 post={p}
                 canReserve={loggedIn === true && p.status === 'open' && !p.started && (p.seatsLeft ?? 0) > 0}
                 onWithdraw={joined.includes(p.id) ? () => withdraw(p.id) : undefined}
-                onReserve={(seats) => reserve(p.id, seats)}
+                onReserve={(seats) => reserve(p, seats)}
                 reserving={reservingId === p.id}
                 locked={reservingId !== null}
                 withdrawing={withdrawingId !== null}
@@ -506,7 +496,7 @@ function PostCard({
             </p>
           )}
           <div className="wb-tags">
-            {showStatus && !(post.ended && post.status !== 'rejected') && <span className={`status ${post.status}`}>{t(`wb.status.${post.status}`)}</span>}
+            {showStatus && !(post.ended && post.status !== 'rejected' && post.status !== 'cancelled') && <span className={`status ${post.status}`}>{t(`wb.status.${post.status}`)}</span>}
             <span className="tag">{t(`wb.type.${post.sessionType}`)}</span>
           </div>
         </div>
@@ -520,7 +510,7 @@ function PostCard({
           </li>
         ))}
       </ul>
-      {post.ended ? (
+      {post.status === 'cancelled' ? null : post.ended ? (
         <span className="pill">{t('wb.ended')}</span>
       ) : post.status === 'pending' || post.status === 'rejected' ? null : post.started ? (
         <span className="pill">{t('wb.started')}</span>
@@ -598,11 +588,7 @@ function PostForm({
   const [sessionDate, setSessionDate] = useState('');
   const [startTime, setStartTime] = useState('');
   // Starts that end before closing (03:00) and are at least 24 hours away.
-  const starts = STARTS.filter(
-    (s) =>
-      nightMinutes(s) + durationMin <= 27 * 60 &&
-      (!sessionDate || startsAt(sessionDate, s) - Date.now() >= NOTICE_MS),
-  );
+  const starts = startsFor(sessionDate, durationMin, NOTICE_MS);
   const start = starts.includes(startTime) ? startTime : '';
   // Mandatory. The server refuses without it and the database has a CHECK
   // constraint, so this is a courtesy to the poster, not the actual guard.
@@ -710,7 +696,7 @@ function PostForm({
         <label className="field inline">
           {t('wb.sessionLength')}
           <select value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))}>
-            {LENGTHS.map((m) => (
+            {SESSION_LENGTHS.map((m) => (
               <option key={m} value={m}>
                 {lengthText(m)}
               </option>

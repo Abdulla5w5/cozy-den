@@ -37,7 +37,7 @@ function timeAgo(iso: string, lang: string): string {
  * moment stay highlighted until it closes.
  */
 export function NotificationBell({ authKey, isStaff = false }: { authKey: number; isStaff?: boolean }) {
-  const { t, lang } = useI18n();
+  const { t, lang, money } = useI18n();
   const navigate = useNavigate();
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -107,15 +107,25 @@ export function NotificationBell({ authKey, isStaff = false }: { authKey: number
   // Each value is isolated so a Latin one keeps its order inside Arabic.
   function readable(v: string): string {
     const m = /^(\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?$/.exec(v);
-    const shown = m ? formatDay(m[1], lang) + (m[2] ? ` \u2066${m[2]}\u2069` : '') : v;
+    // Amounts come as "KD 7.00" and are shown the site's way.
+    const kd = /^KD (\d+)\.(\d{2})$/.exec(v);
+    const shown = m
+      ? formatDay(m[1], lang) + (m[2] ? ` \u2066${m[2]}\u2069` : '')
+      : kd
+        ? money(Number(kd[1]) * 100 + Number(kd[2]))
+        : v;
     return `\u2068${shown}\u2069`;
   }
 
   function text(n: Notice, part: 'title' | 'body'): string {
     const key = `notif.${n.kind}.${part}`;
-    const vars = Object.fromEntries(
+    const vars: Record<string, string> = Object.fromEntries(
       Object.entries(n.data).map(([k, v]) => [k, v === null ? '' : readable(String(v))]),
     );
+    // A session's length, worded properly (two hours reads differently in Arabic).
+    if (typeof n.data.hours === 'number') {
+      vars.length = n.data.hours === 2 ? t('wb.lengthTwo') : t('wb.length', { n: n.data.hours });
+    }
     const s = t(key, vars);
     if (s !== key) return s;
     return part === 'title' ? t('notif.generic') : '';

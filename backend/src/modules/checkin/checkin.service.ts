@@ -231,7 +231,7 @@ async function find(token: string): Promise<Found | null> {
        JOIN users u ON u.id = s.member_id
        LEFT JOIN games g ON g.id = p.game_id
       WHERE s.checkin_token = $1
-        AND s.payment_state = 'paid'
+        AND s.payment_state = 'paid' AND p.status <> 'cancelled'
         AND (p.session_date IS NULL OR p.session_date ${STILL_VALID})`,
     [token],
   );
@@ -379,7 +379,7 @@ export async function listMyPasses(userId: number): Promise<MyPass[]> {
        FROM wanted_post_seats s
        JOIN wanted_posts p ON p.id = s.post_id
        LEFT JOIN games g ON g.id = p.game_id
-      WHERE s.member_id = $1 AND s.payment_state = 'paid'
+      WHERE s.member_id = $1 AND s.payment_state = 'paid' AND p.status <> 'cancelled'
         AND (p.session_date IS NULL OR p.session_date ${STILL_VALID})
       ORDER BY p.session_date`,
     [userId],
@@ -438,7 +438,8 @@ export function emailSeatPass(kind: 'event' | 'wanted', id: number): void {
                JOIN wanted_posts p ON p.id = s.post_id
                JOIN users u ON u.id = s.member_id
                LEFT JOIN games g ON g.id = p.game_id
-              WHERE s.id = $1`,
+              -- Paid as staff cancelled: they are told of the refund instead.
+              WHERE s.id = $1 AND p.status <> 'cancelled'`,
             [id],
           );
     const row = rows[0];

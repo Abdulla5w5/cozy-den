@@ -172,6 +172,15 @@ const reserveSchema = z.object({
   // How many seats you are taking. One by default — you are joining a game, not
   // buying the table — and capped by what the listing has left.
   seats: z.number().int().min(1).max(50).default(1),
+  // What the card showed. Left out by pages from before this.
+  expected: z
+    .object({
+      sessionDate: z.string().max(10).nullable(),
+      startTime: z.string().max(5).nullable(),
+      durationMin: z.number().int(),
+      perPlayerCents: z.number().int(),
+    })
+    .optional(),
 });
 
 /**
@@ -190,10 +199,12 @@ wantedRouter.post(
   async (req, res, next) => {
     const postId = Number(req.params.id);
     try {
-      const hold = await holdSeats(postId, req.user!.sub, req.body.seats);
+      const hold = await holdSeats(postId, req.user!.sub, req.body.seats, req.body.expected);
 
       if (hold.amountCents === 0) {
-        await confirmListing(hold.holdId, 'free');
+        if ((await confirmListing(hold.holdId, 'free')) === 'cancelled') {
+          throw new ApiError(409, 'This session has just been cancelled.');
+        }
         const { rows } = await query<{ checkin_token: string | null }>(
           'SELECT checkin_token FROM wanted_post_seats WHERE id = $1',
           [hold.holdId],

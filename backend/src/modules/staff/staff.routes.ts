@@ -19,7 +19,8 @@ import {
   setStatus,
   Status as SupportStatus,
 } from '../support/support.service';
-import { deletePost, listPostsForStaff, moderatePost } from '../wanted/wanted.service';
+import { deletePost, listPostsForStaff, moderatePost, type PostStatus } from '../wanted/wanted.service';
+import { cancelSession, changeSession, setSeatRefunded } from '../wanted/wanted.staff';
 import { setReviewed } from '../support/support.service';
 import {
   deleteOverride,
@@ -405,7 +406,7 @@ staffRouter.post(
 // ---------- Wanted Board (staff side) ----------
 
 const wantedQuery = z.object({
-  status: z.enum(['pending', 'open', 'completed', 'rejected']).optional(),
+  status: z.enum(['pending', 'open', 'completed', 'rejected', 'cancelled']).optional(),
 });
 
 // GET /api/staff/wanted — full detail INCLUDING the identities and contact
@@ -413,7 +414,7 @@ const wantedQuery = z.object({
 // are exposed; the public board returns counts alone.
 staffRouter.get('/wanted', requireStaff, validate(wantedQuery, 'query'), async (req, res, next) => {
   try {
-    const status = (req.query as { status?: 'pending' | 'open' | 'completed' | 'rejected' }).status;
+    const status = (req.query as { status?: PostStatus }).status;
     res.json({ posts: await listPostsForStaff(status) });
   } catch (err) {
     next(err);
@@ -431,6 +432,85 @@ staffRouter.post(
   async (req, res, next) => {
     try {
       res.json({ post: await moderatePost(Number(req.params.id), req.body.decision) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const sessionFields = {
+  sessionDate: isoDate(),
+  durationMin: z.number().int().min(60).max(720),
+  minPlayers: z.number().int().min(1).max(50),
+  maxPlayers: z.number().int().min(1).max(50),
+};
+const sessionChangeSchema = z.object({
+  ...sessionFields,
+  startTime: z.string().refine(isValidStart, 'Pick a start time.'),
+  // What staff saw, which may be an older post beyond today's limits.
+  expected: z.object({
+    ...sessionFields,
+    minPlayers: z.number().int().min(1).max(1000),
+    maxPlayers: z.number().int().min(1).max(1000),
+    startTime: z.string().max(5).nullable(),
+  }),
+});
+
+// PUT /api/staff/wanted/:id — move a session, or change its player counts.
+// Everyone in it hears about a move; nothing is charged or refunded.
+staffRouter.put(
+  '/wanted/:id',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(sessionChangeSchema),
+  async (req, res, next) => {
+    try {
+      res.json(await changeSession(Number(req.params.id), req.body, req.user!.sub));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const cancelSessionSchema = z.object({
+  // Sent to the players as it is. No control characters but line breaks.
+  note: z
+    .string()
+    .trim()
+    .max(500)
+    .regex(/^(?:\P{Cc}|\r|\n)*$/u, 'Remove the invisible character.')
+    .default(''),
+  expected: z.object({ sessionDate: isoDate(), startTime: z.string().max(5).nullable() }),
+});
+
+// POST /api/staff/wanted/:id/cancel — refunds are by hand, then ticked off.
+staffRouter.post(
+  '/wanted/:id/cancel',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(cancelSessionSchema),
+  async (req, res, next) => {
+    try {
+      await cancelSession(Number(req.params.id), req.body.note, req.user!.sub, req.body.expected);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const refundedSchema = z.object({ refunded: z.boolean() });
+
+// PUT /api/staff/wanted/seats/:id/refunded — "I have refunded this in Tap".
+staffRouter.put(
+  '/wanted/seats/:id/refunded',
+  requireStaff,
+  validate(idParam, 'params'),
+  validate(refundedSchema),
+  async (req, res, next) => {
+    try {
+      await setSeatRefunded(Number(req.params.id), req.body.refunded, req.user!.sub);
+      res.json({ ok: true });
     } catch (err) {
       next(err);
     }

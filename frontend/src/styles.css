@@ -9593,3 +9593,55 @@ button:where(.share-option.active, .floor-load-error *):hover:not(:disabled) {
 button:where(.link:not(.danger), .tabs .active):hover:not(:disabled) {
   color: var(--ink);
 }
+
+/* An open editor must not stretch its neighbours. */
+.staff-wanted {
+  align-items: start;
+}
+/* Staff: move or cancel a Wanted Board session, inside its card. */
+.session-editor {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  border: 2px dashed var(--outline-variant);
+  border-radius: 12px;
+}
+.session-editor .field {
+  min-width: 0;
+  margin: 0;
+}
+.session-editor input,
+.session-editor select,
+.session-editor textarea {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.session-editor-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+.wb-refund {
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+}
+/* Notices can carry staff's own words: long links wrap, line breaks stay. */
+.notif-list,
+.notif-item {
+  grid-template-columns: minmax(0, 1fr);
+}
+.notif-item-title,
+.notif-item-body {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.wb-note {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.wb-tags .status.cancelled,
+.staff-wanted .status.cancelled {
+  background: #ffc4b8;
+}

@@ -5,7 +5,7 @@ import { emailSeatPass, newCheckinToken } from '../checkin/checkin.service';
 import { ApiError } from '../../middleware/error';
 import { isRealDate } from '../../utils/dates';
 import { isValidDuration, isValidStart, slotStartsAt } from '../../utils/slots';
-import { announceDecision } from './wanted.notices';
+import { announceDecision, announceLatePayment, announceMovedToBuyer } from './wanted.notices';
 
 /**
  * The Wanted Board.
@@ -34,13 +34,13 @@ export const POST_NOTICE_MS = 24 * 60 * 60 * 1000;
 // ends. Posts from before start times only have a date to go by. The table
 // must be aliased p.
 const WINDOW = 'booking_window(p.session_date, p.start_time, p.duration_min)';
-const STARTED = `(CASE WHEN p.start_time IS NULL THEN COALESCE(p.session_date < current_date, FALSE)
+export const STARTED = `(CASE WHEN p.start_time IS NULL THEN COALESCE(p.session_date < current_date, FALSE)
   ELSE (lower(${WINDOW}) AT TIME ZONE 'Asia/Kuwait') <= now() END)`;
-const ENDED = `(CASE WHEN p.start_time IS NULL THEN COALESCE(p.session_date < current_date, FALSE)
+export const ENDED = `(CASE WHEN p.start_time IS NULL THEN COALESCE(p.session_date < current_date, FALSE)
   ELSE (upper(${WINDOW}) AT TIME ZONE 'Asia/Kuwait') <= now() END)`;
 
 export type SessionType = 'males_only' | 'females_only' | 'open';
-export type PostStatus = 'pending' | 'open' | 'completed' | 'rejected';
+export type PostStatus = 'pending' | 'open' | 'completed' | 'rejected' | 'cancelled';
 
 export interface PublicPost {
   /** Session length in minutes, and what reserving it costs. */
@@ -376,12 +376,22 @@ export interface StaffPost extends PublicPost {
   interested: { name: string; contact: string; registeredAt: string }[];
   /** Who actually bought seats, and how many. Staff need this to run the
    *  session; the public board never sees it. */
-  seatBuyers: { name: string; contact: string; seats: number; paid: boolean }[];
+  seatBuyers: {
+    id: number;
+    name: string;
+    contact: string;
+    seats: number;
+    amountCents: number;
+    paid: boolean;
+    refunded: boolean;
+  }[];
+  /** What staff told the players when they cancelled. */
+  cancelNote: string | null;
 }
 
 /** Full detail including identities — staff routes only. */
 export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[]> {
-  const { rows } = await query<PublicRow & { poster_name: string; poster_email: string }>(
+  const { rows } = await query<PublicRow & { poster_name: string; poster_email: string; cancel_note: string | null }>(
     `SELECT p.id, p.game_id, COALESCE(g.title, p.game_name) AS game_title,
             p.duration_min,
             COALESCE((SELECT sum(s.seats) FROM wanted_post_seats s
@@ -392,7 +402,7 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
             p.posted_by,
             (SELECT count(*) FROM wanted_post_interests i WHERE i.post_id = p.id)
               AS interest_count,
-            u.name AS poster_name, u.email AS poster_email
+            u.name AS poster_name, u.email AS poster_email, p.cancel_note
        FROM wanted_posts p
        LEFT JOIN games g ON g.id = p.game_id
        JOIN users u ON u.id = p.member_id
@@ -431,10 +441,14 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
     post_id: number;
     name: string;
     email: string;
+    id: number;
     seats: number;
+    amount_cents: number;
+    refunded: boolean;
     payment_state: string;
   }>(
-    `SELECT s.post_id, u.name, u.email, s.seats, s.payment_state
+    `SELECT s.id, s.post_id, u.name, u.email, s.seats, s.amount_cents, s.payment_state,
+            s.refunded_at IS NOT NULL AS refunded
        FROM wanted_post_seats s
        JOIN users u ON u.id = s.member_id
       WHERE s.post_id = ANY($1::int[]) AND s.payment_state <> 'released'
@@ -445,9 +459,12 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
   for (const b of seatRows) {
     const list = seatsByPost.get(b.post_id) ?? [];
     list.push({
+      id: b.id,
       name: b.name,
       contact: b.email,
       seats: b.seats,
+      amountCents: b.amount_cents,
+      refunded: b.refunded,
       paid: b.payment_state === 'paid',
     });
     seatsByPost.set(b.post_id, list);
@@ -461,6 +478,7 @@ export async function listPostsForStaff(status?: PostStatus): Promise<StaffPost[
     posterEmail: r.poster_email,
     interested: byPost.get(r.id) ?? [],
     seatBuyers: seatsByPost.get(r.id) ?? [],
+    cancelNote: r.cancel_note,
   }));
 }
 
@@ -509,8 +527,12 @@ export async function deletePost(id: number): Promise<void> {
     ]);
     if (!post[0]) throw new ApiError(404, 'Post not found.');
     const { rows } = await client.query<{ paid: string; paying: string }>(
-      `SELECT COALESCE(sum(seats) FILTER (WHERE payment_state = 'paid'), 0)::text AS paid,
-              COALESCE(sum(seats) FILTER (WHERE payment_state = 'pending_payment'), 0)::text AS paying
+      `SELECT COALESCE(sum(seats) FILTER (WHERE payment_state = 'paid' AND refunded_at IS NULL
+                AND (amount_cents > 0 OR (SELECT status FROM wanted_posts WHERE id = $1) <> 'cancelled')), 0)::text AS paid,
+              -- A released hold's payment page can still be paid for a while.
+              COALESCE(sum(seats) FILTER (WHERE payment_state = 'pending_payment'
+                OR (payment_state = 'released' AND payment_ref LIKE 'chg\\_%'
+                    AND created_at > now() - interval '1 hour')), 0)::text AS paying
          FROM wanted_post_seats WHERE post_id = $1`,
       [id],
     );
@@ -634,6 +656,13 @@ export async function holdSeats(
   postId: number,
   memberId: number,
   seats: number,
+  /** What the customer was looking at; a moved session is not sold unseen. */
+  expected?: {
+    sessionDate: string | null;
+    startTime: string | null;
+    durationMin: number;
+    perPlayerCents: number;
+  },
 ): Promise<SeatHold> {
   await clearOwnAbandonedHolds(postId, memberId);
   // Read the rates BEFORE taking a client. getRates() goes to the pool for a
@@ -652,8 +681,11 @@ export async function holdSeats(
       session_date: string | Date | null;
       max_players: number;
       expired: boolean;
+      start_time: string | null;
+      change_no: number;
     }>(
       `SELECT p.status, p.duration_min, p.preferred_days, p.session_date, p.max_players,
+              p.start_time, p.change_no,
               ${STARTED} AS expired
          FROM wanted_posts p WHERE p.id = $1 FOR UPDATE`,
       [postId],
@@ -681,14 +713,34 @@ export async function holdSeats(
       overrides,
       post.duration_min,
     );
+    if (
+      expected &&
+      (expected.sessionDate !== toDateString(post.session_date) ||
+        expected.startTime !== post.start_time ||
+        expected.durationMin !== post.duration_min ||
+        expected.perPlayerCents !== perSeat)
+    ) {
+      throw new ApiError(409, 'This session has just changed. Check the new details and try again.');
+    }
     const amountCents = perSeat * seats;
 
     const { rows: held } = await client.query<{ id: number }>(
       `INSERT INTO wanted_post_seats
-         (post_id, member_id, seats, amount_cents, payment_state, checkin_token)
-       VALUES ($1, $2, $3, $4, 'pending_payment', $5)
+         (post_id, member_id, seats, amount_cents, payment_state, checkin_token,
+          held_change_no, held_date, held_start, held_duration)
+       VALUES ($1, $2, $3, $4, 'pending_payment', $5, $6, $7, $8, $9)
        RETURNING id`,
-      [postId, memberId, seats, amountCents, newCheckinToken()],
+      [
+        postId,
+        memberId,
+        seats,
+        amountCents,
+        newCheckinToken(),
+        post.change_no,
+        toDateString(post.session_date),
+        post.start_time,
+        post.duration_min,
+      ],
     );
     await client.query('COMMIT');
     return { holdId: held[0].id, amountCents, seats };
@@ -714,8 +766,14 @@ export async function releaseListing(holdId: number): Promise<void> {
  * The money arrived; the seats are sold. A listing whose last seat has just
  * gone is completed in the same transaction, so the board never shows a full
  * listing as still open.
+ *
+ * Money landing on a session staff have cancelled meanwhile is recorded the
+ * same way, so it shows among the payments to refund, but gives no pass.
  */
-export async function confirmListing(holdId: number, paymentRef: string): Promise<void> {
+export async function confirmListing(
+  holdId: number,
+  paymentRef: string,
+): Promise<'confirmed' | 'cancelled'> {
   // A hold released a moment before a slow payment landed is reinstated: the
   // money is real, so the seats are the customer's even if that oversells the
   // listing, and staff are told.
@@ -726,22 +784,44 @@ export async function confirmListing(holdId: number, paymentRef: string): Promis
       RETURNING s.post_id, old.was`,
     [holdId, paymentRef],
   );
-  if (!rows[0]) return;
+  const { rows: post } = await query<{ status: PostStatus; moved: boolean; amount_cents: number }>(
+    `SELECT p.status, s.amount_cents,
+            COALESCE(p.change_no > s.held_change_no, FALSE) AS moved
+       FROM wanted_post_seats s JOIN wanted_posts p ON p.id = s.post_id
+      WHERE s.id = $1`,
+    [holdId],
+  );
+  const outcome = post[0]?.status === 'cancelled' ? 'cancelled' : 'confirmed';
+  if (!rows[0]) return outcome;
+  if (outcome === 'cancelled') {
+    if (post[0].amount_cents > 0) {
+      console.error(`[wanted] PAID charge ${paymentRef} landed on a cancelled session (hold ${holdId}).`);
+    }
+    void announceLatePayment(holdId);
+    return outcome;
+  }
   emailSeatPass('wanted', holdId);
+  // It moved while they were paying.
+  if (post[0]?.moved) void announceMovedToBuyer(holdId);
   if (rows[0].was === 'released') {
     console.error(
       `[wanted] PAID charge ${paymentRef} landed on released hold ${holdId}; ` +
         'reinstated it — check the listing is not oversold.',
     );
   }
-  await query(
-    `UPDATE wanted_posts p
-        SET status = 'completed'
-      WHERE p.id = $1 AND p.status = 'open'
-        AND (SELECT COALESCE(sum(s.seats), 0) FROM wanted_post_seats s
-              WHERE s.post_id = p.id AND s.payment_state = 'paid') >= p.max_players`,
-    [rows[0].post_id],
-  );
+  // The post locked first: staff may be changing its maximum at this moment.
+  await withTransaction(async (client) => {
+    await client.query('SELECT 1 FROM wanted_posts WHERE id = $1 FOR UPDATE', [rows[0].post_id]);
+    await client.query(
+      `UPDATE wanted_posts p
+          SET status = 'completed'
+        WHERE p.id = $1 AND p.status = 'open'
+          AND (SELECT COALESCE(sum(s.seats), 0) FROM wanted_post_seats s
+                WHERE s.post_id = p.id AND s.payment_state = 'paid') >= p.max_players`,
+      [rows[0].post_id],
+    );
+  });
+  return outcome;
 }
 
 /**
@@ -786,8 +866,8 @@ export async function finalizeListingCharge(
       // Not 'pending': the sweep would then release the paid-for seats.
       return 'review';
     }
-    await confirmListing(holdId, chargeId);
-    return 'paid';
+    // 'review' tells the customer not to pay again and that we will be in touch.
+    return (await confirmListing(holdId, chargeId)) === 'cancelled' ? 'review' : 'paid';
   }
   // Only a declined charge frees the seats. An unfinished one leaves them held
   // until the age check decides it was abandoned.

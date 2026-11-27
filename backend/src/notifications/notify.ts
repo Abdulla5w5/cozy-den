@@ -16,7 +16,12 @@ export type NotificationKind =
   | 'wanted_approved'
   | 'wanted_rejected'
   | 'wanted_new'
-  | 'wanted_reminder';
+  | 'wanted_reminder'
+  | 'wanted_moved'
+  | 'wanted_length'
+  | 'wanted_cancelled'
+  | 'wanted_cancelled_paid'
+  | 'staff_wanted_refund';
 
 export interface NotifyInput {
   /** The account to show it to. Null for a guest, who only gets the email. */
