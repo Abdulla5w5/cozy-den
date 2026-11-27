@@ -178,6 +178,97 @@ function HostTimes({ host, onClose }: { host: Host; onClose: () => void }) {
   );
 }
 
+interface Earning {
+  hostId: number;
+  name: string;
+  sessions: number;
+  minutes: number;
+  onlineCents: number;
+  counterCents: number;
+}
+
+/** What each host earned in a month, for paying them. */
+function HostEarnings() {
+  const { t, money } = useI18n();
+  const [month, setMonth] = useState(() => todayKuwait().slice(0, 7));
+  const [rows, setRows] = useState<Earning[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!/^\d{4}-\d{2}$/.test(month)) return;
+    let active = true;
+    setRows(null);
+    setFailed(false);
+    api
+      .get<{ earnings: Earning[] }>(`/staff/hosts/earnings?month=${month}`)
+      .then((r) => active && setRows(r.earnings))
+      .catch(() => active && setFailed(true));
+    return () => {
+      active = false;
+    };
+  }, [month, tick]);
+
+  const total = (rows ?? []).reduce((s, r) => s + r.onlineCents + r.counterCents, 0);
+
+  return (
+    <section className="host-earnings">
+      <h3>{t('sh.earnings')}</h3>
+      <p className="muted">{t('sh.earningsHelp')}</p>
+      <label className="field inline">
+        {t('staff.month')}
+        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+      </label>
+      {failed ? (
+        <LoadFailed onRetry={() => setTick((n) => n + 1)} />
+      ) : rows === null ? (
+        <p>{t('loading')}</p>
+      ) : rows.length === 0 ? (
+        <p className="muted">{t('sh.earningsNone')}</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="host-earnings-table">
+            <thead>
+              <tr>
+                <th>{t('sh.name')}</th>
+                <th>{t('sh.earnSessions')}</th>
+                <th>{t('sh.earnHours')}</th>
+                <th>{t('sh.earnOnline')}</th>
+                <th>{t('sh.earnCounter')}</th>
+                <th>{t('sh.earnTotal')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.hostId}>
+                  <td>
+                    <bdi>{r.name}</bdi>
+                  </td>
+                  <td>{r.sessions}</td>
+                  <td>{r.minutes / 60}</td>
+                  <td>{money(r.onlineCents)}</td>
+                  <td>{money(r.counterCents)}</td>
+                  <td>
+                    <strong>{money(r.onlineCents + r.counterCents)}</strong>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={5}>{t('sh.earnAll')}</td>
+                <td>
+                  <strong>{money(total)}</strong>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function StaffHosts() {
   const { t } = useI18n();
   const [hosts, setHosts] = useState<Host[] | null>(null);
@@ -481,6 +572,8 @@ export function StaffHosts() {
           ))}
         </div>
       )}
+
+      <HostEarnings />
     </div>
   );
 }

@@ -55,6 +55,8 @@ import {
   removeHost,
   saveHostByEmail,
   upcomingSessions,
+  listFreeHostsForStaff,
+  hostEarnings,
 } from '../hosts/hosts.service';
 import { linkish } from '../../utils/catalogue';
 import {
@@ -798,6 +800,34 @@ const hostBody = z.object({
   isActive: z.boolean().default(true),
   // Library games they can run; left out keeps them as they are.
   gameIds: z.array(z.number().int().positive().max(2147483647)).max(500).optional(),
+});
+
+const freeHostsQuery = z.object({
+  date: isoDate(),
+  timeSlot: z.string().refine(isValidStart, 'Pick a start time.'),
+  durationMin: z.coerce.number().int().min(30).max(780),
+});
+
+// GET /api/staff/hosts/free — hosts free for a sitting, for a booking staff enter.
+staffRouter.get('/hosts/free', requireStaff, validate(freeHostsQuery, 'query'), async (req, res, next) => {
+  try {
+    const q = req.query as unknown as z.infer<typeof freeHostsQuery>;
+    res.set('Cache-Control', 'no-store');
+    res.json({ hosts: await listFreeHostsForStaff(q.date, q.timeSlot, Number(q.durationMin)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const earningsQuery = z.object({ month: isoMonth() });
+
+// GET /api/staff/hosts/earnings?month=YYYY-MM — each host's month, for paying them.
+staffRouter.get('/hosts/earnings', requireAdmin, validate(earningsQuery, 'query'), async (req, res, next) => {
+  try {
+    res.json({ earnings: await hostEarnings((req.query as { month: string }).month) });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // PUT /api/staff/hosts — make an account a host, or update one.

@@ -1649,9 +1649,19 @@ function Receipt({ booking, date }: { booking: StaffBooking; date: string }) {
       {booking.durationMin ? row(t('receipt.length'), `${booking.durationMin / 60}h`) : null}
       {booking.partySize ? row(t('receipt.party'), String(booking.partySize)) : null}
       <hr />
-      {row(t('receipt.fee'), money(booking.totalCents - (booking.hostFeeCents ?? 0)))}
+      {/* Online, the payment includes the host's fee; a booking staff entered
+          is paid at the counter, host included. */}
+      {row(
+        t('receipt.fee'),
+        money(booking.totalCents - (booking.source === 'staff_manual' ? 0 : booking.hostFeeCents ?? 0)),
+      )}
       {booking.hostName
-        ? row(t('host.onBooking', { name: booking.hostName }), money(booking.hostFeeCents ?? 0))
+        ? row(
+            t('host.onBooking', { name: booking.hostName }),
+            booking.source === 'staff_manual'
+              ? `${money(booking.hostFeeCents ?? 0)} (${t('receipt.atCounter')})`
+              : money(booking.hostFeeCents ?? 0),
+          )
         : null}
       {booking.counterCents
         ? row(t('receipt.counter'), money(booking.counterCents))
@@ -1675,7 +1685,7 @@ function ManualBookingForm({
   defaultDate: string;
   onCreated: (date: string) => void;
 }) {
-  const { t } = useI18n();
+  const { t, money } = useI18n();
   const [tables, setTables] = useState<Table[]>([]);
   const [availability, setAvailability] = useState<TableAvailability[]>([]);
   // Never open on a day older than staff may enter (the server refuses those).
@@ -1690,6 +1700,13 @@ function ManualBookingForm({
   const [partySize, setPartySize] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
   const [shareHalf, setShareHalf] = useState(false);
+  // A host, as "kind:hostId", from those free for the chosen sitting.
+  const [hostChoice, setHostChoice] = useState('');
+  const [hostsTry, setHostsTry] = useState(0);
+  const [hostsState, setHostsState] = useState<'idle' | 'loading' | 'failed'>('idle');
+  const [freeHosts, setFreeHosts] = useState<
+    { hostId: number; name: string; kind: 'normal' | 'clocktower'; hourlyCents: number }[]
+  >([]);
   // Bumped after a refusal: the form was open a while, so its times may be stale.
   const [reload, setReload] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -1737,6 +1754,38 @@ function ManualBookingForm({
     ? Array.from({ length: Math.max(0, most - fewest + 1) }, (_, i) => fewest + i)
     : [];
 
+  // The length the form will send: the chosen end, or the first one offered.
+  const length = durationMin === '' ? ends[0] ?? 0 : durationMin;
+  // Hosts only for a whole table, booked ahead (not entered late).
+  const hostsAllowed = !!timeSlot && length > 0 && !sharing && !isLate;
+  useEffect(() => {
+    if (!hostsAllowed) {
+      setFreeHosts([]);
+      setHostsState('idle');
+      return;
+    }
+    let active = true;
+    setHostsState('loading');
+    api
+      .get<{ hosts: typeof freeHosts }>(
+        `/staff/hosts/free?date=${date}&timeSlot=${encodeURIComponent(timeSlot)}&durationMin=${length}`,
+      )
+      .then((r) => {
+        if (!active) return;
+        setFreeHosts(r.hosts);
+        setHostsState('idle');
+      })
+      // Not "no host free": staff must know the list did not load.
+      .catch(() => active && setHostsState('failed'));
+    return () => {
+      active = false;
+    };
+  }, [hostsAllowed, date, timeSlot, length, reload, hostsTry]);
+  // A host no longer free for the new choice is dropped, not sent.
+  const host = hostsAllowed
+    ? freeHosts.find((h) => `${h.kind}:${h.hostId}` === hostChoice) ?? null
+    : null;
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -1752,6 +1801,7 @@ function ManualBookingForm({
         partySize: partySize === '' ? undefined : partySize,
         notes: notes.trim() || undefined,
         share: sharing || undefined,
+        host: host ? { kind: host.kind, hostId: host.hostId } : undefined,
       });
       onCreated(date);
     } catch (err) {
@@ -1875,6 +1925,36 @@ function ManualBookingForm({
           </select>
         </label>
       </div>
+      {hostsAllowed && hostsState === 'failed' && (
+        <p className="wb-error" role="alert">
+          {t('staff.hostsFailed')}{' '}
+          <button type="button" className="link" onClick={() => setHostsTry((n) => n + 1)}>
+            {t('wb.retry')}
+          </button>
+        </p>
+      )}
+      {hostsAllowed && freeHosts.length > 0 && (
+        <div className="row">
+          <label className="field inline">
+            {t('staff.hostLabel')}
+            <select value={host ? hostChoice : ''} onChange={(e) => setHostChoice(e.target.value)}>
+              <option value="">{t('host.noHost')}</option>
+              {freeHosts.map((h) => (
+                <option key={`${h.kind}:${h.hostId}`} value={`${h.kind}:${h.hostId}`}>
+                  {t(`host.kind.${h.kind}`)}: {h.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {host && (
+            <p className="muted">
+              {t('staff.hostFeeCounter', {
+                amount: money(Math.round((host.hourlyCents * length) / 60)),
+              })}
+            </p>
+          )}
+        </div>
+      )}
       <div className="row">
         <label className="field inline">
           {t('bk.name')}
@@ -1899,7 +1979,16 @@ function ManualBookingForm({
         </label>
         <button
           className="primary"
-          disabled={busy || !date || tableId === '' || !timeSlot || !guestName || contact.trim().length < 3}
+          disabled={
+            busy ||
+            // A chosen host is only sent once the list for this time has loaded.
+            (!!hostChoice && hostsState === 'loading') ||
+            !date ||
+            tableId === '' ||
+            !timeSlot ||
+            !guestName ||
+            contact.trim().length < 3
+          }
         >
           {busy ? t('bk.processing') : t('staff.createBtn')}
         </button>

@@ -6,6 +6,7 @@ type Vars = Record<string, string | number>;
 // EN = plain English. AR = Arabic with a light Kuwaiti dialect flavour.
 const dict: Record<string, { en: string; ar: string }> = {
   // ---- nav / footer ----
+  'nav.more': { en: 'More links', ar: 'روابط أكثر' },
   'nav.home': { en: 'Home', ar: 'الرئيسية' },
   'nav.games': { en: 'Games', ar: 'الألعاب' },
   'nav.menu': { en: 'Menu', ar: 'المنيو' },
@@ -1112,6 +1113,55 @@ const dict: Record<string, { en: string; ar: string }> = {
   'staff.wbReopened': {
     en: 'Back in Current: a refund is owed again.',
     ar: 'رجعت للحالية: في استرجاع باقي.',
+  },
+  'staff.hostLabel': {
+    en: 'Game host',
+    ar: 'مضيف اللعب',
+  },
+  'staff.hostFeeCounter': {
+    en: 'Host fee {amount}, collected at the counter with the rest.',
+    ar: 'رسوم المضيف {amount}، تنحصّل عند الكاونتر مع الباقي.',
+  },
+  'sh.earnings': {
+    en: 'Host earnings',
+    ar: 'أرباح المضيفين',
+  },
+  'sh.earningsHelp': {
+    en: 'Sessions in the month that were not cancelled, by the night they belong to. Online fees were paid with the booking; counter fees are on bookings staff entered.',
+    ar: 'الجلسات بالشهر اللي ما ألغيت، حسب الليلة. الرسوم الأونلاين انْدفعت مع الحجز، ورسوم الكاونتر على الحجوزات اللي دخّلها الموظفين.',
+  },
+  'sh.earningsNone': {
+    en: 'No host sessions this month.',
+    ar: 'ما في جلسات مضيفين بهالشهر.',
+  },
+  'sh.earnSessions': {
+    en: 'Sessions',
+    ar: 'الجلسات',
+  },
+  'sh.earnHours': {
+    en: 'Hours',
+    ar: 'الساعات',
+  },
+  'sh.earnOnline': {
+    en: 'Paid online',
+    ar: 'مدفوع أونلاين',
+  },
+  'sh.earnCounter': {
+    en: 'At the counter',
+    ar: 'عند الكاونتر',
+  },
+  'sh.earnTotal': {
+    en: 'Total',
+    ar: 'المجموع',
+  },
+  'sh.earnAll': {
+    en: 'All hosts',
+    ar: 'كل المضيفين',
+  },
+  'receipt.atCounter': { en: 'at the counter', ar: 'عند الكاونتر' },
+  'staff.hostsFailed': {
+    en: 'Could not load the free hosts for this time.',
+    ar: 'ما قدرنا نحمّل المضيفين الفاضيين بهالوقت.',
   },
   'wb.postOne': { en: 'Post a game', ar: 'انشر لعبة' },
   'wb.close': { en: 'Cancel', ar: 'إلغاء' },

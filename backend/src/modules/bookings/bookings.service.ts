@@ -23,7 +23,15 @@ import { normalizeKuwaitiPhone } from '../../utils/phone';
 import { findCode, resolvePromoCode } from '../promo/codes.service';
 import { getAvailability } from '../tables/tables.service';
 import { hashRetryToken } from '../../utils/retryToken';
-import { assignHost, CLOCKTOWER_MIN_PLAYERS, hostEmailForBooking, hostFeeCents, HostKind } from '../hosts/hosts.service';
+import {
+  assignHost,
+  CLOCKTOWER_MIN_PLAYERS,
+  hostEmailForBooking,
+  hostFeeCents,
+  hostForStaffBooking,
+  HostKind,
+  lockHostForStaffBooking,
+} from '../hosts/hosts.service';
 import { ensureCheckinToken, newCheckinToken } from '../checkin/checkin.service';
 
 // Legacy line items are still surfaced for pre-overhaul bookings; new bookings
@@ -378,6 +386,10 @@ async function insertBooking(
       }
       if (e.code === '23P01' && e.constraint === 'bookings_host_no_overlap') {
         throw new ApiError(409, 'That host was just booked for this time. Please try again.');
+      }
+      // The host was removed from the café as this was saved.
+      if (e.code === '23503' && e.constraint === 'bookings_host_id_fkey') {
+        throw new ApiError(409, 'That host is no longer available. Please pick another.');
       }
       if (e.code === '23505' && e.constraint?.startsWith('bookings_newcomer_')) {
         throw new ApiError(
@@ -1148,6 +1160,26 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
   // phone column, like an online booking's; anything else stays as before.
   const phone = normalizeKuwaitiPhone(input.contact);
 
+  // A host, if the group asked for one. The fee is collected at the counter
+  // with the rest, and recorded for the host's earnings.
+  let host: { hostId: number; hourlyCents: number } | null = null;
+  if (input.host) {
+    // A host is arranged ahead; a sitting already under way is recorded as it was.
+    if (enteredLate) throw new ApiError(400, 'A host can only be added to a booking that has not started.');
+    if (input.share === true) throw new ApiError(400, 'A game host is for a whole table, not a shared half.');
+    if (input.host.kind === 'clocktower' && sitting.partySize < CLOCKTOWER_MIN_PLAYERS) {
+      throw new ApiError(400, `Blood on the Clocktower needs at least ${CLOCKTOWER_MIN_PLAYERS} players.`);
+    }
+    // Checked now for a clear answer, and again under the host's lock below.
+    host = await hostForStaffBooking(
+      input.host.kind,
+      input.host.hostId,
+      input.date,
+      input.timeSlot,
+      sitting.durationMin,
+    );
+  }
+
   const params: InsertParams = {
     tableId: input.tableId,
     date: input.date,
@@ -1164,12 +1196,27 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
     partySize: sitting.partySize,
     staffNotes: input.notes,
     enteredLate,
+    hostId: host?.hostId ?? null,
+    hostKind: input.host?.kind ?? null,
+    hostFeeCents: host ? hostFeeCents(host.hourlyCents, sitting.durationMin) : 0,
   };
 
   // A late start must also miss any group that sat there then and has since
   // been marked done (the overlap rule no longer sees those). The table's lock
   // is held from that check to the save, so Mark done cannot land in between.
-  const bookingId = !enteredLate
+  const bookingId = host
+    ? await withTransaction(async (db) => {
+        await lockHostForStaffBooking(
+          db,
+          input.host!.kind,
+          host!.hostId,
+          input.date,
+          input.timeSlot,
+          sitting.durationMin,
+        );
+        return insertSitting(params, false, [1, 2], db);
+      })
+    : !enteredLate
     ? await insertSitting(params, input.share === true)
     : await withTransaction(async (db) => {
         await db.query('SELECT pg_advisory_xact_lock($1, $2)', [TABLE_LOCK, input.tableId]);
@@ -1190,6 +1237,8 @@ export async function createStaffBooking(input: StaffCreateBookingInput): Promis
 
   const view = await getBookingById(bookingId);
   if (!view) throw new ApiError(500, 'Booking vanished after creation.');
+  // A host booked ahead hears about it; one entered late is there already.
+  if (view.hostName && !enteredLate) alertHost(view);
   return view;
 }
 

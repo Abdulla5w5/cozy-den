@@ -8,6 +8,7 @@ import { PromoModal } from './components/PromoModal';
 import { VerifyBanner } from './components/VerifyBanner';
 import { NewcomerBanner } from './components/NewcomerBanner';
 import { NotificationBell } from './components/NotificationBell';
+import { NavScroll } from './components/NavScroll';
 
 // The home shell is eager; secondary and staff pages load only when visited.
 // This keeps staff/admin code out of every customer's initial browser heap and
@@ -144,9 +145,9 @@ export function App() {
             <img src="/brand/cozy-den-header-word.png" alt={t('brand.logoAlt')} />
           </Link>
         </div>
-        {/* Guests see four links, which fit without scrolling; signed-in users
-            get extra links and the row becomes swipeable. */}
-        <nav className={`mainnav ${loggedIn ? 'authed' : 'guest'}`}>
+        {/* On a phone the links are one swipeable row; NavScroll shows when
+            more of them are off-screen. */}
+        <NavScroll className={`mainnav ${loggedIn ? 'authed' : 'guest'}`}>
           <NavLink to="/" end>
             {t('nav.home')}
           </NavLink>
@@ -161,7 +162,7 @@ export function App() {
           {loggedIn && !user?.isStaff && <NavLink to="/support">{t('nav.support')}</NavLink>}
           {user?.isStaff && <NavLink to="/staff/dashboard">{t('nav.staff')}</NavLink>}
           {user?.isHost && <NavLink to="/host">{t('nav.host')}</NavLink>}
-        </nav>
+        </NavScroll>
         <div className="nav-actions">
           {/* Light / dark theme toggle */}
           <button

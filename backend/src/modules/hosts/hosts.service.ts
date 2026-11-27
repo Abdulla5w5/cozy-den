@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import { query, withTransaction } from '../../db/pool';
 import { ApiError } from '../../middleware/error';
 import { CLOSE_MIN, isLateStart, isValidStart, slotStartsAt, toMinutes } from '../../utils/slots';
@@ -180,6 +181,131 @@ export async function listAvailableOptions(
   return out;
 }
 
+// ---------- Staff: a host on a booking taken by phone ----------
+
+export interface FreeHost {
+  hostId: number;
+  name: string;
+  kind: HostKind;
+  hourlyCents: number;
+}
+
+/**
+ * Hosts free for this sitting, by option, for a booking staff enter. Staff may
+ * add a host at short notice (they have just spoken to the host), so only the
+ * host's own free times and their other bookings count. Not for late seatings.
+ */
+export async function listFreeHostsForStaff(
+  date: string,
+  timeSlot: string,
+  durationMin: number,
+): Promise<FreeHost[]> {
+  if (isLateStart(timeSlot)) return [];
+  const out: FreeHost[] = [];
+  for (const option of pricedOptions(await getHostRates())) {
+    const { rows } = await query<{ user_id: number; display_name: string }>(
+      `SELECT h.user_id, h.display_name FROM hosts h
+        WHERE h.is_active AND h.${KIND_COLUMN[option.kind]} AND ${FREE_FOR_WINDOW}
+        ORDER BY h.display_name`,
+      [date, timeSlot, durationMin, null],
+    );
+    for (const r of rows) {
+      out.push({ hostId: r.user_id, name: r.display_name, kind: option.kind, hourlyCents: option.hourlyCents });
+    }
+  }
+  return out;
+}
+
+/** The staff form's choice, checked: that host, offering that option, free then. */
+export async function hostForStaffBooking(
+  kind: HostKind,
+  hostId: number,
+  date: string,
+  timeSlot: string,
+  durationMin: number,
+): Promise<{ hostId: number; hourlyCents: number }> {
+  if (isLateStart(timeSlot)) throw new ApiError(400, 'A game host is not available for late seatings.');
+  const option = pricedOptions(await getHostRates()).find((o) => o.kind === kind);
+  if (!option) throw new ApiError(409, 'That host option is not available.');
+  const { rows } = await query(hostFreeSql(kind), [date, timeSlot, durationMin, null, hostId]);
+  if (!rows[0]) throw new ApiError(409, HOST_NOT_FREE);
+  return { hostId, hourlyCents: option.hourlyCents };
+}
+
+/**
+ * The same check again inside the booking's transaction, on that transaction's
+ * own connection only, with the host's row held until the booking is saved, so
+ * the host cannot be switched off or lose this free time meanwhile (those
+ * changes take the same lock).
+ */
+export async function lockHostForStaffBooking(
+  db: Pick<PoolClient, 'query'>,
+  kind: HostKind,
+  hostId: number,
+  date: string,
+  timeSlot: string,
+  durationMin: number,
+): Promise<void> {
+  const { rows } = await db.query(`${hostFreeSql(kind)} FOR SHARE OF h`, [
+    date,
+    timeSlot,
+    durationMin,
+    null,
+    hostId,
+  ]);
+  if (!rows[0]) throw new ApiError(409, HOST_NOT_FREE);
+}
+
+const HOST_NOT_FREE = 'That host is not free for this time. Pick another host or time.';
+const hostFreeSql = (kind: HostKind) => `SELECT 1 FROM hosts h
+      WHERE h.user_id = $5 AND h.is_active AND h.${KIND_COLUMN[kind]} AND ${FREE_FOR_WINDOW}`;
+
+export interface HostEarnings {
+  hostId: number;
+  name: string;
+  sessions: number;
+  minutes: number;
+  /** Host fees paid online with the booking. */
+  onlineCents: number;
+  /** Host fees on bookings staff entered, collected at the counter. */
+  counterCents: number;
+}
+
+/**
+ * What each host earned in a month: their sessions that happened or are still
+ * to come (not cancelled, not unpaid holds), by the night they belong to.
+ */
+export async function hostEarnings(month: string): Promise<HostEarnings[]> {
+  const { rows } = await query<{
+    host_id: number;
+    name: string;
+    sessions: number;
+    minutes: number;
+    online: number;
+    counter: number;
+  }>(
+    `SELECT h.user_id AS host_id, h.display_name AS name,
+            count(*)::int AS sessions, sum(b.duration_min)::int AS minutes,
+            COALESCE(sum(b.host_fee_cents) FILTER (WHERE b.source <> 'staff_manual'), 0)::int AS online,
+            COALESCE(sum(b.host_fee_cents) FILTER (WHERE b.source = 'staff_manual'), 0)::int AS counter
+       FROM bookings b JOIN hosts h ON h.user_id = b.host_id
+      WHERE b.status NOT IN ('cancelled', 'pending_payment')
+        AND b.booking_date >= ($1 || '-01')::date
+        AND b.booking_date < ($1 || '-01')::date + interval '1 month'
+      GROUP BY h.user_id, h.display_name
+      ORDER BY h.display_name`,
+    [month],
+  );
+  return rows.map((r) => ({
+    hostId: r.host_id,
+    name: r.name,
+    sessions: r.sessions,
+    minutes: r.minutes,
+    onlineCents: r.online,
+    counterCents: r.counter,
+  }));
+}
+
 /**
  * Checked at checkout: pick a free host for this option, the one with the
  * fewest sessions to come, so work is shared out. Returns them and the option's
@@ -341,11 +467,22 @@ export async function addAvailability(
  * booked (the host is still expected), the time just stops taking new ones.
  */
 export async function removeAvailability(hostId: number, id: number): Promise<void> {
-  const { rowCount } = await query('DELETE FROM host_availability WHERE id = $1 AND host_id = $2', [
-    id,
-    hostId,
-  ]);
-  if (!rowCount) throw new ApiError(404, 'Not found.');
+  if (!(await deleteWindow(hostId, id))) throw new ApiError(404, 'Not found.');
+}
+
+/**
+ * Delete a free time with the host's row locked: a staff booking checks the
+ * host under the same lock, so it cannot land in a window being removed.
+ */
+async function deleteWindow(hostId: number, id: number): Promise<boolean> {
+  return withTransaction(async (client) => {
+    await client.query('SELECT 1 FROM hosts WHERE user_id = $1 FOR UPDATE', [hostId]);
+    const { rowCount } = await client.query(
+      'DELETE FROM host_availability WHERE id = $1 AND host_id = $2',
+      [id, hostId],
+    );
+    return (rowCount ?? 0) > 0;
+  });
 }
 
 // ---------- Admin ----------
@@ -554,9 +691,5 @@ export async function listHostAvailability(
  * booked — the host keeps it — the time just stops taking new bookings.
  */
 export async function deleteAvailabilityAsStaff(hostId: number, id: number): Promise<void> {
-  const { rowCount } = await query('DELETE FROM host_availability WHERE id = $1 AND host_id = $2', [
-    id,
-    hostId,
-  ]);
-  if (!rowCount) throw new ApiError(404, 'Not found.');
+  if (!(await deleteWindow(hostId, id))) throw new ApiError(404, 'Not found.');
 }

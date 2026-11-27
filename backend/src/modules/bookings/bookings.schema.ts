@@ -78,6 +78,13 @@ export const staffCreateBookingSchema = z.object({
   partySize: partySize.optional(),
   notes: staffNotes.optional(),
   share: z.boolean().optional(),
+  // A host the group asked for, picked by staff from those free then.
+  host: z
+    .object({
+      kind: z.enum(['normal', 'clocktower']),
+      hostId: z.number().int().positive().max(2147483647),
+    })
+    .optional(),
 });
 
 export type StaffCreateBookingInput = z.infer<typeof staffCreateBookingSchema>;

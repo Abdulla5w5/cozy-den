@@ -56,15 +56,16 @@ export function Confirmation() {
           ({t('bk.sessionHours', { n: formatHours(booking.durationMin) })})
         </p>
         <ul>
-          {/* The stored fee includes a host's; shown apart so each line is
-              what it says. */}
+          {/* Online, the stored fee includes a host's, shown apart so each line
+              is what it says. A booking staff entered is paid at the counter. */}
           <li>
-            {t('bk.tableFee')} — {money(booking.tableFeeCents - (booking.hostFeeCents ?? 0))}
+            {t('bk.tableFee')} —{' '}
+            {money(booking.tableFeeCents - (booking.source === 'staff_manual' ? 0 : booking.hostFeeCents ?? 0))}
           </li>
           {booking.hostKind && (
             <li>
-              {t(`host.kind.${booking.hostKind}`)} —{' '}
-              {money(booking.hostFeeCents ?? 0)}
+              {t(`host.kind.${booking.hostKind}`)} — {money(booking.hostFeeCents ?? 0)}
+              {booking.source === 'staff_manual' ? ` (${t('receipt.atCounter')})` : ''}
             </li>
           )}
         </ul>

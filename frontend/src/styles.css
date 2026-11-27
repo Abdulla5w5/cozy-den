@@ -9645,3 +9645,156 @@ button:where(.link:not(.danger), .tabs .active):hover:not(:disabled) {
 .staff-wanted .status.cancelled {
   background: #ffc4b8;
 }
+
+/* Header links that scroll sideways: the row fades at an edge with more links
+   past it, and an arrow there scrolls it. Sticky inside the scrolling row, so
+   the arrows stay at its edges. Both are always in the row, 0 wide and giving
+   back the gap, so the links never jump when one shows; NavScroll sets the
+   gap and the row's padding as --nav-gap / --nav-pad-start / --nav-pad-end. */
+.mainnav {
+  position: relative;
+  /* A focused or current link stops clear of the fade and the arrow. */
+  scroll-padding-inline: 64px;
+}
+.nav-more {
+  position: sticky;
+  z-index: 2;
+  display: block;
+  flex: none;
+  width: 0;
+  align-self: stretch;
+  visibility: hidden;
+}
+.nav-more-start {
+  inset-inline-start: 0;
+  order: -1;
+  margin-inline-end: calc(-1 * var(--nav-gap, 0px));
+}
+.nav-more-end {
+  inset-inline-end: 0;
+  order: 99;
+  margin-inline-start: calc(-1 * var(--nav-gap, 0px));
+}
+.mainnav.more-start .nav-more-start,
+.mainnav.more-end .nav-more-end {
+  visibility: visible;
+}
+.mainnav .nav-more button {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 0 2px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--orange);
+  color: #fff;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+/* A finger-sized target around the small circle. */
+.mainnav .nav-more button::after {
+  position: absolute;
+  inset: -9px;
+  content: '';
+}
+.mainnav .nav-more button:hover:not(:disabled),
+[data-theme='dark'] .mainnav .nav-more button:hover:not(:disabled) {
+  background: #d96500;
+  color: #fff;
+}
+/* At the row's outer edge, over its padding, where hidden links peek out. */
+.nav-more-end button {
+  inset-inline-end: calc(4px - var(--nav-pad-end, 0px));
+}
+.nav-more-start button {
+  inset-inline-start: calc(4px - var(--nav-pad-start, 0px));
+}
+[dir='rtl'] .nav-more button {
+  transform: translateY(-50%) scaleX(-1);
+}
+/* The fade: links slip under a soft edge in the header's own colour, reaching
+   the very edge of the row. */
+.nav-more::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  content: '';
+  pointer-events: none;
+}
+.nav-more-end::before {
+  inset-inline-end: calc(-1 * var(--nav-pad-end, 0px));
+  width: calc(60px + var(--nav-pad-end, 0px));
+  background: linear-gradient(to left, #fffaf1 45%, rgba(255, 250, 241, 0));
+}
+.nav-more-start::before {
+  inset-inline-start: calc(-1 * var(--nav-pad-start, 0px));
+  width: calc(60px + var(--nav-pad-start, 0px));
+  background: linear-gradient(to right, #fffaf1 45%, rgba(255, 250, 241, 0));
+}
+[dir='rtl'] .nav-more-end::before {
+  background: linear-gradient(to right, #fffaf1 45%, rgba(255, 250, 241, 0));
+}
+[dir='rtl'] .nav-more-start::before {
+  background: linear-gradient(to left, #fffaf1 45%, rgba(255, 250, 241, 0));
+}
+[data-theme='dark'] .nav-more-end::before {
+  background: linear-gradient(to left, #0d0f14 45%, rgba(13, 15, 20, 0));
+}
+[data-theme='dark'] .nav-more-start::before {
+  background: linear-gradient(to right, #0d0f14 45%, rgba(13, 15, 20, 0));
+}
+[dir='rtl'][data-theme='dark'] .nav-more-end::before {
+  background: linear-gradient(to right, #0d0f14 45%, rgba(13, 15, 20, 0));
+}
+[dir='rtl'][data-theme='dark'] .nav-more-start::before {
+  background: linear-gradient(to left, #0d0f14 45%, rgba(13, 15, 20, 0));
+}
+/* Dark: a light rim, so the arrow reads as a button on the dark header. */
+[data-theme='dark'] .mainnav .nav-more button {
+  border-color: rgba(246, 239, 227, 0.85);
+  background: var(--orange);
+  color: #fff;
+  box-shadow: 2px 2px 0 #050608;
+}
+/* At 360px the header's sides are 0.75rem, so the row's edge bleed matches
+   (it was 1rem, 4px past the screen, and the page scrolled sideways). */
+@media (max-width: 360px) {
+  .topbar .mainnav,
+  .mainnav.guest {
+    margin-inline-end: -0.75rem;
+    padding-inline-end: 0.75rem;
+  }
+}
+
+/* Staff → Hosts: the month's earnings. */
+.host-earnings {
+  margin-top: 2rem;
+}
+.host-earnings .table-scroll {
+  overflow-x: auto;
+}
+.host-earnings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.host-earnings-table th,
+.host-earnings-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--outline-variant);
+  text-align: start;
+  white-space: nowrap;
+}
+.host-earnings-table tfoot td {
+  border-bottom: none;
+  font-weight: 700;
+}
